@@ -111,6 +111,8 @@ export function createBrainDumpSyncBridge(deps = {}) {
   const getRoomRef = typeof deps.getRoomRef === 'function' ? deps.getRoomRef : () => null;
   const getRoomId = typeof deps.getRoomId === 'function' ? deps.getRoomId : () => null;
   const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
+  const onOutstandingClaim = typeof deps.onOutstandingClaim === 'function' ? deps.onOutstandingClaim : () => {};
+  const onHydrated = typeof deps.onHydrated === 'function' ? deps.onHydrated : () => {};
   const onRebind = typeof deps.onRebind === 'function' ? deps.onRebind : () => {};
   const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
   const deviceId = typeof deps.deviceId === 'function' ? deps.deviceId : () => 'unknown-device';
@@ -367,6 +369,8 @@ export function createBrainDumpSyncBridge(deps = {}) {
     if (!validBrainDumpId(id) || !value || !roomOwnsCache(roomId)) return;
     const { changed, record } = repository.mergeRemote(id, value);
     if (changed) onRemoteChange(id, record);
+    // Recovery observes authoritative state, even when the cache already agrees.
+    if (record?.promotionClaim && (record.status === 'untriaged' || record.status === 'triaged')) onOutstandingClaim(id, record);
   }
 
   function handleRemoteSnapshot(value, roomId = activeRoomId()) {
@@ -388,9 +392,13 @@ export function createBrainDumpSyncBridge(deps = {}) {
       const ref = roomRef.child(BRAIN_DUMP_REMOTE_PATH);
       listener = { ref, roomId, token };
       onRebind(roomId);
+      let hydrated = false;
       ref.on('value', snap => {
-        if (listener?.token !== token) return; // detached or superseded
+        if (listener?.token !== token || !roomOwnsCache(roomId)) return; // detached, superseded or switched
+        const first = !hydrated;
+        hydrated = true; // set before merging: reconciliation can cause a nested delivery
         handleRemoteSnapshot(snap.val(), roomId);
+        if (first) onHydrated(roomId);
       });
     } catch {
       listener = null;
@@ -444,6 +452,8 @@ if (typeof window !== 'undefined') {
     // (id, record) passed through — brain-dump-ui.js's reconcilePromotionClaim
     // trigger (FIX FIRST round 3) needs to know WHICH capture changed.
     onRemoteChange: (id, record) => globalThis.refreshBrainDumpSurfaces?.(id, record),
+    onOutstandingClaim: (id, record) => globalThis.refreshBrainDumpSurfaces?.(id, record),
+    onHydrated: () => globalThis.refreshBrainDumpSurfaces?.(),
     // A new binding (or none) means a different account's cache is now the active
     // one: re-render so nothing drawn from the previous account's captures lingers.
     // Deferred to a microtask so it runs after storage.js has finished changing the

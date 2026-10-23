@@ -155,7 +155,8 @@ test('B2: moving a stale priority into a full Top 3 lands it under Other planned
 
   const recovery = page.locator('#unfinished-recovery-section');
   await recovery.getByRole('button', { name: /Unfinished/ }).click();
-  await recovery.getByRole('button', { name: 'Move to today' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Move to today', exact: true }).click();
 
   await expect(continuity(page)).toContainText('Moved to Other planned tasks because your Top 3 is already full.');
   await expect(strip(page).locator('.plan-secondary')).toContainText('Slipped task');
@@ -179,7 +180,8 @@ test('B2: with room in the Top 3 the moved priority stays a priority and no noti
   await addPriority(page, 'Only one');
   const recovery = page.locator('#unfinished-recovery-section');
   await recovery.getByRole('button', { name: /Unfinished/ }).click();
-  await recovery.getByRole('button', { name: 'Move to today' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Move to today', exact: true }).click();
   await expect(strip(page)).toContainText('Slipped task');
   await expect(continuity(page)).not.toContainText('Top 3 is already full');
   expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())

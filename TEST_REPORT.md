@@ -5,6 +5,54 @@
 
 ---
 
+## TASK-018 closure verification (origin/main 57754a3) · 2026-10-21
+suite: verification of the owner-named release evidence against GitHub and the retained private artifacts.
+  No runtime change was made in this closure, so no suite was re-run against new code.
+result:
+  - PR #9 "TASK-018: completion responsiveness and honest saving feedback": MERGED, base `main`, head
+    `task-018-performance`, merge commit `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` — verified to be the
+    current tip of origin/main.
+  - CI run 39704038615 on that exact SHA: both required jobs `success`.
+      · browser smoke: "Running 957 tests using 2 workers" -> "957 passed (17.6m)". 957/957.
+      · Firebase fence / rules integration: four suites summed = tests 151, pass 151, fail 0, skipped 0.
+      · legacy unit runner: "455 tests: 455 passed, 0 failed".
+  - Pages: deployment 7241148022 (environment `github-pages`, sha 57754a3, status state `success`,
+    environment_url https://shinyamadasan.github.io/Time-audit/); Pages build 1304072541; deploy workflow
+    run 39704038172. `pages/builds/latest` is 57754a3, i.e. production serves the accepted build.
+  - Firebase backend unchanged: `git diff ca2c90f..57754a3 -- firebase.rules.json firebase.json` is EMPTY.
+    The whole diff is 10 files: frontend (`planning-continuity-ui.js`, `task-completion-sync.js`), their
+    generated www mirrors, tests, and docs. No backend code, rules, schema or IAM change.
+  - 12 production canary checks: recorded PASS in the retained private evidence
+    (release-verification/task-018/performance-release-d6c4f7b/FINAL_STATUS.json, `productionChecks: 12`).
+    Taken from evidence; not independently re-executed in this closure.
+  - Data integrity: canary-after-summary.json shows all 4 source tasks still `done:false`
+    (`source_all_undone: true`) with the owner resolution snapshot present and unchanged.
+  - Owner real-use acceptance: PASS, stated directly by the owner for their normal device
+    (completion + responsive Saving, post-reload access + persistent Undo, reconnection, data intact).
+not run / limitation (stated plainly):
+  - No local full suite was run for this closure. The closure worktree has no `node_modules`, so
+    `firebase-rules.test.js` cannot resolve its `targaryen` devDependency; that is an environment artifact
+    of a fresh worktree, not a code regression. The authoritative gate is CI run 39704038615 on the exact
+    merged SHA, which passed, and this closure changes no runtime code.
+  - Undo latency and p95 improvement remain NOT established (see the TASKS.md closure block).
+→ TASK-018 verified closed.
+
+## TASK-016 pre-implementation audit (origin/main 57754a3) · 2026-10-21
+suite: deterministic offline reproduction of the TASK-015 stuck-claim defect, run against current main
+  sources (run-only harness, deliberately not committed — TASK-016 is not implementation authorized).
+result: 2 tests, 2 pass, 0 fail. The defect REMAINS on main, and the root cause is trigger-side:
+  - Case 1: `reconcilePromotionClaim()` on the exact stuck record -> `ok:true`, capture settles to
+    `promoted`, exactly one plan item `bdp1|<id>`. The finishing logic is healthy.
+  - Case 2: across the initial listener delivery, a replayed whole-subtree snapshot and a reconnect
+    `pushAllLocal()`, `onRemoteChange` fired ZERO times and the capture stayed `triaged` with its claim.
+    Cause: `mergeRemote()` gates `changed` on deep equality, and the sync bridge fires `onRemoteChange`
+    only when `changed`. `onRebind` (the sweep) fired exactly once.
+  - The localStorage lost-update hypothesis from TASK_015_HANDOFF.md is NOT the cause of the
+    non-recovery: it reproduces with a single client and no competing writer.
+not run: the module-evaluation-order mechanism (M2) and the unhydrated-cache mechanism (M3) are
+  code-grounded only, not separately executed. No browser or emulator run; no implementation.
+→ Audit complete. Full analysis in docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md. TASK-016 stays `todo`.
+
 ## TASK-015 post-rebase (origin/main 2411ee4; final base 8abe63b, TASKS.md-only delta) · 2026-10-15
 suite: lead's gates on the rebased branch (npm test, lint, parity, rules, diff-check, targeted 7 specs, full smoke).
   Then, after the F3 rewrite (`601113e`): `npx playwright test tests/brain-dump-plan-tray.spec.js -g F3
@@ -2152,6 +2200,185 @@ untested:
 evidence: task017-npm-final.log, task017-browser-final.log, task017-layout-final.log, task017-lint-final.log (ignored local logs);
   playwright-report/task-017/unfinished-{360,390,1920}.png and unfinished-more-{360,390,1920}.png (local images).
 
+## TASK-018 proposal checkpoint · 2026-10-15
+suite: isolated Playwright proposal renderer (`playwright-report/task-018-proposal/render.mjs`), not the production app
+result: PASS at 360x800, 390x844 and 1280x900; five 64px rows, 445px section, 44px controls,
+  224px anchored menu / 272px date form, all 22 fixture identities reachable, no horizontal overflow,
+  date default and simulated pending/error/unknown/success identity checks, Escape/collapse, 0 external requests,
+  0 browser errors. 21 screenshots and measurements retained in local ignored proposal evidence folder.
+  Builder inspected all three ready layouts and 390px menu/date/error/success screenshots.
+recovery: initial sandbox Chromium spawn EPERM; approved local renderer retry. Fixed URL-decoding in the capture
+  script (two misplaced synthetic captures removed from the exact checked output directory), then a proposal-only
+  click-bubbling defect found by the date-form check. Final renderer exit 0 on all three viewports.
+untested: real persistence/sync/account/old-client safety; physical Android; production regressions and npm test.
+  These are pending implementation after the owner's required proposal acceptance, not skipped completion gates.
+
+## TASK-018 implementation safety gate · 2026-10-15
+suite: node design/task-018/audit-completion-safety.mjs
+result: 18 offline observations reproduced; gate explicitly BLOCKED, not a feature pass. Verified 14 hash-pinned
+  released cf43080 fixture files. Reproduced annotation loss in current/released merges, accepted stale calendar
+  overwrite, denied ordinary post-cutover legacy/operational writes, existing ended-task completion refusal,
+  original-day classifier/backlog mismatch, omitted historical listeners and local-first unacknowledged writes.
+suite: node --test calendar-plan-model.test.js calendar-plan-live.test.js calendar-plan-sync.test.js
+  plan-authority-calendar.test.js plan-authority-fence.test.js firebase-rules.test.js
+result: 116 passed, 0 failed, 0 skipped. Existing baseline only, no new completion behavior under test.
+checks: check:firebase-rules matches builder; check:www-parity passes (92-file closure); git diff --check passes.
+environment: initial audit dependency missing; npm ci --offline failed peer-cache resolution, then
+  --offline --legacy-peer-deps --ignore-scripts --no-audit --no-fund succeeded (no lockfile changes). Early audit
+  fixture hash CRLF/wire-key issues corrected before final exit 0. Initial isolated Node tests had six spawn EPERM
+  file-launch failures under the sandbox; permission-approved retry passed all 116 tests, no product failure claimed.
+untested: full npm test and browser regressions; production completion/Undo/search/long-title acceptance, real
+  failed/uncertain writes, new account/two-client sync protocol, emulator/physical devices. No implementation
+  was made after the explicit safety stop, so no production screenshots or REVIEW-READY claim. Rules interpreter
+  observations and synthetic sync stub are not real-SDK/emulator proof. TASK-014/015/017 behavior unchanged;
+  existing expected-failure/known-issue results were not rerun, relabelled or claimed fixed. No live data accessed.
+
+## TASK-018 completion durability contract · 2026-10-15
+suite: node --test design/task-018/contract/contract.test.mjs design/task-018/contract/emulator.test.mjs
+result: 46 passed, 0 failed, 0 skipped: 35 deterministic and 11 real loopback RTDB emulator/SDK tests. All 14
+  files of the pinned cf43080 release hash-verified. Calendar/operational/legacy ordinary/fenced identity,
+  unchanged history, separate date/report instant, old merge replay and real released calendar bridge replay,
+  account/path denial, live second SDK listener/reload, conditional source CAS/conflicting dates, stale Undo,
+  retained idempotency receipts, lost request/response/readback and same-ID recovery, priority/size refusal,
+  timezone boundary, malformed input/future schema and safe reader projection all exercised.
+suite: node --test calendar-plan-model.test.js operational-plan-model.test.js plan-tomorrow.test.js
+result: 99 passed, 0 failed, 0 skipped. Existing baseline, not newly fixed tests.
+checks: generated Firebase rules match builder; www parity passes (92-file runtime closure); diff whitespace clean.
+recovery: initial isolated fixture import and test signature errors corrected. First emulator pass found Firebase
+  pruning of nullable identity origin; changed to non-null unmarked marker and real Undo passed. Independent
+  source review found reader-side future-version validation gap; fixed and covered before final 46/46 pass.
+environment: Java from JAVA_HOME/bin prepended only in the test process; existing pinned emulator jar and Firebase
+  SDK used. Proposed deny rule loaded in disposable emulator namespaces only. Emulator privileged/unsigned
+  tokens are test facilities; no production credentials, authentication or account data used.
+untested: real Firebase ID-token verification/revocation, deployment IAM and service isolation, streaming limit,
+  production browser/account-switch callback wiring, physical devices, real-data room scale and full npm/browser
+  regressions. No production functionality was implemented. Old-client UI awareness and ordinary id-reuse
+  guarantees are not supplied by the resolution-only record. Existing expected failures/issues remain unchanged.
+
+## TASK-018 approved completion implementation · 2026-10-15
+suite: npm test (task018-node-gates-final.log)
+result: node:test 2250 total, 2249 passed, 0 failed, 1 existing opt-in lower-case-drive negative-control skip
+  requiring CROSS_REPO_COMPAT_CONTROL_PROOF=1; legacy harness 455/455 passed. New production deterministic
+  proofs 59/59 (38 contract, 13 client/sync, 5 backend-boundary, 3 cost/contention), also independently rerun.
+suite: npx playwright test --workers=4 --reporter=list,json (task018-full-browser-review.log)
+result: 947 expected outcomes: 940 passed + 7 unchanged expected failures; 0 unexpected, 0 skipped, 0 flaky.
+  Actual structured JSON inspected at playwright-report/task-018-production/full-browser.json. TASK-013 F-1
+  through F-7 still fail as expected; no relabelling or newly-fixed claim. TASK-014/015/017 regressions included;
+  existing TASK-015 claim/false-conflict and Today-then-Tomorrow limitations remain unchanged.
+suite: npm run test:fence (task018-fence-final.log)
+result: 151/151 passed: 94 rules/emulator, 20 real-SDK fence, 37 mutation. Includes all 14 new production
+  completion emulator cases (also separately 14/14). All 14 pinned files represent one cf43080 released client,
+  not 14 releases; replay, calendar cutover, ordinary/fenced history, account denial, real two-client reads,
+  sibling heartbeat contention, priorities, lost actual PUT acknowledgement and receipt recovery covered.
+suite: unchanged Conversational Worker CI tests and local bundle (task018-worker-gate-final.log)
+result: 32/32 passed; locked Wrangler 4.149.0 dry-run bundle passed, telemetry disabled, no upload. Initial
+  missing-dependency run failed; locked offline install succeeded and rerun passed, no lockfile/source changes.
+checks: generated Firebase rules and functions/shared match sources; www parity passes (95-file closure);
+  lint 0 errors/48 existing warnings; diff whitespace clean. Functions SDK metadata import confirmed separate
+  service-account parameter, region, single-instance/single-concurrency and 512MiB settings without invocation.
+ui: actual production HTML/modules served locally with synthetic 22-task backlog and populated Today timeline.
+  390px/1440px full My Day, five-preview, backlog/search/long-title, menu and date evidence in
+  playwright-report/task-018-production/. Section 375px both widths, row controls >=44x44. Today1 action;
+  earlier4 controls (native picker varies). Final ignored settled-scroll capture rerun 2/2 passed; no CSS hiding.
+cost: 22/.5MiB, 100/2MiB, 1000/8MiB mock rooms: inspect1/1/10 root reads; one concurrent sibling change causes
+  3 completion reads/2 PUT attempts with sibling retained. Total downloads2.10/8.39/109.05MB, attempted uploads
+  1.05/4.20/16.78MB. Lower-bound in-memory observations, not live network/billing or account-scale acceptance.
+recovery: earlier full browser iterations had13, then10, then2 unexpected failures; all are superseded by the
+  final clean947-outcome gate, not reclassified. Causes/repairs disclosed in handoff: stale UI/release assertions,
+  empty-candidate listener duplication, accidentally removed/restored offline backend test helper, baseline INIT
+  autofill form race and detached ElementHandle in double-click test. The baseline race was independently
+  reproduced on exact bb171a sources; production blocks unchanged. Shared smoke startup readiness and atomic
+  connected-control double clicks preserve assertions and add exact revision/sibling checks. Three corrected
+  cases repeated8 each passed24/24, then passed full gate. Early fixture/CSS/wire/parity failures also corrected.
+untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical Android/iOS, hosted CI, live room
+  size/cost and real-use acceptance. Local Node24 differs from declared deployment Node22. Broad privileged
+  credential capability is not RTDB path-scoped IAM; deployment review remains required. Unknown writes stay
+  recoverable; conservative identity/refusal, ordinary byte-identical ID reuse, unseen edits, legacy dismissal
+  durability and unbounded receipt growth limitations remain. No production data accessed/mutated; no deployment,
+  IAM change, merge, push, release, historical migration or TASK-016 work. Exact final SHA independently reviewed
+  separately; REVIEW-READY only, not done.
+
+## TASK-018 completion monitoring delta · 2026-10-16
+- Node 22.23.3 (SHA256 9c9245…db0e verified): `node scripts/functions-shared.mjs && node --test task-completion.test.js
+  task-completion-sync.test.js task-completion-performance.test.js functions/test/*.test.js` → 291 pass, 0 fail/skip.
+- `node --test task-completion-emulator.test.js` (loopback RTDB emulator 4.11.2, synthetic) → 14 pass, 0 fail/skip.
+- New `functions/test/completion-telemetry.test.js` (7): sentinel no-leak scan across inspect/mutate/replay/status/
+  401/405/400 plus field allowlist; applied/replay/rejected/UNKNOWN(ACK_UNPROVEN) under HTTP 200; CONTENDED at the
+  3-attempt bound, one-conflict recovery, WRITE_DENIED; ROOM_TOO_LARGE (real streaming domain) and
+  PRIORITY_UNSUPPORTED flagged; latency/bytes/inspect state counts; TimeoutError class; throwing sink is inert.
+- Entry import under Node22: gcfv2, asia-southeast1, 512MiB, 120s, maxInstances 1, concurrency 1, SA param — unchanged.
+- Rules builder and www mirror checks: unchanged. ESLint on touched files: clean.
+- Review follow-up (independent PASS WITH NOTES on 9349963): clock/event build/sink all inside the guard (new test: throwing
+  clock still returns the committed CONFIRMED); PRIORITY_UNSUPPORTED no longer flagged as size refusal; `transportError`
+  rename with name-only classes; mutate UNKNOWN → `unconfirmedWrite` + ERROR; ETag sentinel added. Node22 291/291, emulator 14/14.
+
+## TASK-018 account-zone fix (0f762aa + 7bf4961) · 2026-10-16
+- Node 22.23.3 focused completion/functions: 295/295; RTDB emulator 14/14; affected browser specs
+  (task-completion, unfinished-ux) 26/26 locally; www parity, functions/shared and rules builder OK; ESLint clean on sources.
+- Isolated staging (chronasense-staging-t018, function rebuilt from 7bf4961 by the dedicated build identity):
+  real-cloud browser acceptance 24/24, zero production requests (HTTP checked pre-send, WebSockets incl. RTDB ns pre-connect).
+
+
+## TASK-018 - final release verification / pending Undo regression - 2026-10-21
+suite: npm test (Node 24.19.0 locally; hosted CI uses Node 22), plus affected Playwright file
+result: npm test exit 0: 2261 total, 2260 passed, 0 failed, 1 known opt-in skip; separate legacy harness 455/455.
+  Playwright tests/task-completion.spec.js: 16 passed, 0 failed. Focused ESLint, 95-file www parity and git diff --check pass.
+  Before the fix, the new uncertain-Undo browser regression failed with pending count 1 instead of 0 after a second Undo.
+  First post-fix browser attempt: 14 passed / 2 failed solely because the new source comparisons included null fields stripped on Firebase-wire reload; corrected to the existing completionWireValue contract, then 16/16 passed. No product workaround.
+  Sandbox worker-spawn EPERM attempts ran no browser cases; successful runs used process-sandbox escalation.
+  Independent reviewer separately executed both new browser regressions: 2/2 pass; final SHA review archived outside the release tree.
+untested: no new production-canary writes for this UI-only follow-up; post-publication artifact acceptance remains pending. O3 first-login render delay and cancelled-permission-listener rebind limitation remain documented; no synchronization changes.
+evidence: local release-verification/task-018/ (outside candidate worktree); original CI failure was Chromium SEGV at browser.newContext with 951 browser passes, not an assertion failure; exact revised-SHA CI is checked separately before GO.
+
+## TASK-018 · performance remediation · 2026-10-21
+suite: npm test; task-completion-sync.test.js; tests/task-completion.spec.js; direct Playwright synthetic canary performance and safety harnesses.
+result: npm test exit 0; sync 21 passed / 0 failed. Existing 16 browser cases passed and added saving/offline cases pass after correcting held-response test timing and listener-driven row disappearance. Added mixed active/uncertain recovery target regression. Final full browser/Firebase-fence CI and independent exact-SHA review are recorded separately in the private performance packet.
+  Ten completion/Undo cycles per client: completion median/p95 1344.5/1517.4ms -> 955.1/1558.0ms; Undo 924.4/946.2ms -> 1013.7/1594.2ms. No claim of Undo/p95 speedup. Normal checking 20/20 -> 0/20, observed request counts 51 -> 40. Fresh inspection/receipt/CAS/history guards retained.
+  New production-backed candidate checks preserve source content/prior receipts, use one synthetic task, verify persistent Undo, abort/reload/same-ID pending recovery, offline refusal, natural reconnect (421ms) and no page exceptions. Timed recovery n=1: 2289ms interaction wall time; status/mutate/inspect 388.6/542.3/391.6ms.
+  Independent review's UNKNOWN->REJECTED offline regression was fixed and tested. Initial timer-modal and new test harness failures are preserved privately; sandbox spawn EPERM ran no cases. Lint exits 0 with 48 existing warnings; www parity and diff checks pass.
+untested: owner performance acceptance, published candidate, expired authentication, larger real rooms, separate production server auth/read/CPU spans, Android/APK. O3 unchanged. No backend/rules/IAM/schema changes or real-user mutations. TASK-018 remains open in review.
+
+## TASK-016 · 2026-10-21 · before Fix A
+suite: node --test --test-name-pattern='TASK-016 C1/C2' brain-dump-sync.test.js
+result: 0 passed, 2 failed as intentionally required before the fix: initial snapshot and reconnect both
+  leave the capture triaged, with exactly one existing unchanged plan item and its original claim.
+baseline: npm test exit 0; focused Brain Dump 164 passed; test:fence 94 + 20 + 37 = 151 passed.
+  Isolated real-browser module-order reproduction also fails before the fix; direct settlement succeeds.
+untested: final candidate and C1–C14 verification pending. No runtime change yet; no production data touched.
+
+## TASK-016 · 2026-10-21 · Fix A/B/C builder verification
+suite: full npm test; full test:smoke (two workers); test:fence; six-worker C8 stress;
+  competing-intent C8 cases; isolated mutations; identical-harness browser initialization probe.
+result: npm test exit 0, 2,270 Node-runner cases: 2,269 passed / 0 failed / 1 existing opt-in skip;
+  separate legacy harness 455/455 and all other chained runners exit 0. Full browser 970 passed,
+  0 failed/skipped/flaky. Firebase emulator fence 94 + 20 + 37 = 151 passed, no skips/failures.
+  Stress: 240 tray + 240 plain-view races with six workers; each surface includes 120 settlements
+  in each order. 480 passed, 0 stuck claims, 0 duplicates, 0 unsupported another-device messages.
+  Cause-neutral transient contention feedback: 15/240 tray and 35/240 view (not eliminated).
+  Both competing-intent orders on both surfaces pass, 4/4. Six independent source mutations killed.
+before/after: preserved checkpoint c9f1256 has C1/C2 0 passed / 2 expected failures with runtime
+  untouched; candidate passes both. Warm-cache and empty-cache first snapshots before UI evaluation
+  fail on baseline and recover on candidate; first snapshot after UI evaluation passes on both.
+  Each actual browser reload preserves exactly one original item/target. A counted post-hydration
+  sweep and its killed mutant prove Fix B's hydration path independently of ordinary changed merges.
+matrix: C1/C2 identical initial/reconnect claims; C3/C4 cold/warm cache and module ordering;
+  C5 coalesced held authoritative read and repeated notifications; C6/C7 Today→Tomorrow, Schedule,
+  double tap, thrown-work cleanup and listener-before-response guard; C8 two-tab races above;
+  C9 late account switch/foreign-room refusal; C10 ended-day/revoked UNKNOWN; C11 offline and actual
+  timeout/reconnect; C12 authoritative presence required despite local item; C13 archive/delegate
+  refusal; C14 terminal/malformed normalization. Existing core suites and real SDK/rules gates retained.
+checks: lint exits 0 with 0 errors / 48 unchanged warnings; all 95 www runtime files byte-identical;
+  generated rules/functions-shared parity and git diff --check pass. Protected core/backend files unchanged.
+iterations: stale strict release-token assertion corrected without relaxing the check; first full browser
+  attempt stopped on the pre-existing pending test's now-premature busy-row wait, then strengthened to
+  await the actual UNKNOWN toast and full 970 rerun passed. Private probe clock/harness mismatch,
+  Firebase null-pruning comparison and compensating lifecycle mutants were corrected and rerun;
+  sandbox spawn denial executed no cases. Earlier evidence retained outside the candidate worktree.
+untested: physical devices/Android APK, hosted TASK-016 CI and production use; no live data writes,
+  Firebase deployment or infrastructure change. Cross-tab whole-envelope write hazard/shared locking
+  remains out of scope. UNKNOWN remains pending until authoritative evidence. Independent exact-SHA
+  final review/results are supplied separately; candidate stays REVIEW-READY / HELD.
+
 ## Owner-direct overnight HUD pilot · 2026-10-20
 branch: `fix/hud-hidden-tracking-session`, baseline `bb171a2`.
 suite/result:
@@ -2174,3 +2401,30 @@ Original pilot evidence preserved: companion 60/30, bridge 33, focused browser 1
 455 legacy cases, zero failures, one opt-in skip; lint/parity/rules checks pass. Not rerun or relabeled here.
 Owner subsequently observed five real synthetic-input WPF/tray checks PASS; see TASK_020_HANDOFF.md.
 Formal candidate hosted CI and the merge runner's own npm test remain required. Runtime has not changed.
+
+## TASK-020 · 2026-10-22 · isolated local reconciliation
+branch: task-020-reconcile-20261022; pinned main 1f171a29b55819c7b96872234a1b095d1e80d48c;
+  original PR head 780e733fe1697bc78a4ea5fa992ddc96ecdf2cbe; reviewed pilot 234a5ca preserved.
+suite/result:
+  - PowerShell Test-HudNormalTracking / Test-HudDogfoodPolish: 60/30 assertions passed.
+  - node --test windows-hud-bridge.test.js: 33 passed; focused normal-tracking-hud browser: 14 passed.
+  - npm test: exit 0; 2270 Node-runner cases, 2269 passed, zero failed, one existing opt-in skip;
+    separate legacy harness 455/455 passed. Coverage not measured.
+  - npm run test:fence: local emulator/rules/real-SDK/mutation suites 151 passed, zero failed/skipped.
+  - npm run test:smoke -- --workers=2: exit 0; 970 expected outcomes, 963 ordinary passes and seven
+    pre-existing annotated expected failures F-1 through F-7. CLI summary: 970 passed (18.9m).
+    No unexpected failures, skipped browser tests or retries. Known offline recovery/logging defects remain.
+  - Lint: exit 0, zero errors / 48 pre-existing warnings. Mirror: 95-file closure byte-identical.
+    Firebase rules and functions/shared generated-source consistency checks pass without writes.
+  - Scope/preservation: original ten files only relative to pinned main; three HUD files byte-identical
+    to pilot; all other tasks/main files and historical logs preserved; conflict markers/whitespace absent.
+  - Code Health / applicable AI QA pass. Existing web timer/sync/history/heartbeat invariants retained by
+    byte identity, with full regressions above. No code structure or architecture moved.
+environment: Windows, Node 24.19.0, npm 11.17.0, PowerShell 7.6.7, Temurin Java 21.0.12.1.
+  Locked offline dependency install used --ignore-scripts --legacy-peer-deps; no manifests changed.
+untested: fresh hosted CI/Node 22, installed-companion release, new owner WPF/tray observations,
+  signed-in production/browser/device end-to-end, first LNA prompt and physical Android/APK.
+  Historical owner observations retain their original scope; no new production acceptance claimed.
+evidence: private release-verification/task-020/reconciliation-20261022/ logs, verification-results.json,
+  scope audits and separate independent review. Tested source tree 618197a21d417dddc708292b3a5afc6fbf3765c2;
+  later tracked edits are documentation/evidence only. No push/publication, production access or installed-HUD action.

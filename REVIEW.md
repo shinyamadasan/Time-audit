@@ -6,6 +6,66 @@
 
 ---
 
+## Independent TASK-020 local reconciliation review — PASS LOCAL / RELEASE HELD (2026-10-22)
+
+Reviewer: fresh native agent `/root/task020_independent_review`, separate from the reconciler.
+Authority: owner's "ChronaSense TASK-020 — Isolated Reconciliation"; this verdict permits the
+verified local merge commit only. It does not change any task status or grant release approval.
+
+Reviewed immutable candidate tree: `55362b7962404aed9eaf69bd3fc4537d2feca83c`.
+Pinned main: `1f171a29b55819c7b96872234a1b095d1e80d48c`; original PR head:
+`780e733fe1697bc78a4ea5fa992ddc96ecdf2cbe`. HEAD and MERGE_HEAD match those merge parents.
+The original reviewed pilot `234a5ca4fbd998d39519949c1fd72363acc12222` remains an ancestor.
+The final tree/commit binding, including this new review record, belongs in the private evidence packet;
+the input tree above intentionally does not contain its own review.
+
+### Findings
+
+No actionable reconciliation defects found.
+
+- The main-relative diff contains exactly the original ten TASK-020 files. All other main files,
+  including TASK-016/TASK-018 runtime, backend, rules, tests and generated mirrors, remain unchanged.
+- The four documentation resolutions retain main's complete records and TASK-020's historical records.
+  TASK-016/TASK-018 remain done, TASK-015/TASK-017 remain approved; TASK-020 remains review.
+- The three HUD files are byte-identical to the reviewed pilot. The minimal tracking-start suppression
+  fix still preserves same-session hiding, rapid stop/start visibility, Focus suppression and kind handover.
+  No infrastructure, companion installation or production-data change is part of this diff.
+- Current handoff authority explicitly supersedes the historical release sequence. Publication copies
+  replace unnecessary full local paths; original history/private evidence remains intact. Historical
+  review quotations are preserved, including ellipsized path examples. Sanitization does not erase history.
+- Comparing the tested tree `618197a21d417dddc708292b3a5afc6fbf3765c2` with this review input shows only
+  CHANGELOG.md, TEST_REPORT.md and TASK_020_HANDOFF.md evidence additions. No tested source changed.
+  Main-relative whitespace checks pass. The CHANGELOG entry's pending-review wording records its
+  pre-review state; this separate entry supplies the new independent local result.
+
+### Evidence actually inspected
+
+I inspected the Git diffs, relevant governance/decision and HUD code, private command receipts and raw
+logs. I did not rerun tests, operate a native window, inspect production or change refs.
+All eleven primary-run verification receipts exit 0. Raw logs support:
+
+- HUD normal tracking/dogfood: 60/30 assertions; bridge: 33; focused browser: 14.
+- Full npm: 2,269 Node passes, zero failures, one existing opt-in skip; legacy: 455/455.
+- Local emulator/fence: 151 passes. Full browser: 963 ordinary passes plus seven pre-existing
+  annotated expected failures F-1 through F-7; CLI reports 970 passed. Those known defects remain.
+- Lint: zero errors, 48 existing warnings. Runtime mirror: 95 byte-identical files; Firebase rules
+  and functions/shared consistency checks pass. Counts were independently reconciled from raw logs.
+
+### Verdict and retained gates
+
+**PASS for the verified local reconciliation commit; HOLD publication/integration.**
+No must-fix remains for this local candidate. Fresh hosted CI on the published candidate is still required;
+local Node 24 verification does not replace hosted Node 22 checks. A separately approved integration route
+must address the unresolved merge-runner/trust-boundary prerequisite. Do not invoke the old runner or use
+historical approval to bypass this gate. No push, PR update, main merge, deployment, dispatcher operation
+or installed-companion replacement/restart is authorized by this review.
+
+New native WPF/tray, signed-in production/browser/device, first LNA prompt and Android/APK acceptance
+remain unverified. Historical synthetic owner observations retain their original scope. Rollback for a
+future release must reverse only the HUD delta from then-current main, preserving later releases.
+
+---
+
 ## Review TASK-020 - APPROVED, HELD (integrate reviewed HUD tracking-hide pilot 234a5ca)
 branch: task-020 @ 8b02066 (baseline main bb171a2; reviewed runtime commit 234a5ca)
 verdict: approved (held for human merge; owner-required HELD gate)
@@ -95,6 +155,57 @@ candidate CI are still outstanding. When torn, choose approved. main is NOT merg
 → TASK-020 status set to `approved` in TASKS.md.
 
 ---
+
+## Review TASK-018 - CLOSED, status `done` (owner real-use acceptance received)
+branch: closure recorded on `docs/task-018-closure-task-016-plan`; the runtime it closes is origin/main
+  `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` (PR #9 squash), already merged and deployed under separate
+  owner authorization.
+verdict: done (the closure record is docs-only and reversible; the runtime is already live)
+reviewer: Claude (reviewer role), verifying the owner-named evidence against GitHub and retained artifacts
+
+What was verified, and how:
+  - PR #9 MERGED with merge commit 57754a3, and 57754a3 IS the current tip of origin/main. Verified via
+    the GitHub API, not from the report text.
+  - CI 39704038615 on that exact SHA: both required jobs success; 957/957 browser; 151/151 fence across
+    four suites; 455/455 legacy unit. Counts read out of the CI log itself.
+  - Pages deployment 7241148022 -> sha 57754a3, environment github-pages, state success; and
+    `pages/builds/latest` is 57754a3, so production serves the accepted build.
+  - Firebase backend unchanged: the ca2c90f..57754a3 diff for firebase.rules.json and firebase.json is
+    empty; the change is frontend + generated mirrors + tests + docs only.
+  - No unexpected data loss or privacy leakage, from the retained canary/privacy evidence.
+  - Owner real-use acceptance PASS, stated directly by the owner. This was the only outstanding gate.
+
+One correction to the owner's evidence list, for the record: the Pages identifier 7241148022 is a Pages
+**deployment** id, not an Actions run id. The corresponding Actions run is 39704038172 and the Pages build
+is 1304072541. The deployment id is correct; only its label needed pinning down.
+
+Honest limitation, preserved and not smoothed over: completion median improved 29% (1344.5 -> 955.1 ms)
+and request count fell 51 -> 40, but **Undo latency did not measurably improve and p95 improvement is not
+established** (candidate Undo 1013.7/1594.2 ms vs baseline 924.4/946.2 ms). Backend mutate p95 rose
+548 -> 1103 ms. O3, server-tail latency, uninstrumented subspans, expired-auth timing, larger-room costs
+and real-device/APK acceptance all remain open and are carried forward in the TASKS.md closure block.
+
+Risk gate: `done` rather than `approved`. The gate applies to what this entry SHIPS, and it ships only
+documentation — the red-zone runtime was merged and deployed earlier under its own owner authorization,
+and nothing here can alter it. No runtime file, www mirror, rule or Firebase config is touched.
+
+## Review TASK-016 - PLANNING ACCEPTED, status `todo` (NOT implementation authorized)
+branch: docs/task-018-closure-task-016-plan (docs only)
+verdict: todo — ready for an owner GO/NO-GO decision; no implementation performed or authorized
+reviewer: Claude (planning role)
+
+The TASK-015 defect was confirmed to still exist on current main, and its root cause was established by
+deterministic reproduction rather than inherited assumption. The owner's instruction not to assume the
+localStorage overwrite was correct to give: that hypothesis is NOT the cause of the non-recovery, which
+reproduces with a single client and no competing writer. The cause is trigger-side — `mergeRemote()`'s
+deep-equality `changed` gate suppresses the only listener-driven reconciliation trigger once local and
+remote agree, and the one remaining trigger (the bind-time sweep) fires once, early, and can silently
+no-op on a module-evaluation race.
+
+Recommendation: **GO** for the bounded three-part client-side fix in
+docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md §3. It repairs existing mechanisms, adds no task store,
+sync engine or backend, touches no Firebase rules or schema, and preserves the UNKNOWN/offline contract.
+Any implementation is red-zone (Hard Rule 9) and must land at `approved`, held for human merge.
 
 ## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
 branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)

@@ -10,11 +10,11 @@ The updated test failed against baseline at `ActivitySwitchLiftsHide`, then pass
 
 ## Status investigation and isolation
 
-- Actual repository: `C:\Users\Admin\Desktop\Vibe code\Time audit app`.
+- Actual repository: `<source-checkout>`.
 - TASK-014: integrated and closed in its task history, with owner-reported normal tracking/Focus/Away/sign-out acceptance. Background throttling and the first browser Local Network Access prompt remain unverified there.
 - TASK-015: separate Brain Dump planning tray; integrated, with real-use acceptance still held in its task history. Its worktree and files were not altered.
 - Subsequent TASK-019 diagnosed the old Focus-only companion rejecting normal tracking. Its 2026-10-18 handoff records replacement with the approved TASK-014 companion and successful live loopback probes; interactive signed-in visual acceptance was not established. This pilot did not claim to reverify that installed process: the process inventory was denied in the sandbox and its escalation was interrupted. The original version-mismatch fix was therefore not duplicated.
-- Isolated branch: `fix/hud-hidden-tracking-session`; worktree: `C:\Users\Admin\AppData\Local\Temp\chronasense-overnight-20261020\worktree`. Its separate Git repository is the sibling `repository.git`, cloned without hardlinks. Existing checkouts were not switched or edited.
+- Isolated branch: `fix/hud-hidden-tracking-session`; worktree: `<isolated-pilot-worktree>`. Its separate Git repository is the sibling `repository.git`, cloned without hardlinks. Existing checkouts were not switched or edited.
 - Baseline: `bb171a287ac67d76ae27634b5227bc24f66919de`. A read-only remote `main` lookup confirmed that exact SHA during this run. No fetch, push, merge or deployment was performed against the original repo.
 
 ## Evidence

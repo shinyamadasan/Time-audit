@@ -26,6 +26,7 @@ export const SHARED_FILES = Object.freeze([
   'plan-tomorrow-model.js', 'personal-day-boundary-model.js', 'personal-day-boundary-wire.js', 'operational-plan-model.js',
   'calendar-plan-model.js', 'commitments-model.js', 'coarse-life-evidence-model.js',
   'intelligence-read-model.js', 'stale-plan-recovery-model.js', 'evidence-interpretation.js',
+  'task-completion-model.js',
 ]);
 
 const toLf = text => text.replace(/\r\n/g, '\n');

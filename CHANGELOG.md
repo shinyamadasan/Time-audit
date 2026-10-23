@@ -1,5 +1,20 @@
 # ChronaSense — Changelog
 
+## TASK-018 — formal closure after owner real-use acceptance; TASK-016 planning (docs only, 2026-10-21)
+base: origin/main `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` (the TASK-018 performance squash, already merged
+  and deployed under separate owner authorization). Branch `docs/task-018-closure-task-016-plan`.
+changed:
+  - TASKS.md: TASK-018 `status: review` -> `status: done`, with a new top `closure` block recording owner
+    real-use acceptance PASS, the merged squash, the Pages deployment, the verified gate numbers, the
+    Firebase-unchanged evidence, the honest Undo/p95 limitation and every carried-forward limitation.
+  - TASKS.md: new TASK-016 entry at `status: todo` (planning authorization only, NOT implementation),
+    carrying the audit finding and the required solution properties.
+  - docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md (new): the full TASK-016 audit, root-cause analysis,
+    bounded design, test matrix, acceptance plan, risk/rollback, review requirements and GO/NO-GO.
+  - No runtime code changed. No Firebase redeployment. No www mirror change. No index.html change.
+tests: no runtime change to test. See TEST_REPORT.md "TASK-018 closure verification".
+→ TASK-018 `done`; TASK-016 `todo` pending a separate owner GO.
+
 ## TASK-015 — post-rebase F3 rewrite and docs (branch: task-015, 2026-10-15)
 base: rebased by the lead onto origin/main `2411ee4`, then cleanly onto `8abe63b` (TASKS.md-only delta). Tokens: governed = `20261014-task014-normal-tracking-hud-v1`;
   Brain Dump = `20261015-task015-plan-tray-v1`.
@@ -5017,6 +5032,158 @@ deviations: owner screenshot unavailable; written feedback used. Full Playwright
   devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
 → status set to `review` in TASKS.md; stop at REVIEW-READY.
 
+## TASK-018 — proposal checkpoint (branch: task-018)
+changed:
+  - TASK_018_UX_PROPOSAL.html / TASK_018_UX_PROPOSAL.md: isolated compact-row proposal and explicit pending completion-contract audit.
+  - TASKS.md: record owner-direct scope and required proposal-acceptance gate; status remains codex.
+tests: isolated proposal renderer passes three viewports, 22 synthetic tasks and simulated action states; see TEST_REPORT.md.
+blockers: waiting for the owner-requested UX acceptance before production implementation; persistence contract audit pending.
+deviations: none — no production code, model, rules, sync, www, deployment or live-data changes.
+→ proposal only; final review-ready candidate and independent review pending.
+
+## TASK-018 — approved Refined A implementation safety gate (branch: task-018)
+changed:
+  - TASKS.md: record current owner implementation authorization and blocked safety-gate result.
+  - TASK_018_IMPLEMENTATION_SAFETY_GATE.md: exact all-store retention, old-client and cutover blockers;
+    required contract, source consumers, evidence and explicitly unfulfilled implementation deliverables.
+  - design/task-018/audit-completion-safety.mjs: offline synthetic reproduction of 18 current-contract observations,
+    with integrity checks for all 14 released-client fixture files. Not a production completion implementation.
+tests: 18 observations reproduced (gate BLOCKED); 116 existing focused baseline tests pass; rules/parity/diff checks pass.
+blockers: old writers can erase an annotation; post-cutover ordinary legacy sources deny the write. Need a reviewed,
+  proven server-enforced stable-identity retention/transition and compatibility protocol across all source stores,
+  plus historical convergence and exact acknowledgements/conditional Undo. See safety-gate report.
+deviations: stopped as owner required before production edits. No implementation SHA, real completion acceptance,
+  production screenshots or full regression/emulator/device evidence. Existing unrelated dirty design files preserved.
+  No new completion/delete behavior, production/rules/sync/live-data changes, merge, push or deployment.
+→ status set to `blocked` in TASKS.md; independent review requested for exact local audit checkpoint, not an implementation.
+
+## TASK-018 — completion durability contract and offline proof (branch: task-018)
+changed:
+  - TASK_018_COMPLETION_DURABILITY_CONTRACT.md: independent resolution-only records, stable source identity,
+    dedicated backend room CAS, confirmed/unknown recovery and conditional Undo; owner architecture gate explicit.
+  - design/task-018/contract/: four isolated proof/fixture/test modules; existing source validators and one
+    14-file hash-pinned cf43080 release reused; no production imports or endpoint.
+  - TASKS.md: record current owner contract-only instructions and proof delivery; implementation remains blocked.
+tests: 46 isolated checks pass (35 deterministic + 11 real loopback RTDB emulator/SDK); 99 existing model tests pass.
+blockers: owner must approve privileged-domain exception and bounded identity/size/priority/contention policy
+  before production implementation; real authentication/IAM, app integration and release gates remain unproved.
+deviations: none. Original audit and all mockups/uncommitted prototype edits preserved. Production/rules/backend
+  and live data unchanged; no UI redesign, integration, push or deployment.
+→ contract recommendation handed off for exact-checkpoint independent review; stop at OWNER APPROVAL GATE.
+
+## TASK-018 — local completion implementation, review-ready (branch: task-018)
+changed:
+  - task-completion-model/repository/sync.js and functions/src/completion-api/domain.js: approved dedicated
+    authenticated resolution facts, account/source/revision binding, bounded room ETag CAS, immutable receipts,
+    confirmed readback, unknown recovery and conditional Undo. No original plan/history rewrite or task copy.
+  - functions/index.js, rules builder/generated rules and functions shared generation: separate required-service-
+    account export and direct-client resolution write denial. No deployed backend, rules, IAM or account writes.
+  - plan-authority.js/rawStaleUnfinished and storage.js account seam: confirmed read-only Unfinished overlay,
+    source/context invalidation, account-generation guards and teardown. Existing Action API/Brain Dump intact.
+  - planning-continuity-ui.js/.css: approved Refined A five-row preview, searchable bounded backlog, anchored
+    More/Done earlier, separate long-title access, 44px targets, honest pending/error/unknown feedback and Undo.
+    Today's timeline check styling aligned without changing its completion callback.
+  - index.html governed release wiring, generated www mirrors, test/lint wiring and focused completion tests;
+    existing planning regressions follow approved controls while retaining history assertions. Shared smoke
+    startup readiness and connected-control double-click harness corrections preserve/strengthen assertions.
+  - CODEMAP.md, TASKS.md status and TASK_018_IMPLEMENTATION_HANDOFF.md: exact 45-file manifest, UI evidence,
+    synthetic cost observations, failed-iteration disclosures, limitations and human/deployment holds.
+tests: npm test: 2249/2250 node:test pass, 0 fail, 1 existing opt-in skip; legacy 455/455 pass. Full browser:
+  940 pass + 7 unchanged expected failures, 0 unexpected/skip/flaky. Firebase fence: 151/151 pass, including
+  14 completion emulator cases. New deterministic proofs 59/59, Worker 32/32 and local dry-run bundle pass;
+  generated rules/shared/www parity pass; lint 0 errors/48 existing warnings. See TEST_REPORT.md and handoff.
+blockers: none for local review handoff; exact-candidate independent verdict supplied separately. Integration,
+  service-account/IAM/live-auth review, physical-device testing and real-use acceptance remain separate gates.
+deviations: existing baseline autofill draft-clear race reproduced independently; only smoke setup waits for
+  startup, production race not fixed. Double-click test avoids a detached ElementHandle and adds exact revision/
+  sibling assertions. Three prior dirty design artifacts preserved and excluded. No merge/push/deployment.
+→ status set to `review` in TASKS.md. REVIEW-READY ONLY; not done or authorized for integration.
+
+## TASK-018 — completion monitoring delta (owner-direct staging preparation, branch: task-018-monitoring)
+changed:
+  - functions/src/completion-telemetry.js (new): per-request transport meter and sanitized structured event —
+    outcome (CONFIRMED/REJECTED/UNKNOWN even under HTTP 200), allowlisted reason, CAS attempts, 412 conflicts,
+    denials, reads, read/response byte buckets, latency, transport failure class, size-refusal flag, severity.
+  - functions/src/completion-api.js: handler accepts optional `log`/`clock`, meters its transport and emits once
+    per request. `execute`, `propose`, validation, response bodies and status codes are unchanged.
+  - functions/src/completion-domain.js: `read` also returns received `bytes`; `readCompletionJson` unchanged.
+  - functions/index.js: JSON log sink (`component: chronasense-completion-api`, Cloud Logging `severity`) and a
+    class-only `completion-unavailable` event on the 503 path. Endpoint metadata unchanged.
+tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RTDB emulator 14/14, lint clean,
+  rules/shared/www parity unchanged. No deployment, IAM, cloud, push or merge.
+
+## TASK-018 — monitoring clarification (release candidate)
+- `readBytes` buckets the SUM of bytes across all room reads in one request (resolution-key reads excluded); it is a
+  read-amplification signal, not a room-size measure. Room-size refusal is reported only as `reason=ROOM_TOO_LARGE` /
+  `sizeRefusal=true`. Cloud Logging lifts the JSON `severity` to LogEntry severity (observed in isolated staging).
+- Isolated staging (separate project): API acceptance 53/53, browser acceptance 22/22 with zero production requests.
+- Release hygiene: TASK-018 design prototypes, capture scripts and the interactive UX proposal (`design/task-018/`,
+  `TASK_018_UX_PROPOSAL.html`) are not shipped (GitHub Pages serves the repository root). They are preserved on the
+  local branch `task-018` at 07f77d4 (worktree `.worktrees/task-018`); historical references in TASK-018 docs point there.
+- Fix (found in isolated staging): a fresh device locks its own browser zone (`ta3-tz`) and never adopts the account's
+  `settings.timezone`, so every historical completion was refused with ACCOUNT_ZONE_CHANGED ("UTC" vs "Etc/UTC").
+  Inspect now returns the account zone from the same snapshot; `complete()` uses it after its own refresh ("today"
+  computed in it); a mismatching caller zone or a missing zone refuses locally. Server checks unchanged.
+  Staging: browser acceptance 24/24 on the fix (fresh-device completion saved in the account zone).
+
+
+## TASK-018 - done (branch: task-018-candidate; final-release Undo fix, 2026-10-21)
+changed:
+  - planning-continuity-ui.js / www mirror: runCompletionUndo resumes the existing pending task operation; Completed rows show Check status while uncertain. Receipt-read errors refuse before dispatch; cancelled-listener comments match the fail-closed contract (18 changed lines per runtime copy).
+  - tests/task-completion.spec.js: two real-browser regressions preserve the same Undo operation across reload, for request failure before commit and acknowledgement loss after commit (57 changed lines).
+tests: affected browser file 16/16; npm test 2260 pass / 0 fail / 1 known opt-in skip plus legacy harness 455/455; 95-file www parity, focused ESLint and git diff check pass.
+blockers: none in local verification; exact-SHA hosted CI and independent review remain release gates.
+deviations: none. Backend, rules, schema and synchronization unchanged; O3 remains deferred. No merge or publication.
+-> status remains `review` in TASKS.md; owner release approval required.
+
+## TASK-018 — performance remediation review checkpoint (branch: task-018-performance, 2026-10-21)
+changed:
+  - task-completion-sync.js: reuse listener-valid inspection; retain backend/post-inspect verification; consume scheduled refresh; coalesce Undo/resume; refuse new offline actions while preserving prior UNKNOWN commands.
+  - planning-continuity-ui.js and www mirrors: immediate Saving feedback; reserve recovery controls for inactive pending commands; keep separate UNKNOWN visible.
+  - sync/browser tests: source/zone races, request counts, coalescing, offline/UNKNOWN and normal-saving regressions; TASK_018_PERFORMANCE_REPORT.md and task phase record.
+tests: npm test exit 0; sync 21/21; existing browser cases 16 pass plus new saving/offline cases pass after harness corrections. Added mixed pending/active recovery target regression. Final exact-head hosted CI/review results are in the private performance packet.
+blockers: owner performance acceptance remains open; final CI/review must be observed before release consideration.
+deviations: no deployment/merge, protected backend/rules/schema or O3 changes. Completion median 1344.5→955.1ms; Undo and p95 improvement not established.
+→ status remains `review`; TASK-018 is not done.
+
+## TASK-016 — failing regression checkpoint (branch: task-016, 2026-10-21)
+base: verified main c2dd2262d875d18ab35265b2cb667a67b33be114 after documentation PR #10.
+authorization: owner explicitly approved design Fix A/B/C and C1–C14 in this session; this supersedes
+  the task's historical planning-only note. No TASK-016 merge/deploy or live data mutation authorized.
+changed:
+  - brain-dump-sync.test.js: preserved C1/C2 failing tests before any runtime fix.
+tests: both targeted cases fail as intended: identical local/remote claim stays triaged rather than promoted.
+  Existing focused baseline 164/164; full npm test exit 0; real emulator fence 151/151.
+blockers: none; this commit intentionally preserves the reproduction, not a release candidate.
+deviations: none. TASK-016 status codex; final candidate must undergo independent review and remain HELD.
+
+## TASK-016 — review-ready (branch: task-016, 2026-10-21)
+changed:
+  - brain-dump-sync.js and www mirror: separate outstanding-claim observation on unchanged merges;
+    once-per-binding first-hydration callback with room ownership and listener-token guards.
+  - brain-dump-ui.js and www mirror: reuse reconciliation at initialization, online and visible return;
+    share a foreground guard across both surfaces, clear it in finally, preserve separate UNKNOWN state;
+    remove unsupported another-device explanations. No polling or protocol changes.
+  - index.html and www mirror: advance the complete Brain Dump module group release token.
+  - brain-dump-sync.test.js and tests/brain-dump-plan-tray.spec.js: C1–C14 regression coverage,
+    actual module-order reloads, authoritative UNKNOWN recovery, held requests and two-tab races.
+  - personal-day-boundary-web-runtime.test.js: matching strict release token; existing production UX
+    pending case now waits for the actual UNKNOWN timeout rather than the new immediate busy row.
+  - CODEMAP.md: current callbacks, initialization and guard lifetimes; TASKS.md: status only.
+tests: npm test exit 0 (2,269 passed, 0 failed, 1 existing opt-in skip; legacy 455/455);
+  full browser 970/970, Firebase fence 151/151, six-worker same-intent stress 480/480 and
+  competing-intent orders 4/4. Six trigger/guard mutations killed in an isolated checkout.
+  Lint 0 errors/48 existing warnings; 95-file www, rules/shared parity and diff checks pass.
+self-review: SELF_REVIEW.md Code Health passes; would ship this scoped implementation: yes.
+  QA.md AI checks pass for the changed scope; unchanged timer/logging hard rules and protected
+  model/repository/promotion/Plan Authority/storage/backend/rules remain intact. Repository ownership
+  rules take precedence over QA's generic requests to edit STATUS/planning/decision documents.
+blockers: none for builder handoff; independent exact-SHA final verdict is recorded separately.
+deviations: two ancillary test adjustments described above; no weakened assertion. Physical-device/APK
+  acceptance is untested. Neutral contention feedback remains (tray 15/240, view 35/240); stuck claims
+  and duplicates both 0/480. Cross-tab whole-envelope writes/shared locks remain out of scope.
+→ status set to `review` in TASKS.md. REVIEW-READY / HELD; no TASK-016 merge, push or deployment.
+
 ## Owner-direct overnight HUD pilot · 2026-10-20
 branch: `fix/hud-hidden-tracking-session`, isolated repository/worktree based on `bb171a2`.
 changed:
@@ -5036,3 +5203,21 @@ changed: TASKS.md owner-direct entry, TASK_020_HANDOFF.md and append-only test/e
 The three HUD files remain byte-identical to 234a5ca. No new source feature or installed-companion action.
 review: submitted to the existing formal review process; no approval result claimed by builder.
 release: required candidate CI and Run-Merge held gate remain pending. See TASK_020_HANDOFF.md.
+
+## TASK-020 — local reconciliation verified (branch: task-020-reconcile-20261022, 2026-10-22)
+changed:
+  - TASKS.md / REVIEW.md / CHANGELOG.md / TEST_REPORT.md: resolve the four documentation conflicts
+    while preserving main's full records and original TASK-020 history. TASK-016/TASK-018 remain done;
+    TASK-015/TASK-017 remain approved. New TASK-020 local candidate is review, not release-approved.
+  - TASK_020_HANDOFF.md: current owner authority, pinned main 1f171a2, evidence scopes and held gates.
+  - PILOT_REPORT.md / TASK_020_HANDOFF.md: publication-copy path placeholders; immutable pilot retained.
+  - No runtime edits: all three HUD files byte-match reviewed pilot 234a5ca; every other main file is retained.
+tests: companion 60/30, bridge 33, focused browser 14; npm 2269 Node passes + legacy 455, zero failures,
+  one existing skip; emulator/fence 151; full browser 970 expected outcomes (963 ordinary passes + seven
+  existing expected failures), exit 0; lint 0 errors / 48 existing warnings; mirror/rules/shared checks pass.
+blockers: publication/integration held for fresh hosted CI, independent candidate review and a separately
+  approved integration route addressing the unresolved merge-runner/trust-boundary prerequisite.
+deviations: none in product scope; exactly the original ten main-relative TASK-020 files. The explicit owner
+  authorizes this isolated branch and normal merge; no rebase, infrastructure change or installation action.
+evidence: private release-verification/task-020/reconciliation-20261022/ packet; never publish raw evidence.
+→ TASK-020 status review; local reconciliation only. No push, PR update, merge to main or deployment.

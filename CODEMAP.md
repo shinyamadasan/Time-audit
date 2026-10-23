@@ -1,6 +1,38 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Historical task resolution (TASK-018, approved Refined A)
+
+- `task-completion-model.js`: typed original identity, resolution validation, canonical hashes and conservative
+  Firebase wire comparison. `task-completion-repository.js` stores account-bound pending commands only.
+- `task-completion-sync.js`: authenticated inspection/commands, exact receipt recovery, revision-aware Undo,
+  source/context listeners and account-generation guards. No optimistic durable completion or task cache.
+  `accountTimezone()` exposes the account zone (`rooms/<uid>/settings/timezone`) from the latest fresh inspection;
+  `complete()` chooses date/zone after its own refresh, never the device-locked `ta3-tz`. UI: `completionZone()`/`completionToday()`
+  (planning-continuity-ui.js) only size the Done-earlier picker.
+- `functions/src/completion-api.js`: dedicated Firebase-session authentication, immutable snapshot validation,
+  bounded room CAS and authoritative receipt readback. `completion-domain.js`: the explicitly owner-approved
+  privileged exception; owner-derived paths, streaming bounds, mandatory ETag and independent resolution-only
+  write lens. Existing user-scoped Action API cannot import this exception. `functions/index.js` exports the
+  separate completion function with a required dedicated-service-account parameter; no deployment performed.
+- `functions/src/completion-telemetry.js` (`meterTransport`, `completionEvent`, `emitSafely`): one sanitized
+  structured event per completion request (op/outcome/allowlisted reason/CAS attempts+412 conflicts/reads/
+  per-request total room-read bytes bucket (`readBytes` = sum over all room reads in that request; an 8 MiB mutate reads twice ⇒ `gt16MiB`; NOT room size — oversize rooms are `reason=ROOM_TOO_LARGE`/`sizeRefusal`), response byte bucket/latency/size-refusal/unconfirmedWrite/severity). Fixed vocabularies and counts only — never UID, path, task,
+  identity, dates, zone, operation IDs, ETags or tokens. Wired via `createCompletionHandler({ log })`.
+- Rules builder/generated rules deny all direct resolution writes; owner reads inherit existing isolation.
+  `functions/shared/task-completion-model.js` is generated from the root source.
+- `plan-authority.js`: `rawStaleUnfinished` preserves original history; `staleUnfinished` adds only a confirmed,
+  source-matching completion overlay. `storage.js` supplies authenticated context and account/teardown resets.
+- `planning-continuity-ui.js` / `.css`: five-row preview, searchable bounded backlog, anchored More/Done earlier,
+  separate title access, actual pending/error/unknown recovery and conditional temporary Undo. Existing timeline
+  check styling matches Unfinished; timeline completion semantics and Brain Dump behavior stay unchanged.
+- Tests: `task-completion*.test.js`, `functions/test/completion-boundary.test.js`, `tests/task-completion.spec.js`,
+  retained `tests/unfinished-ux.spec.js`; generated `www/` parity. Governed token
+  `20261015-task018-completion-v1`; Brain Dump retains `20261015-task015-plan-tray-v1`.
+- Contract: `TASK_018_COMPLETION_DURABILITY_CONTRACT.md`; current evidence/limitations:
+  `TASK_018_IMPLEMENTATION_HANDOFF.md`. TASK-017's design-only completion restriction below is historical;
+  owner-authorized TASK-018 implements separate resolution facts, never old-day completion or deletion.
+
 ## Unfinished UX V1 (TASK-017 review candidate, 2026-10-15)
 
 - `planning-continuity-ui.js`: `staleHtml` renders five ordinary backlog rows per page; native More actions
@@ -42,6 +74,17 @@ TASK-011 (DECISIONS #37) adds only `plan_create`: an Action API plan item `api1_
 TASK-012 (DECISIONS #38) adds `plan_set_completion`, `plan_edit`, `plan_move`, `plan_delete` (no client change; rules change only for `api1_` relocation: `scripts/firebase-rules-builder.mjs` `actionPlanItemRules` `moveIn`/`moveOut` + `actionRelocationImmutable`). `user-scoped-rtdb.js` `lockActionPlanItemForMove` + `relocateActionPlanItem` + `plan_move` token claims (R1: move lock, `lockCreate` and four lock predicates in the rules builder; `plan-read.js` `itemRevision` excludes the lock); `fence-rules-fixtures.js` `moveToken`/`movePatch`; client proof in `plan-action-item.test.js`. `functions/src/envelope.js` `COMMAND_KINDS` (`mutation: true`) + `planMutationParameters` validate the structured intent and require `expectedRevision`; `functions/src/plan-mutation-action.js` owns `mutatePlanAction` (receipt claim/replay/takeover, intent, observe → proof → precondition → decide → origin → one conditional write), the pure `planMutation` (server twin of `updateItem`/`completeCarryoverItem`/tombstone) and `wireForm`; it reuses `ensurePlanOrigin`/`hasOrigin` exported from `plan-create-action.js`. `functions/src/user-scoped-rtdb.js` adds `readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch` and `readCalendarPlansWithEtag`/`putCalendarPlansIfMatch` (owner token, pinned, ETag only). Worker: four tools in `mcp.js` (`mutationTool`, `REVISION_RULES`), scopes in `action-client.js`, consent wording in `index.js`; `scripts/deploy.mjs` is the deploy gate for the five plaintext bindings. Tests: `functions/test/plan-mutation-action.test.js`, `plan-mutation-anchors.test.js` (source-mutation anchors), `plan-domain-support.js` (RTDB-shaped fake), N1/N2 in `plan-create-action.test.js`/`user-scoped-rtdb.test.js`, TASK-012 cases in `firebase-rules-emulator.test.js`, Worker `plan-mutation.test.js` and `deploy-bindings.test.js`.
 
 ## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST rounds 1-3, 2026-10-02; Production UX Correction V1, 2026-10-03)
+
+TASK-016 promotion reliability: `handleRemoteRecord()` emits a separate `onOutstandingClaim` state
+observation for active claims even on unchanged merges; `attach()` emits `onHydrated` once after the
+first owned snapshot. Both use the existing `refreshBrainDumpSurfaces` / `maybeReconcile` path.
+The UI also sweeps at initialization, `online`, and visible `visibilitychange`, with no polling.
+`promoteFromUi()` holds `inFlightPromotionIds` through the foreground await and clears it in `finally`;
+`promotionPending()` combines that guard with the separate UNKNOWN `pendingPromotionIds` lifetime.
+The two surfaces share this guard and cause-neutral feedback. Core claim, destination, expiry and
+account protocols are unchanged. Current Brain Dump generation: `20261021-task016-promotion-reliability-v1`
+(supersedes historical tokens below). Regressions: `brain-dump-sync.test.js`,
+`tests/brain-dump-plan-tray.spec.js` (C1–C14 matrix evidence in TEST_REPORT.md).
 
 Production UX Correction V1: `promotedTo()` (model) lets a foreground promotion recognize its own claim
 already finished by the listener-driven reconciler. `editHandledCapture()`/`reopenCapture()` +

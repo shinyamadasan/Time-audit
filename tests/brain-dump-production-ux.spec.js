@@ -241,6 +241,9 @@ test('F. capture A pending ("Still confirming…") does not block capture B; A t
   await page.evaluate(id => window.__bdHold(id), a);
   await schedule(page, a, '2026-10-10');
   await expect(root(page)).toContainText('Still confirming a previous action…', { timeout: 15_000 });
+  // The row also covers the foreground await now; prove the actual UNKNOWN
+  // timeout before releasing it, rather than treating the early busy row as one.
+  await expect.poll(() => toasts(page), { timeout: 15_000 }).toContain('Still confirming…');
   await schedule(page, b, '2026-10-11');
   await expect.poll(async () => (await storage(page))[b].status).toBe('promoted');
   expect((await storage(page))[a].status).toBe('triaged');

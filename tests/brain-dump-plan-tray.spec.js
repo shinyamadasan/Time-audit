@@ -17,6 +17,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { wireCopy } from '../brain-dump-test-support.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
@@ -52,6 +53,7 @@ const firebaseStub = `
   window.__bdRelease = id => { const q = held.get(id) || []; held.delete(id); q.forEach(fn => fn()); };
   window.__bdHeldCount = id => (held.get(id) || []).length;
   const fireBd = root => (bdListeners.get(root) || new Set()).forEach(cb => cb(snapshot(readBd(root))));
+  window.__bdReplay = () => bdListeners.forEach((_listeners, root) => fireBd(root));
   // Another tab committed: its write reaches this tab as the real SDK's listener would deliver it.
   window.addEventListener('storage', event => {
     if (event.key && event.key.startsWith('__bdtRemote:')) fireBd(event.key.slice('__bdtRemote:'.length));
@@ -76,7 +78,9 @@ const firebaseStub = `
       if (root) {
         if (!bdListeners.has(root)) bdListeners.set(root, new Set());
         bdListeners.get(root).add(cb);
-        setTimeout(() => cb(snapshot(readBd(root))), 0);
+        const deliver = () => { window.__bdHydrated = true; cb(snapshot(readBd(root))); };
+        if (sessionStorage.getItem('task016-hold-hydration')) window.__bdHydrate = deliver;
+        else setTimeout(deliver, 0);
         return cb;
       }
       setTimeout(() => cb(snapshot(null)), 0); return cb;
@@ -134,12 +138,17 @@ async function openApp(page, { now, fresh = true } = {}) {
     // Ticks from a settable base: real devices never stamp two clicks with one millisecond.
     const RealDate = Date;
     let base = now;
-    let startedAt = RealDate.now();
+    // Reload must not move behind an already-persisted claim's timestamp.
+    let startedAt = Number(sessionStorage.getItem('bdt-clock-start')) || RealDate.now();
     const current = () => base + (RealDate.now() - startedAt);
     window.__setNow = value => { base = value; startedAt = RealDate.now(); };
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [current()])); } static now() { return current(); } };
-    if (!fresh || sessionStorage.getItem('bdt-booted') === '1') return;
+    if (!fresh || sessionStorage.getItem('bdt-booted') === '1') {
+      sessionStorage.setItem('bdt-clock-start', String(startedAt));
+      return;
+    }
     localStorage.clear(); sessionStorage.clear();
+    sessionStorage.setItem('bdt-clock-start', String(startedAt));
     sessionStorage.setItem('bdt-booted', '1');
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
     localStorage.setItem('ta3-device-id', 'device-bdtray');
@@ -193,6 +202,252 @@ const storage = (page, uid = UID) => page.evaluate(uid => JSON.parse(localStorag
 const plans = page => page.evaluate(uid => JSON.parse(localStorage.getItem(`ta3-plans:uid_${uid}`) || '{}'), UID);
 const planItemsWithId = async (page, itemId) => Object.values(await plans(page)).flatMap(day => day.items || []).filter(item => item.id === itemId);
 const FALSE_CONFLICT = /elsewhere|another device/i;
+
+// Synthetic fixture only: establish the real original claim and its plan item,
+// then restore that claim in the cache while the remote still holds it.
+async function stuckFixture(page) {
+  const [id] = await seed(page, [{ text: 'TASK-016 recovery fixture' }]);
+  return page.evaluate(async id => {
+    const repo = window.BrainDumpRepository, sync = window.BrainDumpSync;
+    sync.detach();
+    const refresh = globalThis.refreshBrainDumpSurfaces;
+    globalThis.refreshBrainDumpSurfaces = undefined;
+    try {
+      const target = window.PlanAuthority.current();
+      const claim = await sync.claimPromotionRemote(id, { type: 'do-today', store: target.store, targetId: target.id,
+        targetKey: target.id, planItemId: 'bdp1|' + id });
+      if (!claim.ok) throw new Error(claim.reason);
+      const { reconcilePromotionClaim } = await import('../brain-dump-promotion.js');
+      const outcome = reconcilePromotionClaim({ repository: repo, planAuthority: window.PlanAuthority, id, now: Date.now(), deviceId: 'fixture-original' });
+      if (!outcome.ok) throw new Error(outcome.reason);
+      const key = 'ta3-brain-dump-v1:uid_bdtray-user';
+      const envelope = JSON.parse(localStorage.getItem(key));
+      envelope.captures[id] = claim.record;
+      localStorage.setItem(key, JSON.stringify(envelope));
+      return { id, claim: claim.record.promotionClaim, item: window.PlanAuthority.rawItems(target).find(item => item.id === 'bdp1|' + id) };
+    } finally { globalThis.refreshBrainDumpSurfaces = refresh; }
+  }, id);
+}
+
+for (const mode of ['warm-before-ui', 'cold-before-ui', 'cold-after-ui']) {
+  test(`TASK-016 C3/C4: automatic reload recovery ${mode}, original item unchanged`, async ({ page }) => {
+    await openApp(page, { now: at('2026-10-01', '09:00') });
+    const fixture = await stuckFixture(page);
+    if (mode.startsWith('cold')) await page.evaluate(() => localStorage.removeItem('ta3-brain-dump-v1:uid_bdtray-user'));
+    if (mode === 'cold-after-ui') await page.evaluate(() => sessionStorage.setItem('task016-hold-hydration', '1'));
+    let release;
+    if (mode !== 'cold-after-ui') {
+      const gate = new Promise(resolve => { release = resolve; });
+      await page.route('**/brain-dump-ui.js*', async route => { await gate; await route.continue(); });
+    }
+    const navigation = page.reload();
+    if (mode !== 'cold-after-ui') {
+      await page.waitForFunction(() => window.BrainDumpSync && window.__bdHydrated && !globalThis.refreshBrainDumpSurfaces);
+      expect(await page.evaluate(id => window.BrainDumpRepository.read(id)?.status, fixture.id)).toBe('triaged');
+      release();
+    } else {
+      await navigation;
+      await page.waitForFunction(() => window.BrainDumpUI && window.__bdHydrate && window.PlanAuthority?.authorityState() === 'legacy'
+        && globalThis.getChronaSenseRoomCode?.() === 'uid_bdtray-user');
+      expect(await page.evaluate(id => window.BrainDumpRepository.read(id), fixture.id)).toBe(null);
+      await page.evaluate(() => {
+        window.__hydrationSweeps = 0;
+        const refresh = globalThis.refreshBrainDumpSurfaces;
+        globalThis.refreshBrainDumpSurfaces = (...args) => { if (!args[0]) window.__hydrationSweeps++; return refresh(...args); };
+        window.__bdHydrate();
+      });
+      expect(await page.evaluate(() => window.__hydrationSweeps)).toBe(1);
+    }
+    await navigation;
+    await expect.poll(async () => (await storage(page))[fixture.id]?.status).toBe('promoted');
+    const record = (await storage(page))[fixture.id];
+    expect(record.promotionClaim).toBe(null);
+    expect(record.promotion.targetId).toBe(fixture.claim.targetId);
+    expect(await planItemsWithId(page, 'bdp1|' + fixture.id)).toEqual([fixture.item]);
+  });
+}
+
+for (const event of ['online', 'visibilitychange']) test(`TASK-016 C5/B: ${event} recovers once without polling`, async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const fixture = await stuckFixture(page);
+  await page.evaluate(event => {
+    window.__finalizes = 0;
+    const finalize = window.BrainDumpRepository.finalizePromotion;
+    window.BrainDumpRepository.finalizePromotion = (...args) => { window.__finalizes++; return finalize(...args); };
+    if (event === 'visibilitychange') {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      document.dispatchEvent(new Event(event));
+      if (window.__finalizes !== 0) throw new Error('hidden document triggered a sweep');
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      document.dispatchEvent(new Event(event));
+    } else window.dispatchEvent(new Event(event));
+  }, event);
+  expect(await page.evaluate(() => window.__finalizes)).toBe(1);
+  await page.evaluate(() => {
+    for (let n = 0; n < 5; n++) {
+      window.dispatchEvent(new Event('online'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.BrainDumpSync.handleRemoteSnapshot(window.BrainDumpRepository.listAllRaw());
+    }
+  });
+  await expect.poll(async () => (await storage(page))[fixture.id]?.status).toBe('promoted');
+  expect(await page.evaluate(() => window.__finalizes)).toBe(1);
+  expect(await planItemsWithId(page, 'bdp1|' + fixture.id)).toEqual([fixture.item]);
+});
+
+test('TASK-016 C6: thrown foreground work unlocks the row for a retry', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const [id] = await seed(page, [{ text: 'Retry after throw' }]);
+  await expand(page);
+  await page.evaluate(async id => {
+    const claim = window.BrainDumpSync.claimPromotionRemote;
+    window.BrainDumpSync.claimPromotionRemote = () => Promise.reject(new Error('synthetic transport rejection'));
+    try { await window.BrainDumpUI.doToday(id); } catch { /* test the finally cleanup */ }
+    finally { window.BrainDumpSync.claimPromotionRemote = claim; }
+  }, id);
+  await expect(todayButton(page, id)).toHaveCount(1);
+  expect(await planItemsWithId(page, 'bdp1|' + id)).toEqual([]);
+  await todayButton(page, id).click();
+  await expect.poll(async () => (await storage(page))[id]?.status).toBe('promoted');
+});
+
+for (const [surface, different] of [['tray', false], ['view', false], ['tray', true], ['view', true]]) {
+  test(`TASK-016 C8 ${different ? 'competing' : 'same'} stress ${surface}: two tabs converge on the original winning intent`, async ({ context }, testInfo) => {
+    const a = await context.newPage(), b = await context.newPage();
+    await openApp(a, { now: at('2026-10-01', '09:00') });
+    const [id] = await seed(a, [{ text: 'Concurrent synthetic fixture' }]);
+    await openApp(b, { now: at('2026-10-01', '09:00'), fresh: false });
+    const first = testInfo.repeatEachIndex % 2;
+    for (const [index, tab] of [a, b].entries()) {
+      if (surface === 'tray') await expand(tab);
+      else await tab.evaluate(() => showView('braindump'));
+      await tab.evaluate(({ id, surface, tomorrow }) => {
+        window.__bdHold(id);
+        if (surface === 'tray') {
+          const buttons = document.querySelectorAll(`#bd-plan-tray [data-bdt-row="${id}"] .bdt-btn`);
+          window.__tap = window.BrainDumpUI.trayPlace(buttons[tomorrow ? 1 : 0], tomorrow ? 'tomorrow' : 'today');
+        } else if (tomorrow) {
+          window.BrainDumpUI.toggleSchedule(id);
+          document.getElementById(`bd-sched-date-${id}`).value = '2026-10-02';
+          window.__tap = window.BrainDumpUI.confirmSchedule(id);
+        } else window.__tap = window.BrainDumpUI.doToday(id);
+      }, { id, surface, tomorrow: index === 1 && different });
+      expect(await tab.evaluate(id => window.__bdHeldCount(id), id)).toBe(1);
+    }
+    const ordered = first ? [b, a] : [a, b];
+    await ordered[0].evaluate(id => window.__bdRelease(id), id);
+    await ordered[1].evaluate(id => window.__bdRelease(id), id);
+    await Promise.all([a.evaluate(() => window.__tap), b.evaluate(() => window.__tap)]);
+    // No manual reconciliation/reload/lifecycle stimulation: observations must converge.
+    await expect.poll(async () => (await storage(a))[id]?.status, { timeout: 20_000 }).toBe('promoted');
+    const capture = (await storage(a))[id];
+    const remote = await a.evaluate(id => Object.keys(localStorage).filter(key => key.startsWith('__bdtRemote:'))
+      .map(key => JSON.parse(localStorage.getItem(key))[id]).find(Boolean), id);
+    expect(remote.status).toBe('promoted');
+    expect(remote.promotion).toEqual(wireCopy(capture.promotion));
+    expect((await storage(b))[id].promotion).toEqual(capture.promotion);
+    expect(capture.promotion.targetId).toBe(different && first === 1 ? '2026-10-02' : '2026-10-01');
+    const items = await planItemsWithId(a, 'bdp1|' + id);
+    expect(items).toHaveLength(1);
+    const messages = [...await toasts(a), ...await toasts(b)];
+    expect(messages.some(message => FALSE_CONFLICT.test(message))).toBe(false);
+    await testInfo.attach('promotion-stress.json', { contentType: 'application/json', body: JSON.stringify({ surface, first,
+      different, stuck: 0, duplicates: items.length - 1,
+      falseConflict: !different && messages.some(message => /already being added|different details/i.test(message)) ? 1 : 0 }) });
+  });
+}
+
+test('TASK-016 C5/C10/C12: revoked UNKNOWN waits for authoritative presence and coalesces repeated observations', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const fixture = await stuckFixture(page);
+  await page.evaluate(() => {
+    const authority = window.PlanAuthority;
+    window.__assertTarget = authority.assertDirectSchedulingTarget;
+    authority.assertDirectSchedulingTarget = (_target, now) => { if (now > 0) throw new Error('synthetic ended day'); };
+    window.__remotePresence = authority.remoteItemPresence;
+    window.__presenceReads = 0;
+    authority.remoteItemPresence = () => { window.__presenceReads++; return new Promise(resolve => { window.__resolvePresence = resolve; }); };
+    window.dispatchEvent(new Event('online'));
+  });
+  await page.waitForFunction(() => window.__presenceReads === 1);
+  const revoked = (await storage(page))[fixture.id];
+  expect(revoked.promotionClaim.revokedAt).toBeTruthy();
+  expect(revoked.promotionClaim.claimedAt).toBe(fixture.claim.claimedAt);
+  expect(revoked.promotionClaim.claimedBy).toBe(fixture.claim.claimedBy);
+  await page.evaluate(() => {
+    for (let n = 0; n < 8; n++) {
+      window.BrainDumpSync.handleRemoteSnapshot(window.BrainDumpRepository.listAllRaw());
+      window.dispatchEvent(new Event('online'));
+    }
+  });
+  expect(await page.evaluate(() => window.__presenceReads)).toBe(1);
+  await page.evaluate(() => window.__resolvePresence('unknown'));
+  await expect.poll(async () => (await storage(page))[fixture.id]?.status).toBe('triaged');
+  expect((await storage(page))[fixture.id].promotionClaim.revokedAt).toBeTruthy();
+  // An existing local item did not authorize finalization. A later authoritative
+  // presence reply does, without changing its historical data or claim identity.
+  await page.evaluate(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    window.dispatchEvent(new Event('online'));
+  });
+  await page.waitForFunction(() => window.__presenceReads === 2);
+  await page.evaluate(() => window.__resolvePresence('present'));
+  await expect.poll(async () => (await storage(page))[fixture.id]?.status).toBe('promoted');
+  expect(await planItemsWithId(page, 'bdp1|' + fixture.id)).toEqual([fixture.item]);
+  expect((await storage(page))[fixture.id].promotion.targetId).toBe(fixture.claim.targetId);
+});
+
+test('TASK-016 C6: Today then Tomorrow and Schedule are refused during the first round trip', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const [id] = await seed(page, [{ text: 'One foreground request' }]);
+  await expand(page);
+  await page.evaluate(id => {
+    window.__bdHold(id);
+    const buttons = document.querySelectorAll(`#bd-plan-tray [data-bdt-row="${id}"] .bdt-btn`);
+    window.__tap = window.BrainDumpUI.trayPlace(buttons[0], 'today');
+    window.__second = window.BrainDumpUI.trayPlace(buttons[1], 'tomorrow');
+    window.BrainDumpUI.toggleSchedule(id);
+  }, id);
+  expect(await page.evaluate(id => window.__bdHeldCount(id), id)).toBe(1);
+  await expect(row(page, id)).toContainText('Still confirming');
+  await page.evaluate(id => window.__bdRelease(id), id);
+  await page.evaluate(() => Promise.all([window.__tap, window.__second]));
+  await expect.poll(async () => (await storage(page))[id]?.status).toBe('promoted');
+  expect((await storage(page))[id].promotion.type).toBe('do-today');
+  expect((await planItemsWithId(page, 'bdp1|' + id)).length).toBe(1);
+  expect((await toasts(page)).some(message => FALSE_CONFLICT.test(message))).toBe(false);
+});
+
+test('TASK-016 C6: authoritative listener delivery cannot unlock a still-held foreground response', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const [id] = await seed(page, [{ text: 'Listener before response' }]);
+  await expand(page);
+  await page.evaluate(id => {
+    const sync = window.BrainDumpSync, authority = window.PlanAuthority;
+    const claim = sync.claimPromotionRemote;
+    window.__targetById = authority.targetById;
+    authority.targetById = () => null; // keep the observed claim outstanding
+    window.__claimRequests = 0;
+    sync.claimPromotionRemote = async (...args) => {
+      window.__claimRequests++;
+      const result = await claim(...args); // real listener runs before this returns
+      await new Promise(resolve => { window.__releaseResponse = resolve; });
+      return result;
+    };
+    const buttons = document.querySelectorAll(`#bd-plan-tray [data-bdt-row="${id}"] .bdt-btn`);
+    window.__tomorrowButton = buttons[1];
+    window.__tap = window.BrainDumpUI.trayPlace(buttons[0], 'today');
+  }, id);
+  await page.waitForFunction(() => window.__releaseResponse);
+  expect((await storage(page))[id].promotionClaim).toBeTruthy();
+  await expect(row(page, id)).toContainText('Still confirming');
+  await page.evaluate(() => window.BrainDumpUI.trayPlace(window.__tomorrowButton, 'tomorrow'));
+  expect(await page.evaluate(() => window.__claimRequests)).toBe(1);
+  await page.evaluate(() => { window.PlanAuthority.targetById = window.__targetById; window.__releaseResponse(); });
+  await page.evaluate(() => window.__tap);
+  await expect.poll(async () => (await storage(page))[id]?.status).toBe('promoted');
+  expect((await planItemsWithId(page, 'bdp1|' + id)).length).toBe(1);
+});
 
 async function expand(page) {
   await expect(head(page)).toHaveAttribute('aria-expanded', 'false');
@@ -305,8 +560,8 @@ test('F3. a double tap on Today, both taps in flight before either claim settles
     const button = document.querySelector(`#bd-plan-tray [data-bdt-row="${id}"] .bdt-btn`);
     window.__taps = [window.BrainDumpUI.trayPlace(button, 'today'), window.BrainDumpUI.trayPlace(button, 'today')];
   }, id);
-  // Both claim transactions are queued, unsettled, before anything is released.
-  await expect.poll(() => page.evaluate(id => window.__bdHeldCount(id), id)).toBe(2);
+  // The local in-flight guard refuses the second tap before it starts a claim.
+  await expect.poll(() => page.evaluate(id => window.__bdHeldCount(id), id)).toBe(1);
   await page.evaluate(id => window.__bdRelease(id), id);
   await page.evaluate(() => Promise.all(window.__taps));
   await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
@@ -535,6 +790,9 @@ test('F9. a pending claim shows "Still confirming…" with no Today/Tomorrow in 
   await expand(page);
   await todayButton(page, id).click();
   await expect(row(page, id)).toContainText('Still confirming…', { timeout: 15_000 });
+  // The busy row now also covers the foreground await. Wait for the actual
+  // timeout outcome so this still proves UNKNOWN survives finally cleanup.
+  await expect.poll(() => toasts(page), { timeout: 15_000 }).toContain('Still confirming…');
   await expect(todayButton(page, id)).toHaveCount(0);
   await expect(tomorrowButton(page, id)).toHaveCount(0);
 

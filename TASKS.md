@@ -1081,8 +1081,299 @@ integration:
 
 ---
 
+### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
+status: done
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and capture scripts;
+  playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
+  (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
+  CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
+
+closure (2026-10-21, supersedes every prior hold below; owner acceptance received):
+  CLOSED. Owner real-use acceptance explicitly PASS: the owner personally tested the shipped build on
+  their normal device and confirmed (1) completion with responsive Saving feedback, (2) completed tasks
+  still reachable after reload with persistent Undo working, (3) reconnection behaving as expected, and
+  (4) existing time logs, plans and history intact. That was the ONLY outstanding gate; automated
+  verification had already been review-ready. No owner observation here is inferred from automation.
+  Landed: PR #9 "TASK-018: completion responsiveness and honest saving feedback", merged to main as
+  squash 57754a3dad6817cc00bcc99fbfcf4b6939b35ce7 (verified: it is the current tip of origin/main).
+  Deployed: GitHub Pages deployment 7241148022 (environment github-pages, sha 57754a3, state success,
+  https://shinyamadasan.github.io/Time-audit/), Pages build 1304072541, workflow run 39704038172.
+  Verified gates on the exact merged SHA, CI run 39704038615: browser smoke 957/957 passed; Firebase
+  fence / rules integration 151/151 passed across its four suites; legacy unit runner 455/455. Both
+  required jobs concluded success. 12 production canary checks passed (private release evidence).
+  Firebase backend unchanged: firebase.rules.json and firebase.json are byte-identical between the
+  previous released main ca2c90f and 57754a3; the whole diff is frontend, generated www mirrors, tests
+  and docs. No rules deploy, no IAM/schema change, no backend code change.
+  No unexpected data loss and no privacy leakage: all four original canary tasks remain done:false with
+  unchanged wire content, the owner resolution snapshot is unchanged, and privacy verification found zero
+  sensitive-value/key/credential hits across 124 structured events and zero unconfirmed writes.
+  HONEST LIMITATION, deliberately not overstated: completion median improved 29% (1344.5 -> 955.1 ms) and
+  observed API calls fell 51 -> 40 across ten completion/Undo pairs, with normal checking wording gone
+  (20/20 -> 0/20). **Undo latency did NOT measurably improve, and p95 improvement is not established** —
+  candidate Undo median/p95 was 1013.7/1594.2 ms against a 924.4/946.2 ms baseline. Undo still requires
+  its two calls. This closure does not claim otherwise.
+  Accepted limitations carried forward, NOT resolved by this closure: O3 remains deferred; backend
+  server-tail/mutation latency (mutate p95 rose 548 -> 1103 ms) is unimproved; uninstrumented server
+  subspans and expired-auth timing remain unmeasured; larger-room costs unknown; real-device/APK and
+  Android/Capacitor acceptance remain uncovered; permission-cancelled-listener rebind/reload,
+  recovered-completion wording/date-binding and Artifact Registry policy limits stay accepted.
+  Rollback baseline for any future frontend release remains ca2c90f822dc4f8648157fbc62b35324f73f5cca.
+  Evidence retained privately under release-verification/task-018/ (performance/, performance-release-
+  d6c4f7b/, MANIFEST-SHA256.txt and the signed zips); sanitized checkpoint is TASK_018_PERFORMANCE_
+  REPORT.md on main. Raw private evidence is deliberately NOT committed or published.
+  Risk gate: closed as `done` (reversible docs-only closure record). The runtime it records was itself
+  already merged and deployed under separate owner authorization, so this entry ships no code.
+
+current-performance-remediation (supersedes prior release/acceptance hold):
+  Delivery checkpoint: TASK_018_PERFORMANCE_REPORT.md; draft PR #9. Completion median 1344.5->955.1ms,
+  observed request count 51->40 across ten pairs; normal checking copy 20/20->0/20. Undo/tail improvement not
+  established. Final exact-head CI/review evidence is archived privately; keep review/performance acceptance hold.
+  Owner-direct real-use feedback, 2026-10-21: completion and Undo work but feel slow, especially Checking status.
+  Keep TASK-018 open. Dedicated task-018-performance branch from released main ca2c90f.
+  Measure synthetic production median/p95 visual/token/inspection/mutation/refresh/recovery timings and request
+  counts before focused client improvements. Preserve authoritative receipts, operation IDs, authorization,
+  conditional writes, source history, UNKNOWN and account/listener safety. Prefer client changes first.
+  Scope: task-completion-sync.js, planning-continuity-ui.js, their focused tests and generated www mirrors;
+  performance evidence/report, TASKS phase/status, CHANGELOG and TEST_REPORT. Backend inspection/measurement
+  only; no backend/rules/schema/IAM changes or deployment. O3 remains deferred. No merge/deploy or TASK-016.
+  Verify completion/Undo/double-click/reload/interruption/offline/reconnect/account-switch/history, relevant
+  browser/fence gates, CI and fresh independent review. Return review-ready; owner performance acceptance pending.
+
+current-implementation-authorization (supersedes contract-only gate below):
+  Owner-direct attachment 44332b2d-84ff-4e8f-a4f2-80178f0818f9/Pasted text.txt, current session 2026-10-15:
+  Implement Reviewed Completion Contract, REVIEW-READY ONLY. Contract df7c279ea730526314c2e97c7f6597674208b518
+  and Refined A 26e24b46214cf6ae12828d5bd8389171a5644b28 explicitly approved for bounded local development.
+  Dedicated privileged completion boundary approved; no fallback in existing Action API. Preserve prior dirty
+  design artifacts. No deployment, Firebase/IAM changes, real account/task writes, secrets, merge/push/release,
+  UI redesign, bulk migration or TASK-016 work. Stop at first unresolved safety blocker or final review-ready.
+  Exact source scope: new task-completion-model/repository/sync.js; functions/src/completion-api/domain.js;
+  functions/index.js; readonly plan-read helper if necessary; plan-authority.js/stale-plan-recovery-model.js
+  resolution overlay only; storage.js account seam; planning-continuity-ui.js/.css; index.html wiring;
+  scripts/functions-shared.mjs and generated functions/shared; rules builder/generated rules; generated www;
+  completion unit/backend/emulator/browser tests and their wiring; CODEMAP.md, handoff, append-only logs and
+  this task metadata. No other architectural changes. TASK_018_COMPLETION_DURABILITY_CONTRACT.md is authoritative.
+  Acceptance: real today/explicit earlier completion, exact identity/source/revision/receipt protocol and
+  confirmed removal, recoverable rejected/unknown states, conditional Undo, all original history preserved,
+  approved compact five-preview/search/menu/date UI and 44px targets. Bounded conditional PUT only, sibling
+  preservation, streaming size/priority refusals and representative cost/contention observations required.
+  Verify full Node/browser/fence/rules/parity gates, read actual summaries, capture real production UI at
+  390px/1440px including backlog, independently review exact final SHA/security/concurrency/history/UI/results,
+  fix must-fixes. Report all owner-requested fields and limitations; no integration.
+
+current-contract-phase (supersedes execution authorization below; implementation remains blocked):
+  Owner-direct "Completion Durability Contract", current session 2026-10-15. MODE CONTRACT DESIGN + OFFLINE PROOF.
+  Base bb171a287ac67d76ae27634b5227bc24f66919de; audit 07ae51cf28b0aed41a2b5061fcc50dfd5baeb4d9.
+  Allowed additions: TASK_018_COMPLETION_DURABILITY_CONTRACT.md and design/task-018/contract/ isolated proof
+  fixtures/tests; append CHANGELOG/TEST_REPORT and record this phase only. Preserve all earlier work/mockups.
+  Investigate exact all-store/fenced identity, duplicates/moves/boundary conflicts, independently protected
+  resolution-only records versus item annotations, authenticated revision-aware idempotent writes/acks,
+  released-client survival, reload/other-device recovery, failure/unknown handling and conditional Undo.
+  Prove old replay retention, unchanged cutover freeze, resolution without historical rewrite, concurrency,
+  account isolation, reload, no false completion, and malformed/unauthorized refusal with offline fixtures.
+  No production implementation, deployed Firebase changes, live tasks, general task store/event framework,
+  UI redesign, integration, push or deployment. Independent final technical review required.
+  Deliver recommended contract, stable identity/storage/write-ack/compatibility/Undo/rules impact/minimal files,
+  proof results/residual risks/review/readiness. STOP at OWNER APPROVAL GATE, not automatic implementation.
+
+contract-delivery:
+  TASK_018_COMPLETION_DURABILITY_CONTRACT.md recommends independent resolution-only sibling records plus a
+  dedicated authenticated backend room-ETag CAS, retaining original sources and durable per-task op receipts.
+  This requires explicit owner approval of a privileged-domain architecture exception, NOT a fallback in the
+  existing Action API. Typed original identity; all-store/fence proof; conservative move/duplicate/generation/
+  boundary conflicts; conditional Undo; old-client survival; size/priority/contention/unknown limits documented.
+  46 isolated checks pass (35 deterministic, 11 real local RTDB emulator/SDK); 99 existing model tests pass.
+  No production functionality/rules/sync changes. New proposal remains unapproved; TASK-018 implementation
+  stays blocked. Independent review requested for exact local contract checkpoint; stop at owner approval gate.
+
+implementation-phase (supersedes design-only execution restrictions below; historical records retained):
+  Owner-direct "TASK-018 - Implement Approved Refined A", current session 2026-10-15.
+  Visual direction approved at 26e24b46214cf6ae12828d5bd8389171a5644b28. Fetch and verify current origin/main.
+  Goal: real historical completion with the approved compact rows, five-task preview, searchable View all,
+  anchored More/Done earlier, temporary feedback, 44px targets, full-title access and keyboard/mobile support.
+  Preserve original plan date/outcome separately from reported actual completion date; no fabricated time,
+  old-day completion or streak credit; no second task store. Audit Plan Authority, Firebase rules,
+  reconciliation, sync and old-client compatibility BEFORE persistence implementation. Require account-bound
+  revision-aware writes, confirmed durability, recoverable failures/unknown results and conditional Undo.
+  STOP and report a specific blocker if protected data-model changes cannot be proven safe; no decorative check
+  or hidden Move-to-today substitute. No live cleanup/deletion, unrelated changes, merge, push or deployment.
+  If gate passes: declare exact production files here, implement the complete slice, test today/earlier/Undo/
+  conflict/search/titles/account-switch/two-client/failure/unknown/history/old-client and TASK-014/015/017,
+  capture actual production 390px/1440px UI including backlog, run repository verification and independent
+  review on exact candidate. Target REVIEW-READY ONLY; if blocked, report skipped implementation deliverables.
+
+implementation-safety-gate:
+  BLOCKED before production changes. Current and released cf43080 whole-item merges erase a proposed resolution
+  when a newer offline pre-resolution edit arrives; ordinary calendar rules accept that overwrite. Ordinary
+  plans/operationalPlans history rejects all writes after calendar activation although it remains in Unfinished.
+  New-client CAS alone fixes neither gap. Need a reviewed all-store, stable-identity retention/transition and
+  post-cutover exception contract, including old-writer policy, before persistence can be proven safe.
+  Historical subscriptions and exact acknowledgement/conditional Undo also require protected sync changes.
+  See TASK_018_IMPLEMENTATION_SAFETY_GATE.md and design/task-018/audit-completion-safety.mjs (18 offline observations,
+  14 released-fixture hashes verified). Existing six-file baseline: 116 tests pass; rules generation/parity pass.
+  No production checkbox/completion/Undo was implemented. Full implementation tests/screenshots and production
+  independent review are unavailable; independent review of the exact safety-audit checkpoint is requested.
+
+context:
+  Owner-direct visual-first design instructions supplied in Pasted text.txt in this session, 2026-10-15,
+  supersede the earlier implementation sequence. Base bb171a287ac67d76ae27634b5227bc24f66919de.
+  Worktree task-018; preserve prior proposal files and uncommitted edits. TASK-017 failed real-use UX acceptance.
+  MODE DESIGN ONLY. Owner now directs refinement of Option A only; production approval remains pending.
+  The earlier 64px proposal remains an unapproved exploration, not a constraint.
+
+objective:
+  Produce three distinct, polished standalone alternatives for Unfinished in the context of My Day,
+  using 22 realistic mock tasks; compare measurable UX and technical feasibility before owner visual selection.
+
+sequence:
+  1. Inspect current My Day/full-page screenshots, TASK-017 source, existing proposal/edits, tokens and constraints.
+  2. Research Todoist, Things 3 and Linear from actual accessible references; distinguish observations from assumptions.
+  3. Create A minimal checkbox list, B efficient grouped manager, C triage inbox; no predetermined row height.
+  4. Render all options, measure real footprints, compare UX and assess protected persistence separately.
+  5. Deliver visual evidence and a recommendation; stop for owner visual selection, never auto-select or implement.
+
+acceptance:
+  - Three meaningfully different interaction/information architectures, cohesive with existing ChronaSense dark UI.
+  - Each demonstrates mock completion today/earlier, anchored More open/close, move/reschedule, dismissal,
+    feedback/Undo concept, long titles, 22 realistic tasks, empty/error states; no real persistence claim.
+  - Readable text/subtle available dates, accessible touch and keyboard controls, no horizontal overflow,
+    duplicated titles, repeated oversized actions, full-width More panel or unnecessary instructional paragraphs.
+  - Each has 390x844 default/menu/date and 1440x900 default/menu captures, plus surrounding My Day context.
+  - One visual comparison page/contact sheet, local paths/opening instructions and measurable criteria:
+    five-row/section footprint, taps, finding effort, density, clarity, mobile/desktop, accessibility and complexity.
+  - Separate feasibility assessment covers completion truth, Firebase/rules, sync/concurrency, account isolation,
+    old clients, Plan Authority, Undo and TASK-016; identify blockers without implementing any of them.
+
+constraints:
+  - Local design artifacts/mock JavaScript/documentation/screenshots and design-only commits are authorized.
+  - No production UI, Plan Authority/sync, schema/rules changes, real-data mutation, merge, push or deployment.
+  - No automatic design selection. Recommendation is not approval. Delete requires separate data-model approval.
+  - Preserve existing local work; earlier 64px proposal is unapproved. Do not run complete production regressions for mocks.
+
+verification:
+  - Real browser render and inspect every option and required state at requested sizes; focused mock interaction,
+    keyboard/touch/overflow checks and measured dimensions, no live network/storage connections.
+  - Confirm production files unchanged and prior local proposal bytes preserved. Deliver requested design fields,
+    recommendation/tradeoffs, OWNER_APPROVAL PENDING; stop at design delivery.
+
+initial-design-delivery:
+  Three standalone alternatives and comparison page delivered in design/task-018/. Owner visual selection pending.
+  A is recommended only, not selected/approved. Earlier 64px exploration remains unapproved and preserved byte-for-byte.
+  Real browser evidence at 390x844 and 1440x900: all requested default/menu/date and My Day context images,
+  empty/error/success/Undo/long-title states, C selection concept and measured footprints. Focused mock checks:
+  182 assertions pass, 0 browser exceptions/external requests; comparison loads all 7 visual states without overflow.
+  Production completion/Undo remains blocked on a separately reviewed persistence/concurrency/compatibility contract;
+  see design/task-018/FEASIBILITY.md. No production UI, Plan Authority, sync, schema/rules, www or live-data changes.
+  No full production regression suite (explicit owner instruction), merge, push or deployment.
+  Status review is a design-only handoff. Do not resume production implementation without separate owner authorization.
+
+current-refinement:
+  Owner-direct "Refine Option A Only" in this session, 2026-10-15, authorizes visual prototype changes only.
+  Keep original A/B/C study and prior uncommitted work; create A-refined.html / A-refined.css / A-refined.js,
+  capture-A-refined.mjs and A-REFINEMENT.md under design/task-018; link the refinement from comparison/README.
+  Replace pagination with five-item preview + View all opening a bounded searchable backlog without permanent
+  search/grouping in My Day. Checkbox means Complete today; Done earlier stays in compact anchored More.
+  Use a small temporary Undo notice; preserve long-title access and touch targets. Show complete My Day at
+  390px/1440px, preview, full backlog, More and date states; measure footprint and interaction counts.
+  Mock-only interactions, no production/persistence/Firebase/planning changes; no merge/push/deploy.
+  Focused browser design checks only, then stop at design evidence with production approval pending.
+
+refinement-delivery:
+  Refined A is available at design/task-018/A-refined.html; complete screenshot gallery and measurements at
+  A-refinement-evidence.html / A-REFINEMENT.md. Both requested widths captured in complete mock My Day context.
+  Five-task preview + View all; bounded searchable 22-item backlog; More/Done earlier; temporary Undo notification.
+  Measured section 367px mobile / 348px desktop; notification 46px; 62 focused mock assertions pass, no browser
+  exceptions/external requests/storage writes/overflow. Original A/B/C assets and old uncommitted proposal preserved.
+  Design-only handoff. No production/persistence/Firebase/planning changes, merge, push or deployment.
+  Production approval remains pending; stop after this visual evidence.
+
+---
+
+### TASK-016 - Brain Dump Promotion and Synchronization Reliability
+status: done
+owner: claude
+source: owner-direct (preparation + planning authorization only, 2026-10-21)
+priority: P1
+depends-on: TASK-015 (approved), TASK-018 (done)
+
+NOT IMPLEMENTATION AUTHORIZED. This entry is the planned design handoff only. Do not branch, implement,
+merge, deploy or touch production data for it. It moves to `codex` only on a separate owner GO.
+
+context:
+  TASK-015 shipped the My Day Brain Dump planning tray and documented, in TASK_015_HANDOFF.md, a
+  pre-existing stuck-claim defect in the protected sync layer: same-browser two-tab stress sometimes left a
+  capture `triaged` with an outstanding `promotionClaim` even though its plan item already existed. Manual
+  reconciliation fixed it; ordinary reload did not reliably trigger it. The handoff's suspected cause was a
+  cross-tab localStorage lost update, explicitly recorded as a hypothesis, NOT proven.
+
+audit-finding (confirmed on main 57754a3, 2026-10-21):
+  The defect REMAINS. Root cause is TRIGGER-SIDE, and the localStorage lost-update hypothesis is NOT the
+  cause of the non-recovery. Bisected with a deterministic offline reproduction (2/2):
+  1. The finishing logic is healthy. reconcilePromotionClaim(), invoked directly on the exact stuck record,
+     returns ok:true, settles the capture to `promoted` and yields exactly one correctly-attributed plan
+     item `bdp1|<id>`. Nothing is wrong with reconciliation itself.
+  2. Nothing invokes it. brain-dump-repository.js mergeRemote() gates its `changed` flag on
+     `JSON.stringify(local) !== JSON.stringify(merged)`, and brain-dump-sync.js fires onRemoteChange ONLY
+     when `changed`. Once the stuck record is identical locally and remotely — which is exactly the
+     post-reload steady state the handoff observed — the initial listener delivery, a replayed whole-subtree
+     snapshot and a reconnect pushAllLocal() ALL produce zero onRemoteChange, so the listener-driven
+     reconciler is never called. Measured: 0 onRemoteChange calls across all three.
+  3. The only remaining trigger is the single bind-time sweep (settleAllOutstandingClaims), dispatched as
+     `globalThis.refreshBrainDumpSurfaces?.()` one microtask after attach(). It fires once per bind with no
+     retry, and silently no-ops through that optional chaining if brain-dump-ui.js has not evaluated yet.
+     index.html loads storage.js as a classic script (line 1782) ahead of the deferred brain-dump modules
+     (1814-1815), and brain-dump-sync.js's own bottom block can call attach() before brain-dump-ui.js
+     evaluates. Reload recovery therefore depends on winning a module-evaluation race — precisely
+     "ordinary reload did not RELIABLY trigger it". (Mechanism 3 is code-grounded, not separately executed.)
+
+secondary-findings:
+  - Tray in-flight guard (TASK-015 reviewer S3) is still effectively absent. trayPlace(), doToday() and
+    toggleSchedule() all check `pendingPromotionIds.has(id)`, but that set is only populated in
+    reportPromotionOutcome() AFTER the await resolves with reason 'pending' (brain-dump-ui.js:336). During
+    the in-flight window the set is empty, so Today-then-Tomorrow before the first claim settles passes
+    both guards. No duplicate plan item results (the differing intent is correctly refused), but the user
+    is told "This item is already being added to your plan on another device." on their own single device.
+  - pendingPromotionIds is a module-level Set, so it is per-tab only; cross-tab taps get no guard at all.
+  - Misleading 'already-claimed' copy (brain-dump-ui.js:369 and :558) names "another device" for what is
+    frequently the same device or tab.
+
+objective:
+  Make a settled promotion always leave Triaged, and an unsettled one always recoverable automatically,
+  without adding a second task store, sync engine or backend. Fix the existing triggers.
+
+deliverables (planning phase, all docs-only):
+  - [ ] Current-system audit + reproducible root-cause analysis (above; expand into the design doc).
+  - [ ] Bounded implementation design naming exact affected files.
+  - [ ] Deterministic concurrency + recovery test matrix.
+  - [ ] Real Firebase emulator + browser acceptance plan.
+  - [ ] Risk and rollback assessment.
+  - [ ] Independent-review requirements.
+  - [ ] GO / NO-GO recommendation for implementation.
+
+required-solution-properties (acceptance criteria for the eventual implementation):
+  - [ ] Captures never silently disappear.
+  - [ ] A successful promotion produces exactly one correctly attributed plan item.
+  - [ ] A settled promotion never remains indefinitely stuck in Triaged.
+  - [ ] An unresolved outcome is never reported as success or failure.
+  - [ ] Reconciliation resumes the ORIGINAL authoritative claim and destination, never a competing action.
+  - [ ] No duplicate items, historical rewrites, cross-account leaks or lost captures.
+  - [ ] Recovery runs on appropriate lifecycle events, with no unbounded polling or listener loop.
+  - [ ] In-flight actions cannot be accidentally duplicated.
+  - [ ] User-facing status is understandable and actionable.
+
+constraints:
+  - Red-zone: Brain Dump sync, promotion claims and Plan Authority persistence. Hard Rule 9 applies —
+    never lose logged time or a capture. Any implementation lands at `approved`, never auto-merged.
+  - Prefer repairing existing mechanisms over introducing new infrastructure.
+  - Read CODEMAP.md first; never read index.html in full.
+
+see: docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md
+
 ### TASK-020 - Integrate the reviewed HUD tracking-hide pilot
-status: approved
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -1091,6 +1382,25 @@ files: windows-hud/ChronaSenseHud.ps1, windows-hud/Test-HudNormalTracking.ps1, w
   PILOT_REPORT.md, PILOT_REVIEW.md (original reviewed pilot), TASK_020_HANDOFF.md (new),
   TASKS.md (this entry/status only), CHANGELOG.md and TEST_REPORT.md (append-only),
   REVIEW.md (formal reviewer only)
+
+local-reconciliation-authorization (2026-10-22; supersedes the older release sequence below):
+  Owner message "ChronaSense TASK-020 — Isolated Reconciliation" authorizes LOCAL reconciliation,
+  verification, independent review and a local commit only. Reverified remote main
+  1f171a29b55819c7b96872234a1b095d1e80d48c and PR #8 head
+  780e733fe1697bc78a4ea5fa992ddc96ecdf2cbe before changes. Stop if either identity moves.
+  Branch task-020-reconcile-20261022 is an explicitly authorized isolated exception to task-NNN naming;
+  preserve the existing task-020/main/documentation checkouts and original pilot ancestry.
+  Merge pinned main normally; resolve only TASKS/REVIEW/CHANGELOG/TEST_REPORT conflicts. Preserve every
+  other task, TASK-016/TASK-018 release and the three reviewed HUD files byte-for-byte. Update this
+  task's handoff and sanitize unnecessary paths in publication-bound pilot documentation only.
+  Verify both HUD PowerShell suites, bridge/focused browser regressions, full repository tests,
+  lint/mirror/rules consistency, scope and whitespace; independent exact-candidate review required.
+  Required verification failure, runtime conflict or protected-scope change means STOP and document.
+  No push, PR update, main integration, deployment, production Firebase access, installed-companion
+  action, Run-Merge/release/dispatcher invocation or infrastructure repair. Fresh hosted CI requires
+  separately authorized publication; an independently approved integration route must address the
+  unresolved merge-runner/trust-boundary prerequisite. Older integration approval is not a bypass.
+  Status review describes this new local candidate; the historical approval remains in REVIEW.md.
 
 context:
   Owner-direct instruction in the current interactive session, 2026-10-20: continue the already approved

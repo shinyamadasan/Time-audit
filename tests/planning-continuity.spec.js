@@ -151,7 +151,7 @@ async function seedThreePriorities(page, date = null) {
 
 async function openStaleRecovery(page) {
   await unfinished(page).getByRole('button', { name: /Unfinished/ }).click();
-  return unfinished(page).locator('.pc-block', { hasText: 'Unfinished ·' }).last();
+  return unfinished(page).locator('.pc-block').filter({ has: page.getByRole('heading', { name: 'Unfinished', exact: true }) }).last();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -840,7 +840,7 @@ test('30 stale tasks occupy one compact main-page indicator until opened', async
   expect(compactHeight).toBeLessThan(140);
   await trigger.click();
   await expect(unfinished(page).locator('[data-pc-stale]')).toHaveCount(5);
-  await expect(unfinished(page).getByRole('button', { name: 'Next tasks' })).toBeVisible();
+  await expect(unfinished(page).getByRole('button', { name: /View all/ })).toBeVisible();
 });
 
 test('long task titles keep usable controls at mobile width', async ({ page }) => {
@@ -861,9 +861,10 @@ test('an unfinished task from 3 days ago is discoverable and moves to today exac
 
   const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Slipped task');
-  await expect(recovery).toContainText('3 days ago');
+  await expect(recovery).toContainText('Planned Sep 14');
 
-  await recovery.getByRole('button', { name: 'Move to today' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Move to today', exact: true }).click();
   await expect(recovery).toHaveCount(0);
   await expect(strip(page)).toContainText('Slipped task');
 
@@ -890,7 +891,7 @@ test('an unfinished task from weeks ago is still discoverable', async ({ page })
   await openApp(page, { operationalPlans: staleOperationalPlans(30, 'Ancient task') });
   const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Ancient task');
-  await expect(recovery).toContainText('weeks ago');
+  await expect(recovery).toContainText('Planned Aug 19');
 });
 
 test('a completed historical task never appears as unfinished', async ({ page }) => {
@@ -901,8 +902,8 @@ test('a completed historical task never appears as unfinished', async ({ page })
 test('a dismissed stale task stops resurfacing and is not marked done', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
   const recovery = await openStaleRecovery(page);
-  await recovery.getByText('More actions', { exact: true }).click();
-  await recovery.getByRole('button', { name: 'Not doing this' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Not doing this' }).click();
   await expect(unfinished(page)).not.toContainText('Unfinished ·');
 
   const original = await page.evaluate(() => {
@@ -917,8 +918,8 @@ test('a dismissed stale task stops resurfacing and is not marked done', async ({
 test('a stale task can be rescheduled onto an arbitrary future personal day', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
   const recovery = await openStaleRecovery(page);
-  await recovery.getByText('More actions', { exact: true }).click();
-  await recovery.getByRole('button', { name: 'Reschedule…' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Reschedule…' }).click();
 
   // The browser opens so the owner can pick a destination rather than it being guessed.
   const browser = continuity(page).locator('.pc-block', { hasText: 'Browse future My Days' });
@@ -939,7 +940,8 @@ test('a stale task can be rescheduled onto an arbitrary future personal day', as
 test('a reload preserves a recovered task and does not re-offer it', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
   const recovery = await openStaleRecovery(page);
-  await recovery.getByRole('button', { name: 'Move to today' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Move to today', exact: true }).click();
   await expect(strip(page)).toContainText('Slipped task');
 
   await page.reload();
@@ -957,7 +959,8 @@ test('a LEGACY stale task is discoverable and moves into the current personal da
 
   const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Legacy slipped');
-  await recovery.getByRole('button', { name: 'Move to today' }).click();
+  await recovery.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Move to today', exact: true }).click();
   await expect(strip(page)).toContainText('Legacy slipped');
 
   const state = await page.evaluate(() => ({
