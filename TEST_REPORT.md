@@ -2428,3 +2428,34 @@ untested: fresh hosted CI/Node 22, installed-companion release, new owner WPF/tr
 evidence: private release-verification/task-020/reconciliation-20261022/ logs, verification-results.json,
   scope audits and separate independent review. Tested source tree 618197a21d417dddc708292b3a5afc6fbf3765c2;
   later tracked edits are documentation/evidence only. No push/publication, production access or installed-HUD action.
+
+## TASK-020 · 2026-10-22 · final release-gate preparation
+source candidate: 03ffb77c57a624f0c6f201dd7e5996e395574e7b, tree 155607e0f5f1a18df84beb3d84ab32a14374370d;
+  main 1f171a29b55819c7b96872234a1b095d1e80d48c. Approval proposal changes documentation only.
+suite/result:
+  - Fresh local pwsh normal/dogfood suites: 60/30 assertions passed.
+  - Fresh local node --test windows-hud-bridge.test.js: 33 passed, zero failures/skips.
+    Initial default-sandbox attempt could not spawn Node's subprocess (EPERM); authorized retry passed.
+  - Hosted CI run 39885646287 attempt 1: both required GitHub Actions app 15368 jobs completed success
+    on the exact PR #8 head/base above: test 120193082558; Firebase fence / rules integration 120193082356.
+    Actual checkout 3e7505feb84478452a79812aca7fc4ecc4bffabd has the exact candidate tree. Node 22.23.3.
+  - Hosted npm test logs: 2,263 Node passes, zero failures, six existing skips in 2,269 cases;
+    legacy 455/455. Skips are the Windows-specific lowercase-drive case, existing opt-in control, and
+    four Windows-only dispatcher fixture cases on Linux. Windows local totals above are distinct.
+  - Hosted full browser: 970 expected outcomes, 963 ordinary passes plus seven existing annotated
+    expected failures F-1 through F-7, no unexpected failures. Hosted fence: 151 passed, zero failed/skipped.
+    Worker test/bundle and mirror/rules workflow steps succeeded. Coverage was not measured.
+  - Exact ten-file main-relative scope, pilot ancestry, three HUD blob hashes, preservation of all other
+    main blobs/task records, insert-only historical evidence and whitespace are checked for the proposal.
+    Code Health/applicable AI QA pass for the documentation-only delta; runtime invariants are preserved.
+  - Branch summary exposes main protection and both required contexts/app IDs; detailed protection read
+    returned 403. Additional review/protection requirements must be verified by an authorized integrator.
+untested:
+  - No full npm/browser/fence local rerun in this docs-only phase: prior local raw logs and fresh hosted
+    raw logs were inspected. No new native/installed-HUD, production, device, LNA or Android acceptance.
+  - Proposed approval commit has not been published or checked by hosted CI. Old successful checks
+    remain bound to 03ffb77; a new exact head requires both jobs again after separately authorized publication.
+  - No safe integration route/security substitute was approved or exercised; retained TASK-021 STOP stands.
+evidence: private release-verification/task-020/final-gate-20261022/ receipts, scope/commit binding and report;
+  prior reconciliation packet unchanged. Independent reviewer owns the distinct REVIEW.md entry.
+result: local approval preparation PASS; RELEASE HOLD. No push, merge, deploy, runner or dispatcher action.

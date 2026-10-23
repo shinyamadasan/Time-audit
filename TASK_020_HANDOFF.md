@@ -1,3 +1,68 @@
+# TASK-020 — final release gate prepared (2026-10-22)
+
+Current authority: owner's "TASK-020 — Final Release Gate Preparation" permits independent assessment
+and a LOCAL documentation-only approval proposal, held before publication, integration or deployment.
+This section supersedes the earlier authority/release sequence below; historical records remain intact.
+No permission to run/modify Run-Merge.ps1, operate the installed HUD or reactivate the dispatcher is granted.
+
+## Verified release input
+
+- PR [#8](https://github.com/shinyamadasan/Time-audit/pull/8) is open, unmerged and non-draft.
+- PR head: `03ffb77c57a624f0c6f201dd7e5996e395574e7b` on remote `task-020`.
+- Current main: `1f171a29b55819c7b96872234a1b095d1e80d48c`, matching the reconciliation baseline.
+- Candidate tree: `155607e0f5f1a18df84beb3d84ab32a14374370d`.
+- [CI run 39885646287](https://github.com/shinyamadasan/Time-audit/actions/runs/39885646287),
+  attempt 1, pull_request: completed success. Required GitHub Actions app 15368 jobs:
+  [test](https://github.com/shinyamadasan/Time-audit/actions/runs/39885646287/job/120193082558) and
+  [Firebase fence / rules integration](https://github.com/shinyamadasan/Time-audit/actions/runs/39885646287/job/120193082356)
+  both completed success on this exact head/base pair.
+- Actual checkout in both logs: PR merge `3e7505feb84478452a79812aca7fc4ecc4bffabd`.
+  Its API-confirmed tree is identical to the candidate tree. Actual test Node is 22.23.3.
+- Main's branch summary confirms protection and both required job names/app IDs. Detailed protection
+  access returned 403; no claim that review requirements or all other protection settings were inspected.
+  GitHub PR review submissions are empty; formal approval evidence is the retained repository review.
+- Exactly the original ten main-relative files remain changed. All other main blobs, TASK-016/TASK-018
+  releases and TASK-015/TASK-017 records are preserved. Three HUD files equal reviewed pilot `234a5ca`.
+
+A fresh independent reviewer assessed the original contract, actual diff, raw retained local evidence
+and live exact-candidate checks; the distinct final release-gate entry is in REVIEW.md.
+Approval is held lifecycle approval only. No implementation/reconciliation must-fix remains.
+
+## Local approval proposal and remaining gates
+
+The isolated `task-020-final-gate-20261022` branch starts at the verified PR head. Its proposed approval
+commit changes only TASKS.md (TASK-020 status), REVIEW.md (separate review), this handoff, CHANGELOG.md
+and TEST_REPORT.md. All historical records and every runtime byte remain intact. The exact new commit
+and scope audit are recorded in the private final-gate packet, excluded from any public commit.
+
+This documentation commit is a NEW candidate: the successful jobs above do not verify that new SHA.
+Publication requires a separate owner GO identifying the exact approval commit and existing PR #8 branch.
+After authorized publication, both required jobs must pass again on the new exact head/base pair.
+Stop on moved identities, unexpected files/runtime changes, failed/missing checks or changed permissions.
+
+Integration still requires an independently approved safe route resolving the retained TASK-021
+trust-boundary prerequisite. No trusted runner/bootstrap repair was approved or implemented here.
+A possible route for owner/security approval is a protected GitHub PR merge, preserving pilot ancestry
+with a merge commit, pinning the expected PR head and rechecking main immediately before integration.
+It must explicitly replace the historical local-runner step and obey all effective branch protections,
+reviews and required checks, with no admin bypass, direct main push, rebase, force-push or automatic merge.
+That route is a PROPOSAL, not an approved or verified security substitute. If it cannot satisfy the
+required trust boundary and protection gates, retain HOLD and scope a separate security decision.
+Integration and its automatic Pages publication need a subsequent exact-candidate owner GO.
+
+Fresh local HUD normal/dogfood suites pass 60/30; bridge passes 33 after a sandbox subprocess denial
+and authorized retry. Hosted npm logs show 2,263 Node passes, zero failures, six existing platform/opt-in
+skips; legacy 455/455. Hosted browser reports 970 expected outcomes (963 ordinary passes plus seven known
+annotated expected failures); fence 151/151. Retained Windows local full-suite counts below remain
+accurate for that environment. No new full local suite, native/installed-HUD, signed-in production,
+device/Android/APK or first LNA acceptance is claimed. Existing H-1, throttling and clock-jump limits remain.
+
+Rollback must reverse only the TASK-020 HUD delta from then-current main, preserving subsequent releases.
+Installed-HUD replacement/restart remains separately unauthorized. No push, merge, deploy, production
+access, dispatcher or release-runner action occurred. **APPROVAL READY locally / RELEASE HOLD.**
+
+---
+
 # TASK-020 — local reconciliation (2026-10-22)
 
 Current authority: owner message "ChronaSense TASK-020 — Isolated Reconciliation" permits local

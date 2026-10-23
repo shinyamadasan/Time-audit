@@ -6,6 +6,83 @@
 
 ---
 
+## Independent TASK-020 final release-gate review — APPROVED (HELD), 2026-10-22
+
+Reviewer: fresh native agent `/root/release_gate_review`, independent of the reconciliation builder.
+Authority: the owner's current explicit final release-gate request permits this separate REVIEW.md record
+and TASK-020's status-only transition from review to approved (held). This is an explicit reviewer-role
+exception for these documentation changes, not permission to integrate or operate release infrastructure.
+Historical review records below remain intact.
+
+Reviewed immutable candidate: `03ffb77c57a624f0c6f201dd7e5996e395574e7b`.
+Inspected tree: `155607e0f5f1a18df84beb3d84ab32a14374370d`.
+Pinned main: `1f171a29b55819c7b96872234a1b095d1e80d48c`.
+Original reviewed pilot: `234a5ca4fbd998d39519949c1fd72363acc12222`.
+The review input intentionally does not contain this new review record. Any subsequent documentation
+commit is a new candidate; success on 03ffb77 must not be represented as success on that new HEAD.
+
+### Findings and evidence actually inspected
+
+No implementation or reconciliation must-fix remains for the inspected candidate.
+
+- Read the applicable AGENTS instructions, CODEMAP HUD section, TASK-020 contract, retained TASK-020
+  reviews, pilot reports/handoff, relevant architecture/decision material, actual HUD code/diffs and
+  private reconciliation receipts/raw logs. No application, infrastructure or installed-companion changes
+  were made by this review; tests and native acceptance were not rerun by this reviewer.
+- A fresh deterministic Git tree comparison proves exactly the original ten task files differ from
+  pinned main. Every other main blob is identical, preserving TASK-016/TASK-018 runtime, backend/rules,
+  tests and generated mirrors. All unrelated TASKS.md content is identical; main's REVIEW.md,
+  CHANGELOG.md and TEST_REPORT.md records survive with insertion-only additions.
+- Original pilot ancestry holds, and all three HUD files byte-match it. Hide records tracking startedAt;
+  same-start heartbeat/title changes retain suppression, a new tracking start lifts it, and rapid
+  stop/start, Focus work/break suppression and kind handovers retain the reviewed behavior. No new
+  timer, data, authentication, rules or transport change is included. Main-relative whitespace passes.
+- Raw local evidence supports HUD 60/30 assertions, bridge 33, focused browser 14; full npm 2,269 Node
+  passes, zero failures, one existing opt-in skip, plus legacy 455/455; fence/emulator 151/151; browser
+  963 ordinary passes plus seven annotated expected failures (CLI: 970 passed). Lint: zero errors,
+  48 existing warnings; 95-file runtime mirror, rules and shared-function checks pass. These counts
+  are evidence inspection, not new test execution. The seven known timer/logging defects remain.
+- Read-only live GitHub APIs independently confirm PR #8 is open, head equals 03ffb77 and main equals
+  the pinned baseline. Both required checks are completed success on that exact head, issued by
+  GitHub Actions app 15368, matching the protected branch's required contexts:
+  [test, job 120193082558](https://github.com/shinyamadasan/Time-audit/actions/runs/39885646287/job/120193082558)
+  and [Firebase fence / rules integration, job 120193082356](https://github.com/shinyamadasan/Time-audit/actions/runs/39885646287/job/120193082356).
+  CI run 39885646287 is completed success. The primary's hosted-log reconciliation records Node 22.23.3,
+  2,263 Node passes/zero failures/six existing skips, legacy 455/455, browser 970 expected outcomes
+  including the seven expected failures, and fence 151/151. Platform-dependent hosted/local counts
+  differ; they are not asserted equal. Windows-only fixture skips and the opt-in skip are retained.
+- Historical five-scenario owner-observed native WPF/tray acceptance and unchanged installed-process/
+  settings/startup receipts were inspected in the immutable pilot archive. They used synthetic inputs.
+  This review establishes no fresh native WPF/tray, installed-companion, signed-in production/browser,
+  physical-device/Android/APK or first LNA-prompt acceptance. H-1, background staleness and clock-jump
+  limitations remain outside this task.
+
+### Verdict and remaining release holds
+
+**APPROVED (HELD)** for the inspected implementation/reconciliation. No must-fix rework is requested.
+The exact-candidate hosted-CI prerequisite that was pending in the local review is now satisfied for
+03ffb77 only. TASK-020 may move from review to approved under the owner's explicit current exception;
+this lifecycle verdict grants no push, PR update, merge, deployment or installed-companion authority.
+
+The retained TASK-021 STOP report and independent feasibility review establish that an approved trusted
+execution boundary/reference gate separate from candidate code remains missing. Existing candidate-side
+containment is not an approved solution. A separately scoped and approved integration route must address
+that prerequisite while preserving branch protection and required checks. Protected GitHub PR integration
+is a proposal for owner decision, not an authorized or verified substitute route in this review. Do not
+invoke or modify Run-Merge.ps1, release scripts or dispatchers, and do not repair infrastructure here.
+Historical source-integration approval does not override these current holds.
+
+Before any later landing: obtain the approved safe integration route and explicit release authority;
+recheck then-current main/head, clean tree and pilot runtime parity; obtain fresh required hosted checks
+on any newly published documentation HEAD. If identities or scope move, stop and reassess. Final main,
+hosted CI and Pages verification remain future release steps. Rollback must reverse only the HUD delta
+from then-current main, preserving intervening releases. Installed-companion replacement/restart remains
+separately excluded. Raw private evidence must remain uncommitted.
+
+→ TASK-020 status may be set to `approved` (held); release remains stopped.
+
+---
+
 ## Independent TASK-020 local reconciliation review — PASS LOCAL / RELEASE HELD (2026-10-22)
 
 Reviewer: fresh native agent `/root/task020_independent_review`, separate from the reconciler.

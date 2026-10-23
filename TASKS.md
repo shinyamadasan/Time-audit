@@ -1373,7 +1373,7 @@ constraints:
 see: docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md
 
 ### TASK-020 - Integrate the reviewed HUD tracking-hide pilot
-status: review
+status: approved
 owner: codex
 source: owner-direct
 priority: P1
