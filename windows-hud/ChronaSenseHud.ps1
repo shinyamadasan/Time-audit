@@ -280,11 +280,15 @@ $RootBorder.Add_MouseLeftButtonUp({
 # ── Hide until Focus ends (does not touch Focus state at all) ───────────
 $hiddenUntilEnd = $false
 $hiddenForType = ''
+$hiddenForStartedAt = $null
 # TASK-014: the hide lasts until the hidden kind of session ends — a Focus
 # hide is fulfilled when Focus hands over to normal tracking, and vice versa.
+# A new tracking start also ends the hide, even without an empty render between tasks.
 function Hide-HudUntilFocusEnds {
+  $snapshot = $shared.Snapshot
   $script:hiddenUntilEnd = $true
-  $script:hiddenForType = [string]$shared.Snapshot.type
+  $script:hiddenForType = [string]$snapshot.type
+  $script:hiddenForStartedAt = $snapshot.startedAt
   $window.Hide()
 }
 
@@ -375,6 +379,7 @@ function Render-HudState {
   # applies below; it is never displayed as Focus truth.
   # A hide is fulfilled once the hidden kind of session is no longer the one shown.
   if ($script:hiddenUntilEnd -and [string]$snap.type -ne $script:hiddenForType) { $script:hiddenUntilEnd = $false }
+  if ($script:hiddenUntilEnd -and $snap.type -eq 'tracking-active' -and $snap.startedAt -ne $script:hiddenForStartedAt) { $script:hiddenUntilEnd = $false }
 
   $staleThresholdMs = if ($snap.pageVisibility -eq 'hidden') { $StaleAfterHiddenMs } else { $StaleAfterVisibleMs }
   $isStale = ([DateTime]::UtcNow - $lastAt).TotalMilliseconds -gt $staleThresholdMs

@@ -1372,6 +1372,78 @@ constraints:
 
 see: docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md
 
+### TASK-020 - Integrate the reviewed HUD tracking-hide pilot
+status: approved
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-014 (done, ancestor of baseline)
+files: windows-hud/ChronaSenseHud.ps1, windows-hud/Test-HudNormalTracking.ps1, windows-hud/README.md,
+  PILOT_REPORT.md, PILOT_REVIEW.md (original reviewed pilot), TASK_020_HANDOFF.md (new),
+  TASKS.md (this entry/status only), CHANGELOG.md and TEST_REPORT.md (append-only),
+  REVIEW.md (formal reviewer only)
+
+local-reconciliation-authorization (2026-10-22; supersedes the older release sequence below):
+  Owner message "ChronaSense TASK-020 — Isolated Reconciliation" authorizes LOCAL reconciliation,
+  verification, independent review and a local commit only. Reverified remote main
+  1f171a29b55819c7b96872234a1b095d1e80d48c and PR #8 head
+  780e733fe1697bc78a4ea5fa992ddc96ecdf2cbe before changes. Stop if either identity moves.
+  Branch task-020-reconcile-20261022 is an explicitly authorized isolated exception to task-NNN naming;
+  preserve the existing task-020/main/documentation checkouts and original pilot ancestry.
+  Merge pinned main normally; resolve only TASKS/REVIEW/CHANGELOG/TEST_REPORT conflicts. Preserve every
+  other task, TASK-016/TASK-018 release and the three reviewed HUD files byte-for-byte. Update this
+  task's handoff and sanitize unnecessary paths in publication-bound pilot documentation only.
+  Verify both HUD PowerShell suites, bridge/focused browser regressions, full repository tests,
+  lint/mirror/rules consistency, scope and whitespace; independent exact-candidate review required.
+  Required verification failure, runtime conflict or protected-scope change means STOP and document.
+  No push, PR update, main integration, deployment, production Firebase access, installed-companion
+  action, Run-Merge/release/dispatcher invocation or infrastructure repair. Fresh hosted CI requires
+  separately authorized publication; an independently approved integration route must address the
+  unresolved merge-runner/trust-boundary prerequisite. Older integration approval is not a bypass.
+  Status review describes this new local candidate; the historical approval remains in REVIEW.md.
+
+context:
+  Owner-direct instruction in the current interactive session, 2026-10-20: continue the already approved
+  integration of reviewed commit 234a5ca; register a genuine task/matching branch, obtain formal review and
+  required candidate CI, then use Run-Merge.ps1. Approval 1 includes automatic Pages publication, but
+  explicitly excludes replacing/restarting the installed companion. This entry is being registered NOW,
+  after the separately documented pilot implementation; it is not a historical approval or task record.
+  Reviewed runtime commit: 234a5ca4fbd998d39519949c1fd72363acc12222.
+  Reviewed baseline: bb171a287ac67d76ae27634b5227bc24f66919de, still remote main at registration.
+  Original fresh advisory review: ship. All five native Windows synthetic-input WPF/tray checks were
+  subsequently observed PASS by the owner. Neither is being represented as a prior formal TASK-020 review.
+
+acceptance (implementation/formal-review gate):
+  - [x] The exact original 234a5ca remains an ancestor, with no subsequent changes to its three HUD files.
+  - [x] Hide follows the authoritative tracking startedAt: same-session heartbeat/title changes stay hidden;
+        new activity and rapid stop/start show again; Focus work/break hiding and kind handovers are preserved.
+  - [x] The added regression fails against baseline at ActivitySwitchLiftsHide and passes with the fix;
+        companion 60/30 assertions, bridge 33 tests and focused HUD browser 14 tests passed in the pilot.
+  - [x] Original full npm test evidence is 2190 Node passes plus 455 legacy cases, zero failures, one opt-in skip;
+        parity/rules/lint evidence and independent advisory review are preserved, with limitations disclosed.
+  - [x] Five real WPF/tray acceptance checks are owner-observed PASS, and test processes exited while the
+        installed companion, settings and startup remained unchanged. See TASK_020_HANDOFF.md evidence links.
+  - [x] No new product feature, timer/data/auth/rules/transport change, shared-system modification or
+        installed-companion replacement is included. New changes beyond 234a5ca are lifecycle/evidence only.
+
+constraints:
+  - Preserve the reviewed HUD patch byte-for-byte and the immutable durable pilot archive.
+  - Do not manufacture reviewer results or set approved/done as the builder. Formal reviewer owns REVIEW.md
+    and this task's review status. Owner explicitly requires the HELD gate: no automatic integration.
+  - No edits to unrelated tasks, protected TASK-018/TASK-019 worktrees, global instructions or AI Dev OS code.
+  - No production data/rules/credentials changes; no installed Windows companion restart/replacement.
+  - Stop if baseline, permissions, runtime scope or release conditions change unexpectedly; no rebase,
+    force-push or gate bypass. Administrative registration/review/landing commits must remain explicit.
+
+verification/release gates (after formal review, not claims of completion at registration):
+  - [ ] Formal task-specific REVIEW.md verdict, status approved (held), and matching clean task-020 branch.
+  - [ ] Required candidate hosted checks test and Firebase fence / rules integration actually pass.
+  - [ ] Recheck baseline, clean source/candidate and exact runtime parity immediately before landing.
+  - [ ] Run tools/Run-Merge.ps1 -TaskId TASK-020 preview, then -Confirm under existing owner approval only
+        after prerequisites pass. Do not modify the runner or directly push main as a workaround.
+  - [ ] Verify final main SHA, hosted CI and Pages, record rollback baseline and root-cause/preflight proposal.
+
+---
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

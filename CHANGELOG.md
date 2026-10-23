@@ -5183,3 +5183,58 @@ deviations: two ancillary test adjustments described above; no weakened assertio
   acceptance is untested. Neutral contention feedback remains (tray 15/240, view 35/240); stuck claims
   and duplicates both 0/480. Cross-tab whole-envelope writes/shared locks remain out of scope.
 → status set to `review` in TASKS.md. REVIEW-READY / HELD; no TASK-016 merge, push or deployment.
+
+## Owner-direct overnight HUD pilot · 2026-10-20
+branch: `fix/hud-hidden-tracking-session`, isolated repository/worktree based on `bb171a2`.
+changed:
+  - windows-hud/ChronaSenseHud.ps1: bind normal-tracking Hide to the authoritative start time so the next activity
+    becomes visible even when no idle state renders between sessions. Same-session heartbeats and Focus phase
+    hiding preserve their existing behavior; no timer, bridge, transport, account or data changes.
+  - windows-hud/Test-HudNormalTracking.ps1: four regression assertions for activity replacement, same-session
+    heartbeat/title/claim changes, rapid stop/start and Focus work/break suppression.
+  - windows-hud/README.md: document the activity-switch visibility behavior.
+tests: see PILOT_REPORT.md and the sibling evidence directory; independent advisory review: ship (PILOT_REVIEW.md).
+deviations: owner directly authorized this isolated pilot; existing TASK-014/TASK-015 statuses and all approval
+  records remain unchanged. No push, merge, deployment, startup-companion replacement or shared-system edit.
+
+## TASK-020 — formal registration of reviewed HUD pilot (2026-10-20)
+branch: task-020; original reviewed commit 234a5ca preserved above baseline bb171a2.
+changed: TASKS.md owner-direct entry, TASK_020_HANDOFF.md and append-only test/evidence records only.
+The three HUD files remain byte-identical to 234a5ca. No new source feature or installed-companion action.
+review: submitted to the existing formal review process; no approval result claimed by builder.
+release: required candidate CI and Run-Merge held gate remain pending. See TASK_020_HANDOFF.md.
+
+## TASK-020 — local reconciliation verified (branch: task-020-reconcile-20261022, 2026-10-22)
+changed:
+  - TASKS.md / REVIEW.md / CHANGELOG.md / TEST_REPORT.md: resolve the four documentation conflicts
+    while preserving main's full records and original TASK-020 history. TASK-016/TASK-018 remain done;
+    TASK-015/TASK-017 remain approved. New TASK-020 local candidate is review, not release-approved.
+  - TASK_020_HANDOFF.md: current owner authority, pinned main 1f171a2, evidence scopes and held gates.
+  - PILOT_REPORT.md / TASK_020_HANDOFF.md: publication-copy path placeholders; immutable pilot retained.
+  - No runtime edits: all three HUD files byte-match reviewed pilot 234a5ca; every other main file is retained.
+tests: companion 60/30, bridge 33, focused browser 14; npm 2269 Node passes + legacy 455, zero failures,
+  one existing skip; emulator/fence 151; full browser 970 expected outcomes (963 ordinary passes + seven
+  existing expected failures), exit 0; lint 0 errors / 48 existing warnings; mirror/rules/shared checks pass.
+blockers: publication/integration held for fresh hosted CI, independent candidate review and a separately
+  approved integration route addressing the unresolved merge-runner/trust-boundary prerequisite.
+deviations: none in product scope; exactly the original ten main-relative TASK-020 files. The explicit owner
+  authorizes this isolated branch and normal merge; no rebase, infrastructure change or installation action.
+evidence: private release-verification/task-020/reconciliation-20261022/ packet; never publish raw evidence.
+→ TASK-020 status review; local reconciliation only. No push, PR update, merge to main or deployment.
+
+## TASK-020 — final approval prepared, release held (2026-10-22)
+branch: task-020-final-gate-20261022; parent 03ffb77c57a624f0c6f201dd7e5996e395574e7b.
+changed:
+  - TASKS.md: TASK-020 review -> approved (held), by the separately authorized independent reviewer.
+  - REVIEW.md: separate final release-gate assessment; all prior reviews retained.
+  - TASK_020_HANDOFF.md: exact remote/candidate/CI evidence, local proposal and required future authority.
+  - CHANGELOG.md / TEST_REPORT.md: append this preparation and observed verification evidence only.
+tests: fresh HUD 60/30 and bridge 33; retained full local suites reviewed. Hosted CI 39885646287 succeeds
+  on exact 03ffb77 / main 1f171a2, test Node 22.23.3; both required jobs inspected, including raw logs.
+blockers: RELEASE HOLD for separate publication GO, new exact-approval-head CI, and explicit approval
+  of a safe integration route addressing the unresolved TASK-021 trust boundary. No implementation must-fix.
+deviations: owner explicitly authorizes this doc-only reviewer/status transition beyond the default
+  builder role. Proposed protected PR merge route is unapproved; no infrastructure repair or gate bypass.
+  Five documentation paths only beyond 03ffb77; main-relative scope stays the original ten files.
+  Historical records/runtime bytes preserved. Private final-gate packet stays uncommitted.
+→ status approved (held) locally only; no push, merge, deployment or installed-companion action.

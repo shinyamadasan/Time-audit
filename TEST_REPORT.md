@@ -2378,3 +2378,84 @@ untested: physical devices/Android APK, hosted TASK-016 CI and production use; n
   Firebase deployment or infrastructure change. Cross-tab whole-envelope write hazard/shared locking
   remains out of scope. UNKNOWN remains pending until authoritative evidence. Independent exact-SHA
   final review/results are supplied separately; candidate stays REVIEW-READY / HELD.
+
+## Owner-direct overnight HUD pilot · 2026-10-20
+branch: `fix/hud-hidden-tracking-session`, baseline `bb171a2`.
+suite/result:
+  - Reproduction: updated companion test against copied baseline exits 1 at `ActivitySwitchLiftsHide` (expected).
+  - Companion normal tracking: 60 assertions pass; companion dogfood/startup fixture: 30 assertions pass.
+  - HUD bridge: 33 pass. Focused Playwright normal-tracking-hud: 14 pass, stubbed Firebase/companion.
+  - Full npm test completed rerun: exit 0; 2190 Node passes, 0 failures, 1 existing opt-in skip, plus legacy
+    harness 455/455. First run stopped on missing targaryen in reused dependencies. Offline locked npm CI with
+    lifecycle scripts disabled and the repository CI --legacy-peer-deps flag fixed setup; manifests unchanged.
+  - Lint: 0 errors / 48 existing warnings. Runtime 92-file mirror parity, Firebase rules builder parity,
+    repository no-op build and git diff --check pass.
+review: fresh native reviewer `/root/hud_independent_review`: ship, no actionable findings; independently ran
+  both companion suites. Advisory only; no task approval/status/release records changed.
+untested: live WPF/dispatcher/tray, real signed-in browser+companion, first LNA prompt, physical devices, full
+  browser suite, Android, emulator/fence and production. Only companion presentation suppression changed.
+evidence: PILOT_REPORT.md, PILOT_REVIEW.md and sibling ../evidence/ logs, baseline replay and captured reviewed diff.
+
+## TASK-020 — formal review handoff (2026-10-20)
+Original pilot evidence preserved: companion 60/30, bridge 33, focused browser 14; npm 2190 Node passes plus
+455 legacy cases, zero failures, one opt-in skip; lint/parity/rules checks pass. Not rerun or relabeled here.
+Owner subsequently observed five real synthetic-input WPF/tray checks PASS; see TASK_020_HANDOFF.md.
+Formal candidate hosted CI and the merge runner's own npm test remain required. Runtime has not changed.
+
+## TASK-020 · 2026-10-22 · isolated local reconciliation
+branch: task-020-reconcile-20261022; pinned main 1f171a29b55819c7b96872234a1b095d1e80d48c;
+  original PR head 780e733fe1697bc78a4ea5fa992ddc96ecdf2cbe; reviewed pilot 234a5ca preserved.
+suite/result:
+  - PowerShell Test-HudNormalTracking / Test-HudDogfoodPolish: 60/30 assertions passed.
+  - node --test windows-hud-bridge.test.js: 33 passed; focused normal-tracking-hud browser: 14 passed.
+  - npm test: exit 0; 2270 Node-runner cases, 2269 passed, zero failed, one existing opt-in skip;
+    separate legacy harness 455/455 passed. Coverage not measured.
+  - npm run test:fence: local emulator/rules/real-SDK/mutation suites 151 passed, zero failed/skipped.
+  - npm run test:smoke -- --workers=2: exit 0; 970 expected outcomes, 963 ordinary passes and seven
+    pre-existing annotated expected failures F-1 through F-7. CLI summary: 970 passed (18.9m).
+    No unexpected failures, skipped browser tests or retries. Known offline recovery/logging defects remain.
+  - Lint: exit 0, zero errors / 48 pre-existing warnings. Mirror: 95-file closure byte-identical.
+    Firebase rules and functions/shared generated-source consistency checks pass without writes.
+  - Scope/preservation: original ten files only relative to pinned main; three HUD files byte-identical
+    to pilot; all other tasks/main files and historical logs preserved; conflict markers/whitespace absent.
+  - Code Health / applicable AI QA pass. Existing web timer/sync/history/heartbeat invariants retained by
+    byte identity, with full regressions above. No code structure or architecture moved.
+environment: Windows, Node 24.19.0, npm 11.17.0, PowerShell 7.6.7, Temurin Java 21.0.12.1.
+  Locked offline dependency install used --ignore-scripts --legacy-peer-deps; no manifests changed.
+untested: fresh hosted CI/Node 22, installed-companion release, new owner WPF/tray observations,
+  signed-in production/browser/device end-to-end, first LNA prompt and physical Android/APK.
+  Historical owner observations retain their original scope; no new production acceptance claimed.
+evidence: private release-verification/task-020/reconciliation-20261022/ logs, verification-results.json,
+  scope audits and separate independent review. Tested source tree 618197a21d417dddc708292b3a5afc6fbf3765c2;
+  later tracked edits are documentation/evidence only. No push/publication, production access or installed-HUD action.
+
+## TASK-020 · 2026-10-22 · final release-gate preparation
+source candidate: 03ffb77c57a624f0c6f201dd7e5996e395574e7b, tree 155607e0f5f1a18df84beb3d84ab32a14374370d;
+  main 1f171a29b55819c7b96872234a1b095d1e80d48c. Approval proposal changes documentation only.
+suite/result:
+  - Fresh local pwsh normal/dogfood suites: 60/30 assertions passed.
+  - Fresh local node --test windows-hud-bridge.test.js: 33 passed, zero failures/skips.
+    Initial default-sandbox attempt could not spawn Node's subprocess (EPERM); authorized retry passed.
+  - Hosted CI run 39885646287 attempt 1: both required GitHub Actions app 15368 jobs completed success
+    on the exact PR #8 head/base above: test 120193082558; Firebase fence / rules integration 120193082356.
+    Actual checkout 3e7505feb84478452a79812aca7fc4ecc4bffabd has the exact candidate tree. Node 22.23.3.
+  - Hosted npm test logs: 2,263 Node passes, zero failures, six existing skips in 2,269 cases;
+    legacy 455/455. Skips are the Windows-specific lowercase-drive case, existing opt-in control, and
+    four Windows-only dispatcher fixture cases on Linux. Windows local totals above are distinct.
+  - Hosted full browser: 970 expected outcomes, 963 ordinary passes plus seven existing annotated
+    expected failures F-1 through F-7, no unexpected failures. Hosted fence: 151 passed, zero failed/skipped.
+    Worker test/bundle and mirror/rules workflow steps succeeded. Coverage was not measured.
+  - Exact ten-file main-relative scope, pilot ancestry, three HUD blob hashes, preservation of all other
+    main blobs/task records, insert-only historical evidence and whitespace are checked for the proposal.
+    Code Health/applicable AI QA pass for the documentation-only delta; runtime invariants are preserved.
+  - Branch summary exposes main protection and both required contexts/app IDs; detailed protection read
+    returned 403. Additional review/protection requirements must be verified by an authorized integrator.
+untested:
+  - No full npm/browser/fence local rerun in this docs-only phase: prior local raw logs and fresh hosted
+    raw logs were inspected. No new native/installed-HUD, production, device, LNA or Android acceptance.
+  - Proposed approval commit has not been published or checked by hosted CI. Old successful checks
+    remain bound to 03ffb77; a new exact head requires both jobs again after separately authorized publication.
+  - No safe integration route/security substitute was approved or exercised; retained TASK-021 STOP stands.
+evidence: private release-verification/task-020/final-gate-20261022/ receipts, scope/commit binding and report;
+  prior reconciliation packet unchanged. Independent reviewer owns the distinct REVIEW.md entry.
+result: local approval preparation PASS; RELEASE HOLD. No push, merge, deploy, runner or dispatcher action.
