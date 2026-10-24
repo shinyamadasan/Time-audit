@@ -1113,7 +1113,7 @@ if (typeof window !== 'undefined') {
       state.formOpen = false;
       state.formError = '';
       render();
-      section()?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      section()?.scrollIntoView({ block: 'start', behavior: 'instant' });
     },
     editCommitment(id) {
       state.itemForm = { type: 'commitment' };

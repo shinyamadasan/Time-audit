@@ -1372,6 +1372,145 @@ constraints:
 
 see: docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md
 
+### TASK-022 - Fix Firebase nudge permission-denied loop
+status: blocked
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: storage.js (startSync incoming nudges and nudge receipt state only), scripts/firebase-rules-builder.mjs (nudges only), firebase.rules.json (generated), nudge-listener.test.js (new), nudge-test-support.js (new), nudge-rules-emulator.test.js (new), firebase-rules.test.js (nudge assertions only), package.json (test wiring only), npm-test-wiring.test.js (emulator registration only), index.html (governed release generation only), personal-day-boundary-web-runtime.test.js (retired generation only), tests/calendar-native-plan-identity.spec.js (release-token expectation only), www/ (generated mirror), TASK_022_HANDOFF.md (new), CHANGELOG.md, TEST_REPORT.md
+
+context:
+  Owner's current-session instruction, 2026-10-23 America/Phoenix: "OWNER-DIRECT — ChronaSense P1:
+  Fix Firebase nudge permission-denied loop" authorizes local implementation, verification and independent
+  review only. Base is recorded origin/main 1f171a29b55819c7b96872234a1b095d1e80d48c; network refresh
+  is unavailable in the sandbox. Preserve all existing checkouts and TASK-020 release hold.
+
+objective:
+  Stop failed recipient-delete replays and duplicate nudge notifications while preserving delivery,
+  account isolation, time logs and planning; prepare an individually scoped recipient-delete rules candidate.
+
+acceptance:
+  - Deterministically reproduce denied-delete child_added replay; prove bounded operations after the fix.
+  - Deduplicate writes/toasts across listener reattachment and A/B/A account switches; reject stale callbacks.
+  - Fresh new nudge IDs continue to notify; stale/malformed nudges do not notify; failures remain observable.
+  - Recipient may delete only an individual nudge in their own inbox, never create/modify inbox content.
+  - Emulator proves owner/partner/stranger/unauthenticated/action-token, parent/root and multipath boundaries.
+  - Existing partner delivery permissions, logs, planning and all unrelated rules remain unchanged.
+  - Generated rules/runtime mirror match; repository tests, self-review, QA and independent review recorded.
+
+constraints:
+  - Local candidate only. No Firebase deployment, merge, publication, production data access, GitHub security
+    changes, AI Dev OS restart, dispatcher/Run-Merge or installed-HUD action.
+  - Never weaken parent/root permissions or merely suppress console output; no unrelated refactoring.
+  - Stop on an unresolved security/architecture conflict or failed verification; report skipped work.
+  - Independent reviewer reports separately; implementer sets review only, never done/approved or self-approval.
+
+verification:
+  - Node deterministic listener tests and real Firebase SDK/emulator replay plus authorization matrix.
+  - npm test; npm run test:smoke; npm run test:fence; npm run lint.
+  - npm run check:firebase-rules; npm run check:www-parity; git diff --check; scope/rules preservation audit.
+  - Independent review of exact local code candidate and evidence; stop at reviewed release candidate.
+
+blocker:
+  Nudge implementation and authorization checks pass, but mandatory browser QA remains unresolved.
+  First full run: 967 expected / 3 unexpected failures (one stale release-token test fixed).
+  Three focused repeats: 8/9 pass; the editor keeps endTime 03:00 after a Save click while the
+  editor remains open and timeline stays at 01:00. Cause unproven, not confirmed data loss.
+  Untouched 1f171a2 baseline passes 10/10 editor repetitions, so baseline flakiness is not established.
+  Final full run: 969 expected / 1 unexpected failure, Unfinished 390px boundingBox() null.
+  Independent reviewer finds no nudge implementation must-fix but recommends BLOCKED under QA.md.
+  No planning/layout repair is authorized by this bounded task. Preserve local uncommitted candidate;
+  resolve or explicitly rescope these verification blockers before review-ready/commit/release claims.
+  See TASK_022_HANDOFF.md and private release-verification/task-022/ evidence in the original workspace.
+
+### TASK-023 - TASK-022 browser QA unblock
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: tests/calendar-native-plan-identity.spec.js (editor interaction verification only), tests/unfinished-ux.spec.js (layout sampling verification only), planning-continuity-ui.js (only a proven minimal editor/layout correction if needed), index.html (governed token only if runtime changes), personal-day-boundary-web-runtime.test.js (generation only if required), www/ (generated mirror only if runtime changes), TASK_023_HANDOFF.md (new), CHANGELOG.md, TEST_REPORT.md
+
+carried-forward-inputs: storage.js, www/storage.js, scripts/firebase-rules-builder.mjs, firebase.rules.json, firebase-rules.test.js, nudge-listener.test.js, nudge-test-support.js, nudge-rules-emulator.test.js, package.json, npm-test-wiring.test.js, TASK_022_HANDOFF.md (exact reviewed TASK-022 input bytes; no new edits authorized or made)
+
+context:
+  Owner's current-session "OWNER-DIRECT — ChronaSense TASK-022 QA Unblock", 2026-10-23 America/Phoenix,
+  authorizes one bounded local investigation/repair and independent review. Preserve the complete original
+  uncommitted task-022 worktree/evidence. Its exact 18-file overlay (manifest SHA256
+  80aed9542b2f631b3a123d6069bba169232342ebde33340889175c49a8088d94) is copied byte-for-byte onto
+  separate task-023 at base 1f171a29b55819c7b96872234a1b095d1e80d48c; no merged-task dependency is claimed.
+  Immutable comparison baseline is that same base. Reuse valid TASK-022 tests/traces rather than repeat discovery.
+  New test temp/evidence lives at D:/ChronaSense-local-qa/task-023 due C: disk pressure; existing evidence unchanged.
+
+objective:
+  Explain and minimally resolve the editor Save and Unfinished 390px browser QA failures without weakening
+  assertions or changing planning/time-tracking semantics; determine whether TASK-022 can advance locally.
+
+acceptance:
+  - Reproduce both failures independently; compare exact candidate and untouched base under matched environment,
+    worker count, trace setting and test conditions. Classify each with evidence, not assumed flakiness.
+  - Make only a justified minimal application or test-harness correction, preserving all behavior/assertion intent.
+  - Preserve TASK-022 nudge code/rules and original worktree/evidence; record before/after bindings and results.
+  - Focused tests, affected regressions, full browser QA, npm test and applicable Firebase fence/parity/lint pass;
+    disclose every skip/failure/environment limit. Do not replace unexplained failures with later green runs.
+  - Obtain independent review on exact final candidate; report root causes, exact delta, PASS/FAIL/UNVERIFIED,
+    and whether TASK-022 may advance to release preparation (not publication authority).
+
+constraints:
+  - Stop if repair requires broader architecture/data-integrity changes; no sync/schema/plan persistence redesign.
+  - No push, merge, deployment, production Firebase/data, GitHub security or AI Dev OS modifications/actions.
+  - No assertion weakening, forced-green retry masking or unrelated cleanup; preserve historical evidence.
+  - Original TASK-022 status/worktree remain unchanged; this isolated task records the superseding QA result.
+
+verification:
+  - Reuse retained failed traces, instrument only disposable test probes, paired original/candidate reproduction.
+  - Before/after focused repeats under the same conditions plus deterministic regression for proven cause.
+  - Affected full specs, npm test, full Playwright browser suite, Firebase fence as applicable, lint/parity/scope.
+  - SELF_REVIEW.md and QA.md; independent exact-file review; local-only handoff with explicit release hold.
+
+### TASK-024 - TASK-022/023 local release preparation
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: TASKS.md (TASK-024 entry/status only), TASK_024_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+carried-forward-inputs: exact 22-file reviewed combined TASK-022/023 candidate; runtime, rules, tests, package and generated artifacts unchanged
+
+context:
+  Owner's current-session "OWNER-DIRECT — ChronaSense TASK-022/023 Local Release Preparation",
+  2026-10-24 America/Phoenix, authorizes local verification/preparation and one local commit only.
+  Input manifest SHA256 787cc36936a6c8569714f3f96f141b165719f11022527fd60a98ef1b97722186;
+  independent assessment SHA256 13c17920a812fcf1c8544e0e7c238c86f4314fbb059b8cb9174a649ab95b100d.
+  Fresh GitHub main comparison is identical to reviewed base 1f171a29b55819c7b96872234a1b095d1e80d48c.
+  Original task-022/task-023 worktrees and private evidence are preserved inputs, not merged dependencies.
+  Prepare on isolated local branch task-024; publication remains held.
+
+objective:
+  Prepare one clean local release commit containing the nudge fix and QA corrections, with exact
+  reviewed/staged/commit binding, complete test results/limits, rollback baseline and review references.
+
+acceptance:
+  - Verify all 22 input hashes and independent assessment, live GitHub main, branch ancestry and scope.
+  - Preserve original TASK-022 worktree and all private evidence; stop on unexpected drift/files/content.
+  - Generated Firebase rules and runtime mirror match sources; exclude private logs, credentials,
+    temporary dependencies, evidence and unrelated changes.
+  - Record complete retained tests, fresh validation, limits, rollback baseline and independent review.
+  - Verify exact staged diff before one LOCAL commit; verify resulting tree, file list and clean worktree.
+  - Report SHA, validation status and remaining blockers; stop after local release preparation.
+
+constraints:
+  - No implementation changes, assertions weakened, reconciliation or broader task chaining.
+  - No push, PR creation, merge, Pages/Firebase deployment, production data, GitHub permissions or AI Dev OS action.
+  - Publication requires separate owner GO; historical runner trust boundary remains unresolved.
+  - Original reviewed input/status/history preserved; only new administrative preparation records differ.
+
+verification:
+  - Manifest/assessment hashes; original non-junction preservation inventories; live GitHub compare receipts.
+  - Fresh rules-generation/runtime-mirror, whitespace, secret and deterministic scope checks.
+  - Reuse unchanged-code suites; SELF_REVIEW.md/applicable QA.md; exact staged and committed tree binding.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

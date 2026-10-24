@@ -289,7 +289,10 @@
       },
       "nudges": {
         ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
-        ".write": "auth != null && auth.token.chronasenseActionId == null && root.child($userNode).child('partnerUid').val() === auth.uid"
+        ".write": "auth != null && auth.token.chronasenseActionId == null && $userNode !== ('uid_' + auth.uid) && root.child($userNode).child('partnerUid').val() === auth.uid",
+        "$nudgeId": {
+          ".write": "auth != null && auth.token.chronasenseActionId == null && $userNode === ('uid_' + auth.uid) && !newData.exists()"
+        }
       }
     }
   }

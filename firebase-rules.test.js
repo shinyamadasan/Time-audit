@@ -190,6 +190,19 @@ test('nudges — only the linked partner may write, only the owner may read', ()
   assert.equal(canRead(LINKED, A, '/uid_alice_uid/nudges'), true, 'owner reads own inbox');
 });
 
+test('nudges — recipient cleanup grants no create/edit/parent or self-link authority', () => {
+  const data = structuredClone(LINKED);
+  data.uid_alice_uid.nudges = { n1: { from: 'Bob', ts: 5 }, n2: { from: 'Bob', ts: 6 } };
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges/n1', null), true);
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges/new', { ts: 5 }), false);
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges/n1/ts', 7), false);
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges/n1/from', null), false);
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges', null), false);
+  assert.equal(canWrite(data, C, '/uid_alice_uid/nudges/n1', null), false);
+  data.uid_alice_uid.partnerUid = A.uid;
+  assert.equal(canWrite(data, A, '/uid_alice_uid/nudges/new', { ts: 5 }), false);
+});
+
 test('rooms and root — unchanged and locked', () => {
   assert.equal(canRead({}, A, '/rooms/uid_alice_uid/timer'), true, 'owner reads own room');
   assert.equal(canRead({}, C, '/rooms/uid_alice_uid/timer'), false, 'outsider denied');

@@ -403,8 +403,23 @@ for (const width of [360, 390, 1920]) {
     await seed(page, 'operational', Array.from({ length: 100 }, (_, n) => item(String(n).padStart(3, '0'), n ? `Previously planned task ${n + 1}` : 'Review the previous project notes and prepare the next practical action with the team '.repeat(4))));
     await expect(row(page, '000')).toContainText(/Planned Sep 23/);
     await expect(row(page, '000').getByRole('button', { name: 'Not doing this' })).toBeHidden();
-    const controls = recovery(page).locator('button:visible, summary:visible');
-    for (const b of await controls.all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // Read the dynamic control set and its geometry in one browser turn.
+    const measurements = await page.evaluate(() => [...document.querySelectorAll('#unfinished-recovery-section button, #unfinished-recovery-section summary')]
+      .filter(element => element.checkVisibility({ visibilityProperty: true }))
+      .map(element => ({
+        action: element.dataset.pcAction, id: element.dataset.id, connected: element.isConnected,
+        height: element.getBoundingClientRect().height,
+      })));
+    expect(measurements).toHaveLength(12);
+    expect(measurements.filter(control => control.action === 'collapse-stale')).toHaveLength(1);
+    expect(measurements.filter(control => control.action === 'view-all-stale')).toHaveLength(1);
+    for (const action of ['reveal-stale-title', 'completion-menu']) {
+      expect(measurements.filter(control => control.action === action).map(control => control.id).sort()).toEqual(['000', '001', '002', '003', '004']);
+    }
+    for (const control of measurements) {
+      expect(control.connected).toBe(true);
+      expect(control.height).toBeGreaterThanOrEqual(44);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await fs.mkdir(path.join(APP_ROOT, 'playwright-report', 'task-017'), { recursive: true });
     await recovery(page).scrollIntoViewIfNeeded();
