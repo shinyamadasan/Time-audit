@@ -5237,3 +5237,12 @@ changed:
 tests: 22/8 before, 32/32 after; npm 2307 pass, 0 fail; lint 0 errors. Full browser: 0 of 4 runs green because of two flaky tests that also fail on the unchanged TASK-025 baseline.
 blockers: full browser gate not green. See TASK_026_HANDOFF.md.
 → status set to `blocked` in TASKS.md.
+
+## TASK-027 — browser QA stability (branch: task-027)
+changed:
+  - tests/brain-dump-plan-tray.spec.js: a second tab shares the context's mock-clock origin, as two real tabs share one device clock. C8 assertions unchanged.
+  - tests/normal-tracking-hud.spec.js:287: waits for the exact tracking-active projection instead of racing the 1 s poll; adds an identity check on every post-break projection.
+  - planning/ROADMAP.md: P1 backlog item for the Brain Dump cross-device clock-skew defect (owner-directed; not fixed here). TASK_027_HANDOFF.md; TASKS.md statuses.
+tests: C8 before 21/96 failed, after 0/192; HUD race window before 12/12 failed, after 12/12 pass; mutant fails 3/3. Full browser 972/972 at 4 workers and 972/972 at 2 workers.
+blockers: none. Independent review PASS-with-notes.
+→ TASK-026 and TASK-027 set to `approved` (held; no merge).

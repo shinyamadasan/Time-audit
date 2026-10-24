@@ -2420,3 +2420,10 @@ suite: entry-validation.test.js (actual endBreak/saveRetroEntry/quickRetroLog so
 result: before the fix 22 pass / 8 expected fail; after 32/32. npm exit 0: 2307 pass, 0 fail, 1 existing skip; legacy 455/455. Lint 0 errors / 48 existing warnings. Mirror 95 files identical. Full browser (4 workers x3, 2 workers x1): 970-971/972 every run. Failures were only brain-dump-plan-tray.spec.js:315 and normal-tracking-hud.spec.js:287. The baseline full rerun failed the same two (970/972). Repeat tests: brain dump 4/50 failures on each tree; HUD 24/24 in isolation on both.
 review: independent read-only review PASS-with-notes, no must-fix; its test gaps were added.
 untested: hosted CI, production, native/Android, coverage. No production entries read.
+
+## TASK-027 · 2026-10-24
+suite: tests/brain-dump-plan-tray.spec.js (C8), tests/normal-tracking-hud.spec.js:287; full browser QA at 4 and 2 workers.
+result: C8 x12 before 9/48 (w4) and 12/48 (w2) failed; after x24, 96/96 and 96/96 passed. HUD sampled inside the race window: before 12/12 failed, after 12/12 passed. Both specs x8 under load: 336/336 (w4) and 336/336 (w2). HUD mutant (no projection) fails 3/3. Full browser: 972/972 (4 workers, 391 s) and 972/972 (2 workers, 688 s).
+evidence: c8 traces show B's claim stamped before the capture's createdAt and dropped by normalizeCapture (harness clock behind). HUD timeline: selector valid at ~0.9 s, projection at ~1.45 s, fixed sample at 1.5 s.
+review: independent review PASS-with-notes, no must-fix in test changes. It reported a separate pre-existing cross-device clock-skew defect (confirmed; recorded in ROADMAP as P1; not fixed).
+untested: hosted CI, production, native/Android. Runtime and Node tests are unchanged from a056713, so TASK-026 npm/lint/mirror results carry over.

@@ -1557,7 +1557,7 @@ verification:
   - Independent review, explicit unknowns/production acceptance limits; local reviewed handoff only.
 
 ### TASK-026 - TASK-025 follow-up: zero-minute entries at their creation source
-status: blocked
+status: approved
 owner: codex
 source: owner-direct
 priority: P1
@@ -1594,13 +1594,48 @@ constraints:
     defect this task removes.
   - No unrelated refactor; stop for conflict-resolution or other red-zone policy changes.
 
-blocker:
-  Full browser QA never green on the candidate (0 of 4) because of two flaky tests (brain-dump-plan-tray.spec.js:315,
-  normal-tracking-hud.spec.js:287) that also fail on the unchanged TASK-025 baseline. All other gates pass. See TASK_026_HANDOFF.md.
+resolved:
+  The blocker was resolved by TASK-027 (test-harness causes). The combined candidate passed full browser QA at 972/972
+  with 4 and 2 workers. Red zone: held for the owner's merge.
 
 verification:
   - Before/after actual-source Node VM regressions; npm test; npm run lint; generation/mirror parity;
     full browser QA; scope audit against baseline 828b289; independent exact-candidate review.
+
+### TASK-027 - Browser QA stability for the TASK-026 release gate
+status: approved
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-026 (candidate carried byte-identical as local baseline commit a056713)
+files: tests/brain-dump-plan-tray.spec.js, tests/normal-tracking-hud.spec.js (test harness only), TASK_027_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "OWNER-DIRECT — ChronaSense TASK-027: Browser QA Stability", 2026-10-24
+  America/Phoenix. Owner declined release exceptions. brain-dump-plan-tray.spec.js:315 (C8 two-tab
+  convergence) and normal-tracking-hud.spec.js:287 (Focus break -> HUD) fail intermittently on the
+  TASK-025 baseline and the TASK-026 candidate (TASK-026 A/B evidence in release-verification/task-026).
+
+objective:
+  Find each exact race. Correct test synchronization without weakening assertions, or stop and report
+  an application defect for separate approval.
+
+acceptance:
+  - Original failures reproduced before correction; cause shown with evidence (test sync vs app defect).
+  - C8 still asserts both tabs reach the correct authoritative state; HUD assertions are not weakened.
+  - No arbitrary sleeps, retries, skips or weaker expectations; HUD functionality unchanged.
+  - Focused repeated runs under the previously failing worker configurations; full browser suite;
+    other affected gates; independent review of the combined exact candidate.
+
+constraints:
+  - Local only: no push, merge, deployment, Firebase change or unattended production action.
+  - TASK-025/026 implementation unchanged; no entry, Firebase record, duration or sync-semantics change.
+  - Application defect or architectural change needed -> stop and report; do not fix here.
+  - TASK-026 is not marked approved until mandatory gates and independent review pass.
+
+verification:
+  - Before/after focused repeats (workers 4 and 2); full browser suite; npm test if affected;
+    scope audit against a056713; independent review.
 
 <!-- Paste new tasks above this line. -->
 
