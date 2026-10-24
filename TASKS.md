@@ -1511,6 +1511,51 @@ verification:
   - Fresh rules-generation/runtime-mirror, whitespace, secret and deterministic scope checks.
   - Reuse unchanged-code suites; SELF_REVIEW.md/applicable QA.md; exact staged and committed tree binding.
 
+### TASK-025 - Post-release entry validation reliability
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: storage.js (validateEntry, local-account load and entry sync only if minimal correction justified), index.html (scoped entry producers only if proven minimal correction, governed generation), entry-validation.test.js (new), tests/entry-validation.spec.js (new), package.json (test wiring), personal-day-boundary-web-runtime.test.js (generation if runtime changes), tests/calendar-native-plan-identity.spec.js (generation if required), www/ (generated mirror only), TASK_025_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "ChronaSense — Post-Release Entry Validation Investigation",
+  2026-10-24 America/Phoenix, directly authorizes separate local reliability investigation,
+  exact isolated reproduction, minimal evidence-based correction, regression tests and independent review.
+  Warnings are [validateEntry] blockIntervalMin < 1 and id invalid. Source documents legitimate
+  scheduled-template string IDs. Production records have not been supplied or accessed.
+  Isolated branch task-025 at current GitHub main e7d8b87bb0059b1c08351a9f9dc24bc5adebb9b8,
+  freshly verified identical. TASK-022/023/024 worktrees and private evidence remain preserved.
+
+objective:
+  Classify warning causes and affected record types, reproduce repetition and determine whether
+  unnecessary sync/writes occur; correct only proven narrow validation/producer/revalidation defects.
+
+acceptance:
+  - Trace validateEntry, account-local loading, entry synchronization and all relevant producers.
+  - Reproduce exact warnings with isolated synthetic fixtures and count validation, sync and writes.
+  - Distinguish false positives/legitimate IDs, malformed history, duration errors and unchanged-record
+    repetition; do not claim production record-specific causes without actual evidence.
+  - Preserve IDs, durations, historical records, time accuracy, account isolation/cross-device conflict
+    resolution and all existing data-integrity hard rules; no silent migration or fabricated duration.
+  - Make only justified minimal corrections; never merely mute warnings or weaken malformed-entry checks.
+  - Add regression coverage; relevant Node/browser/fence/parity/lint checks, SELF_REVIEW.md/applicable QA;
+    independent exact-candidate review and evidence with confirmed causes, results, limits and risks.
+
+constraints:
+  - Local only: no production database changes/access/cleanup, GitHub push/merge, Pages deployment,
+    Firebase rules/auth/security changes or AI Dev OS merge automation.
+  - No unrelated refactor, entry schema redesign, lossy normalization or changes to stored history.
+  - Stop for broader architecture/data-integrity changes or unresolved verification failure.
+  - Preserve prior candidates/evidence; no protected planning/docs/REVIEW.md edits.
+
+verification:
+  - Actual source-block Node VM and isolated mocked browser account/sync/producer fixtures.
+  - Before/after warning counts and final byte/state/write equality/convergence checks.
+  - npm test; focused and full browser QA; Firebase fence as applicable; lint, generation/mirror and scope.
+  - Independent review, explicit unknowns/production acceptance limits; local reviewed handoff only.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

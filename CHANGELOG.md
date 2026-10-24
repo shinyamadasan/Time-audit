@@ -5216,3 +5216,15 @@ tests: retained combined candidate browser 971 expected/zero unexpected, focused
 blockers: none for bounded local preparation; publication, exact-head hosted checks/formal review, trusted integration/Pages release, production rules and acceptance remain held/unverified.
 deviations: no full-suite rerun for identical reviewed code; read-only live main comparison replaces a pull into preserved existing worktrees. Local base/main 1f171a29b55819c7b96872234a1b095d1e80d48c.
 → status set to `review` in TASKS.md; one local commit only, no publication authority.
+
+## TASK-025 — entry validation reliability (branch: task-025)
+changed:
+  - storage.js: validateEntry accepts the existing deterministic scheduled-template ID grammar and finite positive numeric IDs; all duration/other-field diagnostics remain. No entry mutation, producer or sync protocol changes.
+  - entry-validation.test.js and tests/entry-validation.spec.js: actual-source producer/account/sync regressions and isolated real-page Firebase fixture; package.json adds the Node suite.
+  - index.html/runtime-generation tests and generated www/index.html/www/storage.js: governed generation only beyond the validator correction; 95-file mirror preserved.
+  - TASKS.md: own owner-direct entry/status; TASK_025_HANDOFF.md: causes, redacted sample limits, repetition/write evidence, unchanged zero-duration history and release limits.
+tests: pre-fix corrected source fixture 17 pass/5 expected regression failures; after 22/22, focused Node 42/42, focused browser 1/1. npm 2297 Node passes/one existing opt-in skip plus legacy 455/455; lint zero errors/48 existing warnings. Full browser 972 expected outcomes (965 ordinary passes/seven existing annotated failures), zero unexpected. Rules generation/95-file mirror, whitespace and deterministic 13-path scope pass; 710 untouched base files preserved.
+blockers: none for the scoped local correction; independent implementation review PASS/no must-fix, final exact-candidate assessment separately bound in private evidence. Genuine rounded-zero history remains diagnostic; duration policy/cleanup is outside this correction. No release approval is claimed.
+deviations: no Firebase fence rerun for unchanged authorization paths; retained TASK-024 157/157 is identified as prior evidence. Initial spawn/fixture/tool errors are retained privately. No production entry access or unrelated repair.
+→ local candidate only; no commit, push, merge, deployment or production change authorized/performed.
+→ status set to `review` in TASKS.md.
