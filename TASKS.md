@@ -1556,6 +1556,52 @@ verification:
   - npm test; focused and full browser QA; Firebase fence as applicable; lint, generation/mirror and scope.
   - Independent review, explicit unknowns/production acceptance limits; local reviewed handoff only.
 
+### TASK-026 - TASK-025 follow-up: zero-minute entries at their creation source
+status: blocked
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-025 (reviewed candidate, carried byte-identical as local baseline commit 828b289)
+files: index.html (endBreak, saveRetroEntry, quickRetroLog only; governed generation), entry-validation.test.js (invert the two TASK-025 producer-characterization tests only; add regressions), personal-day-boundary-web-runtime.test.js and tests/calendar-native-plan-identity.spec.js (generation token only), www/ (generated mirror only), TASK_026_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "ChronaSense — TASK-025 Follow-up: Zero-Minute Entries", 2026-10-24
+  America/Phoenix. TASK-025 passed independent review and is preserved unchanged (manifest
+  ea1595ae..., all 13 hashes verified before the baseline commit). TASK-025 confirmed endBreak()
+  can store a 5.4-second break as blockIntervalMin 0 and quickRetroLog() 23:00-00:00 can store an
+  empty next-day fragment. Reuse that evidence; do not repeat the investigation.
+
+objective:
+  Establish the entry-duration contract, stop invalid new zero-minute records at their producers
+  without discarding legitimate time, and determine whether unchanged-history revalidation is
+  producing unnecessary warnings.
+
+acceptance:
+  - Contract distinguishes empty records (ts <= tsStart; never created) from legitimate positive
+    sub-minute activity (kept, exact timestamps, blockIntervalMin >= 1).
+  - endBreak, saveRetroEntry and quickRetroLog never create blockIntervalMin < 1 or empty records;
+    a block ending exactly at midnight is one record on its start date.
+  - Validator and its warnings unchanged; historical entries, IDs, timestamps, totals and sync
+    conflict resolution unchanged; no migration.
+  - Repeated-validation determination recorded with evidence; changes only if justified and in scope.
+  - Focused regressions; npm test, lint, generation/mirror, full browser QA; independent review.
+  - The four owner duration records are reported as attributable or not, never guessed.
+
+constraints:
+  - Local only: no production data access/changes, historical migration, push, merge, Firebase
+    rules change or deployment.
+  - TASK-025 runtime/test content preserved except the two characterization tests that assert the
+    defect this task removes.
+  - No unrelated refactor; stop for conflict-resolution or other red-zone policy changes.
+
+blocker:
+  Full browser QA never green on the candidate (0 of 4) because of two flaky tests (brain-dump-plan-tray.spec.js:315,
+  normal-tracking-hud.spec.js:287) that also fail on the unchanged TASK-025 baseline. All other gates pass. See TASK_026_HANDOFF.md.
+
+verification:
+  - Before/after actual-source Node VM regressions; npm test; npm run lint; generation/mirror parity;
+    full browser QA; scope audit against baseline 828b289; independent exact-candidate review.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

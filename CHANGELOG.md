@@ -5228,3 +5228,12 @@ blockers: none for the scoped local correction; independent implementation revie
 deviations: no Firebase fence rerun for unchanged authorization paths; retained TASK-024 157/157 is identified as prior evidence. Initial spawn/fixture/tool errors are retained privately. No production entry access or unrelated repair.
 → local candidate only; no commit, push, merge, deployment or production change authorized/performed.
 → status set to `review` in TASKS.md.
+
+## TASK-026 — zero-minute entries at their creation source (branch: task-026)
+changed:
+  - index.html: endBreak, saveRetroEntry, quickRetroLog. Positive intervals are stored as at least 1 minute with exact timestamps; empty or skewed intervals are never stored; a block ending at midnight is not split. The validator is unchanged.
+  - entry-validation.test.js: the two TASK-025 tests describing the defect are inverted; 12 regressions added. Every other TASK-025 test is unchanged.
+  - www/index.html: generated mirror. TASKS.md: own entry. TASK_026_HANDOFF.md: contract, determination, attribution limit.
+tests: 22/8 before, 32/32 after; npm 2307 pass, 0 fail; lint 0 errors. Full browser: 0 of 4 runs green because of two flaky tests that also fail on the unchanged TASK-025 baseline.
+blockers: full browser gate not green. See TASK_026_HANDOFF.md.
+→ status set to `blocked` in TASKS.md.

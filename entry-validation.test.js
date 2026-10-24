@@ -202,7 +202,7 @@ test('explicit sync sends existing rows unchanged; its echo and validation do no
   assert.deepEqual(h.rows(), rows);
 });
 
-test('actual early-break producer can round the owner sample 5.4-second interval to zero; later validation reports it', () => {
+test('actual early-break producer keeps the owner sample 5.4-second interval as a valid one-minute record (TASK-026)', () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.breakActive = true;
@@ -210,27 +210,181 @@ test('actual early-break producer can round the owner sample 5.4-second interval
   assert.equal(h.context.endBreak('uid_A'), true);
   const [row] = h.rows();
   assert.equal(row.ts - row.tsStart, 5400);
-  assert.equal(row.blockIntervalMin, 0);
+  assert.equal(row.blockIntervalMin, 1);
   assert.equal(row.retro, undefined);
   assert.equal(row.autoLogged, undefined);
   h.context.validateEntry(row);
-  assert.equal(h.warnings[0].message, '[validateEntry] blockIntervalMin < 1');
+  assert.equal(h.warnings.length, 0);
   assert.equal(h.writes.length, 1, 'one explicit producer sync, not a validation loop');
 });
 
-test('actual quick-retro midnight split can create an empty second fragment; genuine warning is retained without modifying history', () => {
+test('actual quick-retro 23:00-00:00 no longer creates an empty second fragment (TASK-026)', () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.document.getElementById('retro-task').value = 'Synthetic past work';
   h.context.document.getElementById('retro-qstart').value = '23:00';
   h.context.document.getElementById('retro-qend').value = '00:00';
   h.context.quickRetroLog();
-  assert.deepEqual(h.rows().map(row => row.blockIntervalMin).sort((a, b) => a - b), [0, 60]);
-  const zero = h.context.entries.find(row => row.blockIntervalMin === 0);
-  assert.equal(zero.ts, zero.tsStart);
-  const before = clone(zero);
-  h.context.validateEntry(zero);
-  assert.equal(h.warnings[0].message, '[validateEntry] blockIntervalMin < 1');
-  assert.deepEqual(clone(zero), before);
+  assert.deepEqual(h.rows().map(row => row.blockIntervalMin), [60]);
+  assert.ok(h.rows().every(row => row.ts > row.tsStart));
+  assert.equal(h.warnings.length, 0);
   assert.equal(h.writes.length, 1);
+});
+
+// TASK-026: duration contract at the producers. Exact timestamps are the tracked time; a
+// positive interval is legitimate (at least one minute) and an empty interval is never stored.
+function retroHarness() {
+  const h = harness();
+  Object.assign(h.context, { retroEnergy: 'deep', editingEntryId: null, editingMergedIds: null,
+    editingEntryBase: null, _lastLoggedEntryId: null, sameEntryId: (a, b) => String(a) === String(b),
+    cloneUndoValue: clone, maybeOfferTemplateUpdate: () => false, closeModal: () => {},
+    formatEnergyLabel: String, confirm: () => false });
+  vm.runInContext(fn(index, 'saveRetroEntry'), h.context);
+  return h;
+}
+
+function fillRetroModal(h, start, end) {
+  h.context.document.getElementById('retro-activity').value = 'Synthetic past work';
+  h.context.document.getElementById('retro-start').value = start;
+  h.context.document.getElementById('retro-end').value = end;
+}
+
+test('TASK-026 a normal break keeps its rounded duration and exact interval', () => {
+  const h = harness();
+  h.bind('uid_A', []);
+  h.context.breakActive = true;
+  h.context.breakStartTs = NOW - 25 * 60_000;
+  assert.equal(h.context.endBreak('uid_A'), true);
+  const [row] = h.rows();
+  assert.equal(row.blockIntervalMin, 25);
+  assert.equal(row.ts - row.tsStart, 25 * 60_000);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 a clock-skewed break with no positive interval stores no entry but still resumes the timer', () => {
+  const h = harness();
+  h.bind('uid_A', []);
+  h.context.breakActive = true;
+  h.context.breakStartTs = NOW + 2000;
+  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.deepEqual(h.rows(), []);
+  assert.equal(h.context.breakActive, false);
+  assert.equal(h.context.running, true);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 quick retro ending exactly at midnight is one start-day record, not an empty fragment', () => {
+  const h = harness();
+  h.bind('uid_A', []);
+  h.context.document.getElementById('retro-task').value = 'Synthetic past work';
+  h.context.document.getElementById('retro-qstart').value = '23:00';
+  h.context.document.getElementById('retro-qend').value = '00:00';
+  h.context.quickRetroLog();
+  const rows = h.rows();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].blockIntervalMin, 60);
+  assert.equal(rows[0].date, '2026-10-24');
+  assert.equal(rows[0].tsStart, Date.parse('2026-10-24T23:00:00Z'));
+  assert.equal(rows[0].ts, Date.parse('2026-10-25T00:00:00Z'));
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 quick retro that genuinely crosses midnight still splits by date', () => {
+  const h = harness();
+  h.bind('uid_A', []);
+  h.context.document.getElementById('retro-task').value = 'Synthetic past work';
+  h.context.document.getElementById('retro-qstart').value = '23:30';
+  h.context.document.getElementById('retro-qend').value = '00:15';
+  h.context.quickRetroLog();
+  const rows = h.rows().sort((a, b) => a.tsStart - b.tsStart);
+  assert.deepEqual(rows.map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 30], ['2026-10-25', 15]]);
+  assert.equal(rows[0].ts, rows[1].tsStart);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 a positive sub-minute midnight fragment is kept with exact timestamps and one minute', () => {
+  const h = harness();
+  h.bind('uid_A', []);
+  h.setNow(Date.parse('2026-10-25T00:00:10Z'));
+  h.context.document.getElementById('retro-task').value = 'Synthetic past work';
+  h.context.quickRetroLog();
+  const rows = h.rows().sort((a, b) => a.tsStart - b.tsStart);
+  assert.deepEqual(rows.map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 30], ['2026-10-25', 1]]);
+  assert.equal(rows[1].ts - rows[1].tsStart, 10_000);
+  assert.equal(rows[1].tsStart - rows[0].tsStart, 29 * 60_000 + 50_000);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 retro modal ending exactly at midnight is one record, still splits a real crossing', () => {
+  const h = retroHarness();
+  h.bind('uid_A', []);
+  fillRetroModal(h, '23:00', '00:00');
+  h.context.saveRetroEntry();
+  assert.deepEqual(h.rows().map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 60]]);
+  fillRetroModal(h, '23:45', '00:30');
+  h.context.saveRetroEntry();
+  assert.deepEqual(h.rows().map(row => row.blockIntervalMin).sort((a, b) => a - b), [15, 30, 60]);
+  assert.ok(h.rows().every(row => row.ts > row.tsStart));
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 editing a block to end exactly at midnight keeps its ID and creates no fragment', () => {
+  const h = retroHarness();
+  const original = entry({ id: 1_700_000_000_000, tsStart: Date.parse('2026-10-24T22:00:00Z'),
+    ts: Date.parse('2026-10-24T22:30:00Z'), blockIntervalMin: 30, retro: true });
+  h.bind('uid_A', [original]);
+  h.context.editingEntryId = original.id;
+  h.context.editingEntryBase = { startDate: new Date(original.tsStart), crossesMidnight: false };
+  fillRetroModal(h, '23:00', '00:00');
+  h.context.saveRetroEntry();
+  const rows = h.rows();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, original.id);
+  assert.equal(rows[0].blockIntervalMin, 60);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 merged-block edit ending exactly at midnight replaces its sub-entries with one record', () => {
+  const h = retroHarness();
+  const a = entry({ id: 1_700_000_000_001, tsStart: Date.parse('2026-10-24T22:00:00Z'), ts: Date.parse('2026-10-24T22:30:00Z'), blockIntervalMin: 30 });
+  const b = entry({ id: 1_700_000_000_002, tsStart: Date.parse('2026-10-24T22:30:00Z'), ts: Date.parse('2026-10-24T23:00:00Z'), blockIntervalMin: 30 });
+  h.bind('uid_A', [a, b]);
+  h.context.editingEntryId = a.id;
+  h.context.editingMergedIds = [a.id, b.id];
+  h.context.editingEntryBase = { startDate: new Date(a.tsStart), crossesMidnight: false };
+  fillRetroModal(h, '22:00', '00:00');
+  h.context.saveRetroEntry();
+  assert.deepEqual(h.rows().map(row => [row.id, row.blockIntervalMin]), [[a.id, 120]]);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 editing a scheduled auto-log to end exactly at midnight keeps its tpllog ID and markers', () => {
+  const h = retroHarness();
+  const original = entry({ id: 'tpllog_fixture_2026-10-24', tsStart: Date.parse('2026-10-24T22:00:00Z'),
+    ts: Date.parse('2026-10-24T23:00:00Z'), blockIntervalMin: 60, autoLogged: true,
+    scheduledAutoLog: true, templateId: 'fixture' });
+  h.bind('uid_A', [original]);
+  h.context.editingEntryId = original.id;
+  h.context.editingEntryBase = { startDate: new Date(original.tsStart), crossesMidnight: false };
+  fillRetroModal(h, '22:00', '00:00');
+  h.context.saveRetroEntry();
+  const rows = h.rows();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, original.id);
+  assert.equal(rows[0].blockIntervalMin, 120);
+  assert.deepEqual([rows[0].autoLogged, rows[0].scheduledAutoLog, rows[0].templateId], [true, true, 'fixture']);
+  assert.equal(h.warnings.length, 0);
+});
+
+test('TASK-026 a break with no positive interval offers no undo for a record that does not exist', () => {
+  const h = harness();
+  const calls = [];
+  Object.assign(h.context, { rememberCreatedUndo: (...args) => calls.push(['undo', ...args]),
+    showUndoToast: (...args) => calls.push(['undoToast', ...args]), showToast: text => calls.push(['toast', text]) });
+  h.bind('uid_A', []);
+  h.context.breakActive = true;
+  h.context.breakStartTs = NOW;
+  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.deepEqual(h.rows(), []);
+  assert.deepEqual(calls, [['toast', 'Break over']]);
 });

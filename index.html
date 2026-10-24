@@ -2706,19 +2706,23 @@ function endBreak(ownerRoom = breakStateOwnerRoom()) {
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('switch-btn').style.display = 'inline-flex';
 
-  // Log the break as an entry
-  const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
-  const entry = {
-    id: Date.now(), ts: Date.now(),
+  // Log the break as an entry. A sub-minute break still counts as one minute;
+  // an empty or clock-skewed interval has no time to log.
+  const tsEnd = Date.now();
+  const entry = tsEnd > breakStartTs ? {
+    id: tsEnd, ts: tsEnd,
     tsStart: breakStartTs,
-    blockIntervalMin: actualDur,
+    blockIntervalMin: Math.max(1, Math.round((tsEnd - breakStartTs) / 60000)),
     date: toDateKey(new Date()),
     activity: 'Break',
     energy: 'recovery',
     onPlan: true,
-  };
-  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
-  entries.unshift(entry);
+  } : null;
+  if (entry) {
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+    validateEntry(entry);
+    entries.unshift(entry);
+  }
 
   // Restart timer for next block
   totalSecs = settings.intervalMin * 60;
@@ -2737,8 +2741,12 @@ function endBreak(ownerRoom = breakStateOwnerRoom()) {
   persist(); scheduleRenderToday(); syncEntries(); syncTimerState({ ownerRoom });
   syncBreakState({ active: false, ownerRoom });
   releaseBreakStateOwnership(ownerRoom);
-  rememberCreatedUndo('break log', [entry]);
-  showUndoToast('Break over — break logged', entry.energy);
+  if (entry) {
+    rememberCreatedUndo('break log', [entry]);
+    showUndoToast('Break over — break logged', entry.energy);
+  } else {
+    showToast('Break over');
+  }
   playAlert(1, 0);
   return true;
 }
@@ -3530,11 +3538,12 @@ function saveRetroEntry() {
   getActivityColor(activity);
   learnWastePattern(activity, retroEnergy);
 
-  // Detect midnight span: start and end on different calendar dates in user's TZ
+  // Detect midnight span: start and end on different calendar dates in user's TZ.
+  // Ending exactly at midnight belongs to the start day; splitting it leaves an empty fragment.
   const startDateKey = toDateKey(new Date(tsStart));
   const endDateKey   = toDateKey(new Date(tsEnd));
-  const spansMidnight = startDateKey !== endDateKey;
-  const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
+  const midnight = tzParseTime(endDateKey, '00:00');
+  const spansMidnight = startDateKey !== endDateKey && tsEnd > midnight;
 
   const onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
   const project = document.getElementById('retro-project').value.trim();
@@ -6779,10 +6788,11 @@ function quickRetroLog() {
   }
   const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
 
+  // Ending exactly at midnight belongs to the start day; splitting it leaves an empty fragment.
   const startDateKey = toDateKey(new Date(tsStart));
   const endDateKey   = toDateKey(new Date(tsEnd));
-  const spansMidnight = startDateKey !== endDateKey;
-  const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
+  const midnight = tzParseTime(endDateKey, '00:00');
+  const spansMidnight = startDateKey !== endDateKey && tsEnd > midnight;
 
   // Energy resolution: 1) learned waste/distraction pattern, 2) most recent entry for same activity, 3) shallow
   const commonOption = COMMON_LOG_OPTIONS.find(option => activityGroupKey(option.activity) === activityGroupKey(task));
@@ -6791,21 +6801,22 @@ function quickRetroLog() {
   const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || commonOption?.energy || 'shallow';
 
   function makeQEntry(id, ts, tsS, dateKey) {
-    const blkDur = Math.round((ts - tsS) / 60000);
+    const blkDur = Math.max(1, Math.round((ts - tsS) / 60000));
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
       date: dateKey, activity: task, energy: learnedEng,
       onPlan: learnedEng !== 'waste' && learnedEng !== 'distraction', retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
+    validateEntry(e);
     return e;
   }
 
   getActivityColor(task);
   learnWastePattern(task, learnedEng);
   if (spansMidnight) {
-    const dur1 = Math.round((midnight - tsStart) / 60000);
-    const dur2 = Math.round((tsEnd - midnight) / 60000);
     const firstEntry = makeQEntry(midnight - 1, midnight, tsStart, startDateKey);
     const secondEntry = makeQEntry(tsEnd, tsEnd, midnight, endDateKey);
+    const dur1 = firstEntry.blockIntervalMin;
+    const dur2 = secondEntry.blockIntervalMin;
     entries.push(firstEntry);
     entries.push(secondEntry);
     entries.sort((a, b) => b.ts - a.ts);
