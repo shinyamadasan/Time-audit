@@ -429,7 +429,12 @@ export function buildRules({ without = [] } = {}) {
         },
         partnerUid: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)` },
         pairCode: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)` },
-        nudges: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && root.child($userNode).child('partnerUid').val() === auth.uid` },
+        nudges: {
+          '.read': "auth != null && $userNode === ('uid_' + auth.uid)",
+          // Keep the existing partner grant; a self-link must not grant the recipient creation/edit authority.
+          '.write': `auth != null && ${NORMAL_TOKEN} && $userNode !== ('uid_' + auth.uid) && root.child($userNode).child('partnerUid').val() === auth.uid`,
+          $nudgeId: { '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid) && !newData.exists()` },
+        },
       },
     },
   };

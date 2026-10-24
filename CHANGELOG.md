@@ -5183,3 +5183,36 @@ deviations: two ancillary test adjustments described above; no weakened assertio
   acceptance is untested. Neutral contention feedback remains (tray 15/240, view 35/240); stuck claims
   and duplicates both 0/480. Cross-tab whole-envelope writes/shared locks remain out of scope.
 → status set to `review` in TASKS.md. REVIEW-READY / HELD; no TASK-016 merge, push or deployment.
+
+## TASK-022 - implementation complete, QA BLOCKED (branch: task-022)
+changed:
+  - storage.js: startSync incoming nudges only; account/session receipts before cleanup, stale UID/generation/ref guards, bounded removal and observable rejection (23 additions / 5 removals, including receipt state).
+  - scripts/firebase-rules-builder.mjs and generated firebase.rules.json: recipient individual-child delete-only grant; narrow existing partner grant against self-links; no unrelated rule change.
+  - nudge-listener.test.js, nudge-test-support.js, nudge-rules-emulator.test.js: deterministic and real-SDK replay, lifecycle/account/session and authorization regressions.
+  - firebase-rules.test.js, package.json, npm-test-wiring.test.js: nudge boundaries and mandatory suite wiring.
+  - index.html, personal-day-boundary-web-runtime.test.js, tests/calendar-native-plan-identity.spec.js: governed generation/retired-token expectation only; generated www/index.html and www/storage.js parity.
+  - TASK_022_HANDOFF.md and owner-direct TASK-022 entry: authority, verification, limits, independent assessment, hold and distinct future approvals.
+tests: focused 35/35; fence 157/157; npm test 2275 Node passes/0 failures/1 existing opt-in skip, legacy455/455; lint0 errors/48 existing warnings; rules/parity/scope/whitespace pass.
+blockers: full browser final969 expected/1 unexpected layout failure; focused editor repeat8/9 with unresolved Save submission; base editor10/10 pass, so baseline flakiness is not proven. Independent review finds no nudge must-fix but requires QA BLOCKED.
+deviations: no release-ready handoff/commit due mandatory QA failures. Environmental disk/spawn/dependency/runner attempts retained in private evidence; no planning/layout repair, assertion weakening, push/merge/deployment/production or AI Dev OS action.
+-> TASK-022 status set to `blocked` in TASKS.md; uncommitted worktree retained for the owner/Claude.
+
+## TASK-023 — ready for review (branch: task-023)
+changed:
+  - planning-continuity-ui.js: editTask uses instant editor navigation (one option); smooth scrolling moved Save away before trusted input arrived. Planning persistence is unchanged.
+  - tests/calendar-native-plan-identity.spec.js: genuine-pointer end-only regression; tests/unfinished-ux.spec.js: same-turn control selection/geometry with exact 12-control and 44px checks, removing a detached-element sampling race without weakening assertions.
+  - index.html, personal-day-boundary-web-runtime.test.js and generated www mirrors: governed task-023 generation only beyond the single runtime correction.
+  - TASKS.md: owner-direct TASK-023 contract/status; TASK_023_HANDOFF.md: causes, matched before/after evidence and release boundary. Original TASK-022 code/rules/worktree/evidence preserved.
+tests: focused 18/18; full browser 971 expected outcomes (seven existing annotated expected failures), zero unexpected; npm 2275 Node passes/one existing opt-in skip plus legacy 455/455; fence 157/157; lint zero errors/48 existing warnings; parity/scope/preservation pass.
+blockers: none for local review/release preparation; publication/integration/production rules/native acceptance remain separately held.
+deviations: new isolated worktree moved to D: due C: disk pressure; exact local base only, no live pull/hosted/production claim. Timing-dependent reproductions and the rejected prototype are retained; no unexplained final failure is hidden.
+→ status set to `review` in TASKS.md; independent exact-candidate assessment retained privately, not formal release approval.
+
+## TASK-024 — local release preparation (branch: task-024)
+changed:
+  - TASKS.md: own owner-direct preparation entry/status; TASK_024_HANDOFF.md: exact reviewed input/review hashes, complete validation, source rollback baseline and remaining approvals.
+  - CHANGELOG.md and TEST_REPORT.md: append-only preparation evidence. All implementation, tests, rules, package wiring and generated mirrors remain the exact reviewed TASK-022/023 input.
+tests: retained combined candidate browser 971 expected/zero unexpected, focused 18/18, npm 2275 Node passes/one existing skip plus legacy 455/455, fence 157/157, lint zero errors/48 existing warnings. Fresh preparation tests 30/30; rules/mirror/preservation/scope/staged/whitespace/secret checks required before local commit.
+blockers: none for bounded local preparation; publication, exact-head hosted checks/formal review, trusted integration/Pages release, production rules and acceptance remain held/unverified.
+deviations: no full-suite rerun for identical reviewed code; read-only live main comparison replaces a pull into preserved existing worktrees. Local base/main 1f171a29b55819c7b96872234a1b095d1e80d48c.
+→ status set to `review` in TASKS.md; one local commit only, no publication authority.

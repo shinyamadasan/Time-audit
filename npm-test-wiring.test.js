@@ -30,6 +30,7 @@ const OWN_SCRIPT = new Map([
   ['firebase-rules-emulator.test.js', 'test:rules-emulator'],
   ['entry-tombstone-rules-emulator.test.js', 'test:rules-emulator'],
   ['task-completion-emulator.test.js', 'test:rules-emulator'],
+  ['nudge-rules-emulator.test.js', 'test:rules-emulator'],
   // The same emulator, driven by real Firebase JS SDK connections (ordering/race proof, the real cf43080 client).
   ['brain-dump-fence-sdk.test.js', 'test:fence-sdk'],
   // Rebuilds the rules with one named predicate disabled and attacks the real emulator.

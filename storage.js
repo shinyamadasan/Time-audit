@@ -1538,12 +1538,29 @@ function startSync() {
   });
 
   // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
-  _nudgesRef = fbDb.ref(`uid_${currentUser.uid}/nudges`);
-  _nudgesRef.on('child_added', snap => {
+  if (_nudgesRef) _nudgesRef.off();
+  const nudgeUid = currentUser.uid;
+  const nudgeReceiptKey = `ta3-nudge-seen:${nudgeUid}`;
+  if (!_nudgeReceipts.has(nudgeUid)) {
+    let saved = [];
+    try { saved = JSON.parse(globalThis.sessionStorage.getItem(nudgeReceiptKey) || '[]'); } catch { /* memory guard still works */ }
+    _nudgeReceipts.set(nudgeUid, new Set(Array.isArray(saved) ? saved.filter(id => typeof id === 'string') : []));
+  }
+  const seenNudges = _nudgeReceipts.get(nudgeUid);
+  const nudgesRef = fbDb.ref(`uid_${nudgeUid}/nudges`);
+  _nudgesRef = nudgesRef;
+  nudgesRef.on('child_added', snap => {
+    if (!isCurrentSync() || currentUser?.uid !== nudgeUid || _nudgesRef !== nudgesRef) return;
+    if (seenNudges.has(snap.key)) return;
+    // A denied optimistic remove restores this child and emits child_added again. Mark FIRST;
+    // retain the receipt across reattachment/account switches, including failed cleanup.
+    seenNudges.add(snap.key);
+    try { globalThis.sessionStorage.setItem(nudgeReceiptKey, JSON.stringify([...seenNudges])); } catch { /* memory guard still works */ }
     const nudge = snap.val();
-    if (!nudge || !nudge.ts || Date.now() - nudge.ts > NUDGE_MAX_AGE_MS) { snap.ref.remove(); return; }
-    showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
-    snap.ref.remove();
+    if (nudge && Number.isFinite(nudge.ts) && nudge.ts > 0 && Date.now() - nudge.ts <= NUDGE_MAX_AGE_MS) {
+      showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
+    }
+    snap.ref.remove().catch(err => console.warn('Nudge cleanup failed', err));
   });
 
   // Watch for partner connecting (handles the code-generator side who never calls connectPartner)
@@ -2324,6 +2341,7 @@ function publishSharedAccountability() {
 let _partnerListener = null;
 let _partnerSharedListener = null;
 let _nudgesRef      = null;
+let _nudgeReceipts  = new Map(); // per-UID, tab-session receipts; never reset on account detach
 let _partnerUidRef  = null;
 let _pairCodeRef    = null;
 let _pendingPairClaim   = null;  // creator side: uid of someone who claimed our code, awaiting our explicit Accept

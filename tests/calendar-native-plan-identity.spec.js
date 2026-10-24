@@ -23,7 +23,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20261015-task018-completion-v1';
+const TOKEN = '20261023-task023-qa-unblock-v1';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
@@ -623,6 +623,38 @@ test('primary My Day editor creates, reloads, crosses midnight, returns same-day
   expect(item).not.toHaveProperty('durationMinutes');
   await expect(row).toContainText('8:00 PM');
   await expect(row).not.toContainText('10:00 PM');
+});
+
+test('editor Save stays under the pointer during an end-only edit', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(() => {
+    window.PlanAuthority.saveItems(window.PlanAuthority.current(), [{
+      id: 'pointer-save', task: 'Pointer save', kind: 'task', when: '23:00', durationMinutes: 120,
+      whenTz: 'Asia/Manila', done: false, updatedAt: 1, updatedBy: 'device-cnpi',
+    }]);
+    window.refreshAuthoritativePlanSurfaces();
+  });
+  const row = page.locator('#timeline-blocks [data-plan-item-id="pointer-save"]');
+  await expect(row).toContainText('11:00 PM–1:00 AM');
+  await row.getByRole('button', { name: 'Edit planned task Pointer save' }).click();
+  const form = page.locator('#pc-task-form');
+  await form.locator('input[name="endTime"]').fill('03:00');
+  const point = await form.getByRole('button', { name: 'Save', exact: true }).evaluate(button => {
+    const box = button.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  // Preserve a real pointer's aim across the brief delivery gap seen in the failed trace.
+  const inputDeliveryFrames = 3;
+  await page.evaluate(async frames => {
+    for (let frame = 0; frame < frames; frame++) await new Promise(requestAnimationFrame);
+  }, inputDeliveryFrames);
+  await page.mouse.click(point.x, point.y);
+  await expect(form).toBeHidden();
+  expect((await calendarStore(page))[`cal1:${SUN}`].items.find(item => item.id === 'pointer-save'))
+    .toMatchObject({ id: 'pointer-save', when: '23:00', durationMinutes: 240 });
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+  await expect(row).toContainText('11:00 PM–3:00 AM');
 });
 
 test('the default 36h Daily View shows several factual Monday items through 3 AM, with no projection writes or duplicate persistence', async ({ page }) => {
