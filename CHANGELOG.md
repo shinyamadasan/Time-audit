@@ -5216,3 +5216,33 @@ tests: retained combined candidate browser 971 expected/zero unexpected, focused
 blockers: none for bounded local preparation; publication, exact-head hosted checks/formal review, trusted integration/Pages release, production rules and acceptance remain held/unverified.
 deviations: no full-suite rerun for identical reviewed code; read-only live main comparison replaces a pull into preserved existing worktrees. Local base/main 1f171a29b55819c7b96872234a1b095d1e80d48c.
 → status set to `review` in TASKS.md; one local commit only, no publication authority.
+
+## TASK-025 — entry validation reliability (branch: task-025)
+changed:
+  - storage.js: validateEntry accepts the existing deterministic scheduled-template ID grammar and finite positive numeric IDs; all duration/other-field diagnostics remain. No entry mutation, producer or sync protocol changes.
+  - entry-validation.test.js and tests/entry-validation.spec.js: actual-source producer/account/sync regressions and isolated real-page Firebase fixture; package.json adds the Node suite.
+  - index.html/runtime-generation tests and generated www/index.html/www/storage.js: governed generation only beyond the validator correction; 95-file mirror preserved.
+  - TASKS.md: own owner-direct entry/status; TASK_025_HANDOFF.md: causes, redacted sample limits, repetition/write evidence, unchanged zero-duration history and release limits.
+tests: pre-fix corrected source fixture 17 pass/5 expected regression failures; after 22/22, focused Node 42/42, focused browser 1/1. npm 2297 Node passes/one existing opt-in skip plus legacy 455/455; lint zero errors/48 existing warnings. Full browser 972 expected outcomes (965 ordinary passes/seven existing annotated failures), zero unexpected. Rules generation/95-file mirror, whitespace and deterministic 13-path scope pass; 710 untouched base files preserved.
+blockers: none for the scoped local correction; independent implementation review PASS/no must-fix, final exact-candidate assessment separately bound in private evidence. Genuine rounded-zero history remains diagnostic; duration policy/cleanup is outside this correction. No release approval is claimed.
+deviations: no Firebase fence rerun for unchanged authorization paths; retained TASK-024 157/157 is identified as prior evidence. Initial spawn/fixture/tool errors are retained privately. No production entry access or unrelated repair.
+→ local candidate only; no commit, push, merge, deployment or production change authorized/performed.
+→ status set to `review` in TASKS.md.
+
+## TASK-026 — zero-minute entries at their creation source (branch: task-026)
+changed:
+  - index.html: endBreak, saveRetroEntry, quickRetroLog. Positive intervals are stored as at least 1 minute with exact timestamps; empty or skewed intervals are never stored; a block ending at midnight is not split. The validator is unchanged.
+  - entry-validation.test.js: the two TASK-025 tests describing the defect are inverted; 12 regressions added. Every other TASK-025 test is unchanged.
+  - www/index.html: generated mirror. TASKS.md: own entry. TASK_026_HANDOFF.md: contract, determination, attribution limit.
+tests: 22/8 before, 32/32 after; npm 2307 pass, 0 fail; lint 0 errors. Full browser: 0 of 4 runs green because of two flaky tests that also fail on the unchanged TASK-025 baseline.
+blockers: full browser gate not green. See TASK_026_HANDOFF.md.
+→ status set to `blocked` in TASKS.md.
+
+## TASK-027 — browser QA stability (branch: task-027)
+changed:
+  - tests/brain-dump-plan-tray.spec.js: a second tab shares the context's mock-clock origin, as two real tabs share one device clock. C8 assertions unchanged.
+  - tests/normal-tracking-hud.spec.js:287: waits for the exact tracking-active projection instead of racing the 1 s poll; adds an identity check on every post-break projection.
+  - planning/ROADMAP.md: P1 backlog item for the Brain Dump cross-device clock-skew defect (owner-directed; not fixed here). TASK_027_HANDOFF.md; TASKS.md statuses.
+tests: C8 before 21/96 failed, after 0/192; HUD race window before 12/12 failed, after 12/12 pass; mutant fails 3/3. Full browser 972/972 at 4 workers and 972/972 at 2 workers.
+blockers: none. Independent review PASS-with-notes.
+→ TASK-026 and TASK-027 set to `approved` (held; no merge).

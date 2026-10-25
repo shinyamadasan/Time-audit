@@ -1511,6 +1511,132 @@ verification:
   - Fresh rules-generation/runtime-mirror, whitespace, secret and deterministic scope checks.
   - Reuse unchanged-code suites; SELF_REVIEW.md/applicable QA.md; exact staged and committed tree binding.
 
+### TASK-025 - Post-release entry validation reliability
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: storage.js (validateEntry, local-account load and entry sync only if minimal correction justified), index.html (scoped entry producers only if proven minimal correction, governed generation), entry-validation.test.js (new), tests/entry-validation.spec.js (new), package.json (test wiring), personal-day-boundary-web-runtime.test.js (generation if runtime changes), tests/calendar-native-plan-identity.spec.js (generation if required), www/ (generated mirror only), TASK_025_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "ChronaSense — Post-Release Entry Validation Investigation",
+  2026-10-24 America/Phoenix, directly authorizes separate local reliability investigation,
+  exact isolated reproduction, minimal evidence-based correction, regression tests and independent review.
+  Warnings are [validateEntry] blockIntervalMin < 1 and id invalid. Source documents legitimate
+  scheduled-template string IDs. Production records have not been supplied or accessed.
+  Isolated branch task-025 at current GitHub main e7d8b87bb0059b1c08351a9f9dc24bc5adebb9b8,
+  freshly verified identical. TASK-022/023/024 worktrees and private evidence remain preserved.
+
+objective:
+  Classify warning causes and affected record types, reproduce repetition and determine whether
+  unnecessary sync/writes occur; correct only proven narrow validation/producer/revalidation defects.
+
+acceptance:
+  - Trace validateEntry, account-local loading, entry synchronization and all relevant producers.
+  - Reproduce exact warnings with isolated synthetic fixtures and count validation, sync and writes.
+  - Distinguish false positives/legitimate IDs, malformed history, duration errors and unchanged-record
+    repetition; do not claim production record-specific causes without actual evidence.
+  - Preserve IDs, durations, historical records, time accuracy, account isolation/cross-device conflict
+    resolution and all existing data-integrity hard rules; no silent migration or fabricated duration.
+  - Make only justified minimal corrections; never merely mute warnings or weaken malformed-entry checks.
+  - Add regression coverage; relevant Node/browser/fence/parity/lint checks, SELF_REVIEW.md/applicable QA;
+    independent exact-candidate review and evidence with confirmed causes, results, limits and risks.
+
+constraints:
+  - Local only: no production database changes/access/cleanup, GitHub push/merge, Pages deployment,
+    Firebase rules/auth/security changes or AI Dev OS merge automation.
+  - No unrelated refactor, entry schema redesign, lossy normalization or changes to stored history.
+  - Stop for broader architecture/data-integrity changes or unresolved verification failure.
+  - Preserve prior candidates/evidence; no protected planning/docs/REVIEW.md edits.
+
+verification:
+  - Actual source-block Node VM and isolated mocked browser account/sync/producer fixtures.
+  - Before/after warning counts and final byte/state/write equality/convergence checks.
+  - npm test; focused and full browser QA; Firebase fence as applicable; lint, generation/mirror and scope.
+  - Independent review, explicit unknowns/production acceptance limits; local reviewed handoff only.
+
+### TASK-026 - TASK-025 follow-up: zero-minute entries at their creation source
+status: approved
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-025 (reviewed candidate, carried byte-identical as local baseline commit 828b289)
+files: index.html (endBreak, saveRetroEntry, quickRetroLog only; governed generation), entry-validation.test.js (invert the two TASK-025 producer-characterization tests only; add regressions), personal-day-boundary-web-runtime.test.js and tests/calendar-native-plan-identity.spec.js (generation token only), www/ (generated mirror only), TASK_026_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "ChronaSense — TASK-025 Follow-up: Zero-Minute Entries", 2026-10-24
+  America/Phoenix. TASK-025 passed independent review and is preserved unchanged (manifest
+  ea1595ae..., all 13 hashes verified before the baseline commit). TASK-025 confirmed endBreak()
+  can store a 5.4-second break as blockIntervalMin 0 and quickRetroLog() 23:00-00:00 can store an
+  empty next-day fragment. Reuse that evidence; do not repeat the investigation.
+
+objective:
+  Establish the entry-duration contract, stop invalid new zero-minute records at their producers
+  without discarding legitimate time, and determine whether unchanged-history revalidation is
+  producing unnecessary warnings.
+
+acceptance:
+  - Contract distinguishes empty records (ts <= tsStart; never created) from legitimate positive
+    sub-minute activity (kept, exact timestamps, blockIntervalMin >= 1).
+  - endBreak, saveRetroEntry and quickRetroLog never create blockIntervalMin < 1 or empty records;
+    a block ending exactly at midnight is one record on its start date.
+  - Validator and its warnings unchanged; historical entries, IDs, timestamps, totals and sync
+    conflict resolution unchanged; no migration.
+  - Repeated-validation determination recorded with evidence; changes only if justified and in scope.
+  - Focused regressions; npm test, lint, generation/mirror, full browser QA; independent review.
+  - The four owner duration records are reported as attributable or not, never guessed.
+
+constraints:
+  - Local only: no production data access/changes, historical migration, push, merge, Firebase
+    rules change or deployment.
+  - TASK-025 runtime/test content preserved except the two characterization tests that assert the
+    defect this task removes.
+  - No unrelated refactor; stop for conflict-resolution or other red-zone policy changes.
+
+resolved:
+  The blocker was resolved by TASK-027 (test-harness causes). The combined candidate passed full browser QA at 972/972
+  with 4 and 2 workers. Red zone: held for the owner's merge.
+
+verification:
+  - Before/after actual-source Node VM regressions; npm test; npm run lint; generation/mirror parity;
+    full browser QA; scope audit against baseline 828b289; independent exact-candidate review.
+
+### TASK-027 - Browser QA stability for the TASK-026 release gate
+status: approved
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-026 (candidate carried byte-identical as local baseline commit a056713)
+files: tests/brain-dump-plan-tray.spec.js, tests/normal-tracking-hud.spec.js (test harness only), TASK_027_HANDOFF.md (new), CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session "OWNER-DIRECT — ChronaSense TASK-027: Browser QA Stability", 2026-10-24
+  America/Phoenix. Owner declined release exceptions. brain-dump-plan-tray.spec.js:315 (C8 two-tab
+  convergence) and normal-tracking-hud.spec.js:287 (Focus break -> HUD) fail intermittently on the
+  TASK-025 baseline and the TASK-026 candidate (TASK-026 A/B evidence in release-verification/task-026).
+
+objective:
+  Find each exact race. Correct test synchronization without weakening assertions, or stop and report
+  an application defect for separate approval.
+
+acceptance:
+  - Original failures reproduced before correction; cause shown with evidence (test sync vs app defect).
+  - C8 still asserts both tabs reach the correct authoritative state; HUD assertions are not weakened.
+  - No arbitrary sleeps, retries, skips or weaker expectations; HUD functionality unchanged.
+  - Focused repeated runs under the previously failing worker configurations; full browser suite;
+    other affected gates; independent review of the combined exact candidate.
+
+constraints:
+  - Local only: no push, merge, deployment, Firebase change or unattended production action.
+  - TASK-025/026 implementation unchanged; no entry, Firebase record, duration or sync-semantics change.
+  - Application defect or architectural change needed -> stop and report; do not fix here.
+  - TASK-026 is not marked approved until mandatory gates and independent review pass.
+
+verification:
+  - Before/after focused repeats (workers 4 and 2); full browser suite; npm test if affected;
+    scope audit against a056713; independent review.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

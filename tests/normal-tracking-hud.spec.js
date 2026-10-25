@@ -294,6 +294,7 @@ test.describe('TASK-014 normal tracking on the Windows HUD', () => {
     await page.evaluate(ts => { window.__t14.set(ts); endWorkSession(); }, T0 + 30 * MIN);
     expect(last(context)).toMatchObject({ type: 'focus-active', phase: 'break' });
     expect((await appState(page)).selector).toBeNull(); // the echoed timer is never projected during Focus
+    const breakIndex = hud(context).length;
     await page.evaluate(ts => { window.__t14.set(ts); _pomodoroAutoStart = false; endPomodoroBreak(); }, T0 + 36 * MIN);
     await page.waitForTimeout(POLL_WAIT_MS);
     const app = await page.evaluate(() => ({
@@ -304,7 +305,12 @@ test.describe('TASK-014 normal tracking on the Windows HUD', () => {
     }));
     if (app.heroTracking && app.remoteMode == null) {
       expect(app.selector).toEqual({ title: app.heroTask, startedAt: app.taskStartTime });
-      expect(last(context)).toMatchObject({ type: 'tracking-active', title: app.heroTask, startedAt: app.taskStartTime });
+      // The 1 s tracking poll projects a session up to one poll after the selector confirms it, and the sample
+      // above can land inside that gap: wait for that projection instead of racing the poll.
+      await expect.poll(() => last(context), { timeout: 5_000 })
+        .toMatchObject({ type: 'tracking-active', title: app.heroTask, startedAt: app.taskStartTime });
+      expect(hud(context).slice(breakIndex).filter(p => p.type === 'tracking-active')
+        .every(p => p.title === app.heroTask && p.startedAt === app.taskStartTime)).toBe(true);
     } else {
       expect(app.selector).toBeNull();
       expect(last(context).type).toBe('focus-ended');

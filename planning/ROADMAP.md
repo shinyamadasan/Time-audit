@@ -95,9 +95,19 @@ Current Objective.)_
 
 ## Approved Backlog
 
-*(empty -- approve a proposal in `PROPOSALS.md` to populate this. The reconciled phase sequence
-above tracks the separate, already-running Phase-branch track and is recorded here for
-visibility, not as an approval.)*
+*(The reconciled phase sequence above tracks the separate, already-running Phase-branch track and
+is recorded here for visibility, not as an approval.)*
+
+- **P1 — Brain Dump cross-device clock skew silently drops actions.** Owner-directed backlog item,
+  2026-10-24 (found by TASK-027 independent review, confirmed against the real model; not fixed
+  there). `normalizeCapture()` (`brain-dump-model.js:626`) rejects `updatedAt < createdAt`, and
+  every Brain Dump action stamps raw `Date.now()` with no clock correction. A device whose clock is
+  even 1 ms behind the device that created a capture (1) triages it: `ok: true` is reported, but the
+  record is invalid and the next merge reverts it to untriaged; (2) adds it to a plan: the claim
+  commits as a no-op and the user sees a false "already-claimed". Already shipped (TASK-016 code);
+  no logged time or plan item is lost or duplicated. Red zone (sync/record semantics). Candidate
+  directions for planning: clamp each action's time to `max(now, createdAt, updatedAt)`, or use
+  the RTDB server time offset. Needs Plan -> BUILD_QUEUE before any build.
 
 ---
 

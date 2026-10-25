@@ -2889,12 +2889,15 @@ function tryAutoConnect() {
 const VALID_ENERGY = new Set(['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste','admin','distraction','break','away']);
 const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
 
-// Warns to console if a newly created entry is missing required fields.
+// Warns on creation, account load and remote changes without altering stored records.
 // Never throws — validation is defensive only; a malformed entry is better than a crash.
-/** Warns to console if a newly created entry is missing required fields. Never throws. @param {Object} entry */
+/** Reports malformed entry fields without changing the record. @param {Object} entry */
 function validateEntry(entry) {
   const problems = [];
-  if (typeof entry.id !== 'number' || entry.id <= 0)        problems.push('id invalid');
+  // autoTemplateEntryId() produces stable string IDs; edits retain them even if the date changes.
+  const scheduledId = typeof entry.id === 'string' && entry.id === entry.id.trim()
+    && /^tpllog_[\w-]+_\d{4}-\d{2}-\d{2}$/.test(entry.id);
+  if ((!Number.isFinite(entry.id) || entry.id <= 0) && !scheduledId) problems.push('id invalid');
   if (typeof entry.ts !== 'number' || entry.ts <= 0)        problems.push('ts invalid');
   if (typeof entry.blockIntervalMin !== 'number' || entry.blockIntervalMin < 1) problems.push('blockIntervalMin < 1');
   if (!entry.activity || typeof entry.activity !== 'string') problems.push('activity missing');

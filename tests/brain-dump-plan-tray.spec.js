@@ -138,8 +138,10 @@ async function openApp(page, { now, fresh = true } = {}) {
     // Ticks from a settable base: real devices never stamp two clicks with one millisecond.
     const RealDate = Date;
     let base = now;
-    // Reload must not move behind an already-persisted claim's timestamp.
-    let startedAt = Number(sessionStorage.getItem('bdt-clock-start')) || RealDate.now();
+    // Reload must not move behind an already-persisted claim's timestamp, and a second
+    // tab shares the first tab's clock, as two tabs on one device share its wall clock.
+    let startedAt = Number(sessionStorage.getItem('bdt-clock-start'))
+      || (!fresh && Number(localStorage.getItem('bdt-clock-start'))) || RealDate.now();
     const current = () => base + (RealDate.now() - startedAt);
     window.__setNow = value => { base = value; startedAt = RealDate.now(); };
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [current()])); } static now() { return current(); } };
@@ -149,6 +151,7 @@ async function openApp(page, { now, fresh = true } = {}) {
     }
     localStorage.clear(); sessionStorage.clear();
     sessionStorage.setItem('bdt-clock-start', String(startedAt));
+    localStorage.setItem('bdt-clock-start', String(startedAt));
     sessionStorage.setItem('bdt-booted', '1');
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
     localStorage.setItem('ta3-device-id', 'device-bdtray');

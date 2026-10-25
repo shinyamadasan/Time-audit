@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20261023-task023-qa-unblock-v1">
+<meta name="pdb-release" content="20261024-task025-entry-validation-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,14 +13,14 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261023-task023-qa-unblock-v1">
+<link rel="stylesheet" href="style.css?v=20261024-task025-entry-validation-v1">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
 <link rel="stylesheet" href="plan-tomorrow.css?v=20260908-plan-tomorrow-v1">
 <link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
-<link rel="stylesheet" href="planning-continuity.css?v=20261023-task023-qa-unblock-v1">
+<link rel="stylesheet" href="planning-continuity.css?v=20261024-task025-entry-validation-v1">
 <link rel="stylesheet" href="brain-dump-tray.css?v=20261021-task016-promotion-reliability-v1">
 </head>
 <body>
@@ -1719,7 +1719,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261023-task023-qa-unblock-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261024-task025-entry-validation-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1738,39 +1738,39 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261023-task023-qa-unblock-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261023-task023-qa-unblock-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20261023-task023-qa-unblock-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20261023-task023-qa-unblock-v1",
-    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261023-task023-qa-unblock-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261023-task023-qa-unblock-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261023-task023-qa-unblock-v1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-item-origin.js": "./plan-item-origin.js?v=20261023-task023-qa-unblock-v1",
-    "./task-completion-model.js": "./task-completion-model.js?v=20261023-task023-qa-unblock-v1",
-    "./task-completion-repository.js": "./task-completion-repository.js?v=20261023-task023-qa-unblock-v1",
-    "./task-completion-sync.js": "./task-completion-sync.js?v=20261023-task023-qa-unblock-v1",
-    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261023-task023-qa-unblock-v1",
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261024-task025-entry-validation-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261024-task025-entry-validation-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20261024-task025-entry-validation-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261024-task025-entry-validation-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261024-task025-entry-validation-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20261024-task025-entry-validation-v1",
+    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261024-task025-entry-validation-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20261024-task025-entry-validation-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20261024-task025-entry-validation-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261024-task025-entry-validation-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261024-task025-entry-validation-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261024-task025-entry-validation-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261024-task025-entry-validation-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20261024-task025-entry-validation-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261024-task025-entry-validation-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261024-task025-entry-validation-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261024-task025-entry-validation-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261024-task025-entry-validation-v1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261024-task025-entry-validation-v1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261024-task025-entry-validation-v1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261024-task025-entry-validation-v1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261024-task025-entry-validation-v1",
+    "./plan-item-origin.js": "./plan-item-origin.js?v=20261024-task025-entry-validation-v1",
+    "./task-completion-model.js": "./task-completion-model.js?v=20261024-task025-entry-validation-v1",
+    "./task-completion-repository.js": "./task-completion-repository.js?v=20261024-task025-entry-validation-v1",
+    "./task-completion-sync.js": "./task-completion-sync.js?v=20261024-task025-entry-validation-v1",
+    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261024-task025-entry-validation-v1",
     "./brain-dump-model.js": "./brain-dump-model.js?v=20261021-task016-promotion-reliability-v1",
     "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261021-task016-promotion-reliability-v1",
     "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261021-task016-promotion-reliability-v1",
@@ -1779,38 +1779,38 @@
   }
 }
 </script>
-<script src="storage.js?v=20261023-task023-qa-unblock-v1"></script>
+<script src="storage.js?v=20261024-task025-entry-validation-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20261023-task023-qa-unblock-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20261024-task025-entry-validation-v1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20261023-task023-qa-unblock-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20261024-task025-entry-validation-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
-<script type="module" src="windows-hud-bridge.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20261023-task023-qa-unblock-v1"></script>
+<script type="module" src="windows-hud-bridge.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20261024-task025-entry-validation-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20261023-task023-qa-unblock-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261023-task023-qa-unblock-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261024-task025-entry-validation-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="commitments-sync.js?v=20261023-task023-qa-unblock-v1"></script>
-<script type="module" src="planning-continuity-ui.js?v=20261023-task023-qa-unblock-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="commitments-sync.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20261024-task025-entry-validation-v1"></script>
 <script type="module" src="brain-dump-sync.js?v=20261021-task016-promotion-reliability-v1"></script>
 <script type="module" src="brain-dump-ui.js?v=20261021-task016-promotion-reliability-v1"></script>
 <script type="module" src="intelligence-ui.js?v=20261008-intelligence-int001"></script>
@@ -2706,19 +2706,23 @@ function endBreak(ownerRoom = breakStateOwnerRoom()) {
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('switch-btn').style.display = 'inline-flex';
 
-  // Log the break as an entry
-  const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
-  const entry = {
-    id: Date.now(), ts: Date.now(),
+  // Log the break as an entry. A sub-minute break still counts as one minute;
+  // an empty or clock-skewed interval has no time to log.
+  const tsEnd = Date.now();
+  const entry = tsEnd > breakStartTs ? {
+    id: tsEnd, ts: tsEnd,
     tsStart: breakStartTs,
-    blockIntervalMin: actualDur,
+    blockIntervalMin: Math.max(1, Math.round((tsEnd - breakStartTs) / 60000)),
     date: toDateKey(new Date()),
     activity: 'Break',
     energy: 'recovery',
     onPlan: true,
-  };
-  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
-  entries.unshift(entry);
+  } : null;
+  if (entry) {
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+    validateEntry(entry);
+    entries.unshift(entry);
+  }
 
   // Restart timer for next block
   totalSecs = settings.intervalMin * 60;
@@ -2737,8 +2741,12 @@ function endBreak(ownerRoom = breakStateOwnerRoom()) {
   persist(); scheduleRenderToday(); syncEntries(); syncTimerState({ ownerRoom });
   syncBreakState({ active: false, ownerRoom });
   releaseBreakStateOwnership(ownerRoom);
-  rememberCreatedUndo('break log', [entry]);
-  showUndoToast('Break over — break logged', entry.energy);
+  if (entry) {
+    rememberCreatedUndo('break log', [entry]);
+    showUndoToast('Break over — break logged', entry.energy);
+  } else {
+    showToast('Break over');
+  }
   playAlert(1, 0);
   return true;
 }
@@ -3530,11 +3538,12 @@ function saveRetroEntry() {
   getActivityColor(activity);
   learnWastePattern(activity, retroEnergy);
 
-  // Detect midnight span: start and end on different calendar dates in user's TZ
+  // Detect midnight span: start and end on different calendar dates in user's TZ.
+  // Ending exactly at midnight belongs to the start day; splitting it leaves an empty fragment.
   const startDateKey = toDateKey(new Date(tsStart));
   const endDateKey   = toDateKey(new Date(tsEnd));
-  const spansMidnight = startDateKey !== endDateKey;
-  const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
+  const midnight = tzParseTime(endDateKey, '00:00');
+  const spansMidnight = startDateKey !== endDateKey && tsEnd > midnight;
 
   const onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
   const project = document.getElementById('retro-project').value.trim();
@@ -6779,10 +6788,11 @@ function quickRetroLog() {
   }
   const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
 
+  // Ending exactly at midnight belongs to the start day; splitting it leaves an empty fragment.
   const startDateKey = toDateKey(new Date(tsStart));
   const endDateKey   = toDateKey(new Date(tsEnd));
-  const spansMidnight = startDateKey !== endDateKey;
-  const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
+  const midnight = tzParseTime(endDateKey, '00:00');
+  const spansMidnight = startDateKey !== endDateKey && tsEnd > midnight;
 
   // Energy resolution: 1) learned waste/distraction pattern, 2) most recent entry for same activity, 3) shallow
   const commonOption = COMMON_LOG_OPTIONS.find(option => activityGroupKey(option.activity) === activityGroupKey(task));
@@ -6791,21 +6801,22 @@ function quickRetroLog() {
   const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || commonOption?.energy || 'shallow';
 
   function makeQEntry(id, ts, tsS, dateKey) {
-    const blkDur = Math.round((ts - tsS) / 60000);
+    const blkDur = Math.max(1, Math.round((ts - tsS) / 60000));
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
       date: dateKey, activity: task, energy: learnedEng,
       onPlan: learnedEng !== 'waste' && learnedEng !== 'distraction', retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
+    validateEntry(e);
     return e;
   }
 
   getActivityColor(task);
   learnWastePattern(task, learnedEng);
   if (spansMidnight) {
-    const dur1 = Math.round((midnight - tsStart) / 60000);
-    const dur2 = Math.round((tsEnd - midnight) / 60000);
     const firstEntry = makeQEntry(midnight - 1, midnight, tsStart, startDateKey);
     const secondEntry = makeQEntry(tsEnd, tsEnd, midnight, endDateKey);
+    const dur1 = firstEntry.blockIntervalMin;
+    const dur2 = secondEntry.blockIntervalMin;
     entries.push(firstEntry);
     entries.push(secondEntry);
     entries.sort((a, b) => b.ts - a.ts);
@@ -12753,7 +12764,7 @@ if (!localStorage.getItem('ta3-onboarded')) {
   setTimeout(openOnboarding, 400);
 }
 </script>
-<script src="focus-mode.js?v=20261023-task023-qa-unblock-v1"></script>
+<script src="focus-mode.js?v=20261024-task025-entry-validation-v1"></script>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="ob-overlay" id="ob-overlay">
