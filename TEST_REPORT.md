@@ -2565,3 +2565,10 @@ review: independent adversarial review PASS-with-notes, no blocking finding. Its
   LWW tests added, task contract recorded, DECISIONS #40, evidence logged, held gate.
 known: her get_today still returns CONFLICT malformed-entries until her 2 invalid time entries are fixed (Fix 2,
   not approved).
+
+## TASK-032 Fix 1 — browser gate · 2026-10-27
+suite: every Playwright spec that exercises commitments (15 specs: calendar-native-plan-identity, commitments-sync-wiring,
+  cross-store-account-isolation, intelligence, personal-day-boundary, plan-linkage-up-next, plan-time-range,
+  plan-tomorrow-ui, plan, planning-continuity-fixes, planning-continuity, single-plan-authority, today-simplification,
+  tomorrow-timeline-preview, tomorrow-view), chromium, 2 workers, on task-032 bb010ba.
+result: 289 passed, 0 failed (8.1 min). This closes the earlier "not run" gap.
