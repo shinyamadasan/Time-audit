@@ -6,7 +6,13 @@ Merged to main `f6f18a5` (G1, 2026-10-25). Rollout progress:
 - G1: done.
 - G2: done. Function `chronasenseactionapi-00008-wur`, owner canary PASS.
 - G3: done. Worker `e0a99bd6-7da4-46b1-91f4-1c3a247f94c9`, 16/16 checks, owner canary PASS.
-- G4: preparation only (read-only). G5 onward: not started. The second user is NOT active.
+- G4: done (read-only). Her Firebase UID is taken from the mutual in-app partnerUid link. Her Access sub candidate
+  is calibrated: the owner dashboard User ID equals the configured, JWT-derived owner sub. Both are kept in private
+  files outside the repo.
+- G5.1: done. Backend `chronasenseactionapi-00009-son` with both second-user values; 24/24 checks; owner canary PASS
+  on retry. The first call timed out on a cold start: the backend answered in 12.2 s, past the Worker's 10 s read
+  limit. This is pre-existing and not a regression.
+- G5.2 onward: not started. The Worker still refuses the second user.
 This document contains no real Access subject, Firebase UID, token or secret, and none may be added to it.
 
 ## What changes

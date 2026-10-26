@@ -2505,3 +2505,23 @@ result:
     /authorize 302 to Access; /mcp 401; discovery and protected-resource metadata unchanged.
   - Owner canary (existing ChatGPT connection, no reconnect or consent): get_today PASS (3 items), get_brain_dump PASS
     (16 captures). No writes.
+
+## TASK-029 rollout — G4 + G5.1 · 2026-10-26/27
+result:
+  - G4 (read-only, booleans only):
+    - In-app link: the single pair record was created by the owner; the mutual owner-written partnerUid link is
+      confirmed. Her Auth account exists, is enabled and email-verified, and her room exists. Her email matches the
+      second Access Allow-policy email (corroboration only).
+    - Access sub candidate: lowercase UUID, differs from the owner.
+    - Calibration: the owner's dashboard User ID equals the configured, JWT-derived owner subject.
+  - G5.0 preflight 13/13.
+  - G5.1: the owner ran gcloud --update-env-vars from the private files with the identical f6f18a5 source; revision
+    chronasenseactionapi-00009-son ACTIVE.
+  - G5.1v 24/24: only the revision and the two SECOND names changed; all pre-existing env values are identical by
+    hash; the two values equal the private files and differ from the owner; secret, service account, sizing,
+    ingress and IAM unchanged; unauthenticated requests 401; Worker unchanged.
+  - Owner canary: the first get_today timed out in ChatGPT. Logs show a 200 "ok get_today" after 12.18 s on the first
+    request to the new revision: a cold start past the Worker's 10 s read timeout. 00008's first call took 8.16 s.
+    The retry PASSED (user-scoped plan, no reconnect, no writes).
+open (not TASK-029): with min instances 0, cold starts can exceed the Worker's 10 s read limit on the first call after
+  a deploy or idle period.
