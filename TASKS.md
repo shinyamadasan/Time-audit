@@ -1638,7 +1638,7 @@ verification:
     scope audit against a056713; independent review.
 
 ### TASK-029 - Two-user authentication for the conversational MCP bridge
-status: approved
+status: done
 owner: claude (owner explicitly asked Claude to implement)
 source: owner-direct
 priority: P2
