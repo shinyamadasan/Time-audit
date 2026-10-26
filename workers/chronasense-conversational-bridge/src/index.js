@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { handleMcpRequest, ISSUER, KNOWN_SCOPES, PLAN_WRITE_SCOPE, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
+import { allowedSubjects, handleMcpRequest, ISSUER, KNOWN_SCOPES, PLAN_WRITE_SCOPE, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
 
 const ACCESS_ASSERTION_HEADER = 'Cf-Access-Jwt-Assertion';
 const ACCESS_ALGORITHM = 'RS256';
@@ -53,9 +53,10 @@ export async function handleDefaultRequest(request, env, deps = {}) {
   const url = new URL(request.url);
   if (url.pathname !== '/authorize') return new Response('Not found.', { status: 404 });
 
-  let ownerSubject;
+  let accessSubject;
+  let accessLabel;
   try {
-    ownerSubject = await requireAccessSubject(request, env, deps);
+    ({ subject: accessSubject, label: accessLabel } = await verifyAccessIdentity(request, env, deps));
   } catch (error) {
     if (error instanceof AccessConfigurationError) {
       return textResponse('Access identity verification is not configured.', 503);
@@ -64,10 +65,10 @@ export async function handleDefaultRequest(request, env, deps = {}) {
   }
 
   if (request.method === 'GET' && isIdentityBootstrapRequest(url)) {
-    return identityResponse(ownerSubject);
+    return identityResponse(accessSubject);
   }
-  if (request.method === 'GET') return beginAuthorization(request, env.OAUTH_PROVIDER, ownerSubject);
-  if (request.method === 'POST') return finishAuthorization(request, env.OAUTH_PROVIDER, ownerSubject);
+  if (request.method === 'GET') return beginAuthorization(request, env.OAUTH_PROVIDER, accessSubject, accessLabel);
+  if (request.method === 'POST') return finishAuthorization(request, env.OAUTH_PROVIDER, accessSubject);
   return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
 }
 
@@ -77,6 +78,11 @@ function isIdentityBootstrapRequest(url) {
 }
 
 export async function requireAccessSubject(request, env, deps = {}) {
+  return (await verifyAccessIdentity(request, env, deps)).subject;
+}
+
+/** The allowlisted `sub` (the identity) plus the Access email as a display-only label: never an identity key. */
+async function verifyAccessIdentity(request, env, deps = {}) {
   const token = request.headers.get(ACCESS_ASSERTION_HEADER) || '';
   if (!token) throw new Error('Access assertion missing.');
 
@@ -94,8 +100,11 @@ export async function requireAccessSubject(request, env, deps = {}) {
   if (typeof payload.sub !== 'string' || !payload.sub || payload.type !== 'app') {
     throw new Error('Access identity is invalid.');
   }
-  if (payload.sub !== configuredValue(env, 'CHRONASENSE_OWNER_SUBJECT')) throw new Error('Access subject does not match the configured owner.');
-  return payload.sub;
+  let allowed;
+  try { allowed = allowedSubjects(env); } catch { throw new AccessConfigurationError(); }
+  if (!allowed.includes(payload.sub)) throw new Error('Access subject is not allowlisted.');
+  const label = typeof payload.email === 'string' && payload.email.length <= 320 ? payload.email : '';
+  return { subject: payload.sub, label };
 }
 
 function configuredTeamDomain(env) {
@@ -129,7 +138,7 @@ function getRemoteJwks(teamDomain) {
 
 class AccessConfigurationError extends Error {}
 
-async function beginAuthorization(request, oauth, ownerSubject) {
+async function beginAuthorization(request, oauth, accessSubject, accessLabel) {
   if (!oauth) return textResponse('OAuth provider is unavailable.', 503);
   try {
     const authRequest = await oauth.parseAuthRequest(request);
@@ -138,13 +147,13 @@ async function beginAuthorization(request, oauth, ownerSubject) {
     const consent = await oauth.beginConsent(authRequest);
     consent.headers.set('Content-Type', 'text/html; charset=utf-8');
     consent.headers.set('Cache-Control', 'no-store');
-    return new Response(consentPage(details, consent.handle, ownerSubject, authorizedScopes(authRequest)), { status: 200, headers: consent.headers });
+    return new Response(consentPage(details, consent.handle, accessSubject, accessLabel, authorizedScopes(authRequest)), { status: 200, headers: consent.headers });
   } catch (error) {
     return authorizationErrorResponse(error);
   }
 }
 
-async function finishAuthorization(request, oauth, ownerSubject) {
+async function finishAuthorization(request, oauth, accessSubject) {
   if (!oauth) return textResponse('OAuth provider is unavailable.', 503);
   let form;
   try {
@@ -166,10 +175,10 @@ async function finishAuthorization(request, oauth, ownerSubject) {
     requireApprovedRequest(approved.request);
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
-      userId: ownerSubject,
+      userId: accessSubject,
       metadata: {},
       scope: authorizedScopes(approved.request),
-      props: { ownerSubject, issuer: ISSUER, resource: RESOURCE, notBefore: Math.floor(Date.now() / 1000) }
+      props: { ownerSubject: accessSubject, issuer: ISSUER, resource: RESOURCE, notBefore: Math.floor(Date.now() / 1000) }
     });
     approved.headers.set('Location', redirectTo);
     approved.headers.set('Cache-Control', 'no-store');
@@ -234,17 +243,19 @@ function consentHeading(scopes) {
   return ['Allow read access to ChronaSense?', 'Allow read access'];
 }
 
-function consentPage(details, handle, ownerSubject, scopes) {
+function consentPage(details, handle, accessSubject, accessLabel, scopes) {
   const clientName = escapeHtml(details.clientName || 'OAuth client');
   const [heading, approve] = consentHeading(scopes);
   const writes = scopes.includes(WRITE_SCOPE) || scopes.includes(PLAN_WRITE_SCOPE);
   const clientDomain = details.clientDomain
     ? 'Published by <strong>' + escapeHtml(details.clientDomain) + '</strong>.'
     : 'The client identity document is not available.';
-  const subject = escapeHtml(ownerSubject);
+  const subject = escapeHtml(accessSubject);
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>Authorize ' + clientName + '</title></head><body><main><h1>' + heading + '</h1>' +
     '<p>' + clientDomain + ' The redirect destination is <strong>' + escapeHtml(details.redirectHost) + '</strong>.</p>' +
+    // TASK-029: two people can sign in here, so name whose ChronaSense account this grant opens (display only).
+    (accessLabel ? '<p>Signed in as <strong>' + escapeHtml(accessLabel) + '</strong>. This grants access to <strong>that person\'s</strong> ChronaSense account. If that is not you, deny and sign out of Cloudflare Access first.</p>' : '') +
     '<p>Verified Cloudflare Access subject: <code>' + subject + '</code>.</p>' +
     '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (writes ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
     + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : '')

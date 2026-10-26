@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { REQUIRED_PLAINTEXT_BINDINGS, SECRET_BINDINGS, bindingProblems, redacted, wranglerArgs } from '../scripts/deploy.mjs';
+import { OPTIONAL_PLAINTEXT_BINDINGS, REQUIRED_PLAINTEXT_BINDINGS, SECRET_BINDINGS, bindingProblems, redacted, wranglerArgs } from '../scripts/deploy.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VALID = Object.freeze({
@@ -17,7 +17,7 @@ const VALID = Object.freeze({
   CHRONASENSE_OWNER_SUBJECT: 'sub-&-|-"quoted"', CHRONASENSE_ACTION_API_URL: 'https://fn.example.test/v1/query', CHRONASENSE_WORKER_HMAC_KEY_ID: 'key-1',
 });
 
-test('the required list is exactly the env names the Worker source reads, minus secrets and platform bindings', () => {
+test('the required + optional lists are exactly the env names the Worker source reads, minus secrets and platform bindings', () => {
   const read = new Set();
   for (const file of readdirSync(path.join(ROOT, 'src'))) {
     const source = readFileSync(path.join(ROOT, 'src', file), 'utf8');
@@ -25,7 +25,24 @@ test('the required list is exactly the env names the Worker source reads, minus 
     for (const [, name] of source.matchAll(/configuredValue\(env, '([A-Z][A-Z0-9_]+)'\)/g)) read.add(name);
   }
   const platform = ['OAUTH_PROVIDER', 'OAUTH_KV'];
-  assert.deepEqual([...read].filter(name => !platform.includes(name) && !SECRET_BINDINGS.includes(name)).sort(), [...REQUIRED_PLAINTEXT_BINDINGS].sort());
+  assert.deepEqual([...read].filter(name => !platform.includes(name) && !SECRET_BINDINGS.includes(name)).sort(),
+    [...REQUIRED_PLAINTEXT_BINDINGS, ...OPTIONAL_PLAINTEXT_BINDINGS].sort());
+});
+
+test('TASK-029: the optional second subject is passed only when present, validated, distinct from the owner and redacted', () => {
+  assert.deepEqual(OPTIONAL_PLAINTEXT_BINDINGS, ['CHRONASENSE_SECOND_SUBJECT']);
+  assert.ok(!wranglerArgs(VALID).some(arg => arg.startsWith('CHRONASENSE_SECOND_SUBJECT:')), 'absent -> not passed (deploy removes it: owner only)');
+  const withSecond = { ...VALID, CHRONASENSE_SECOND_SUBJECT: 'second-sub-1' };
+  assert.deepEqual(bindingProblems(withSecond), []);
+  const args = wranglerArgs(withSecond);
+  assert.ok(args.includes('CHRONASENSE_SECOND_SUBJECT:second-sub-1'));
+  assert.equal(args.filter(arg => arg === '--var').length, REQUIRED_PLAINTEXT_BINDINGS.length + 1);
+  assert.ok(!redacted(args).join(' ').includes('second-sub-1'));
+  for (const [value, problem] of [['', /invalid value for CHRONASENSE_SECOND_SUBJECT/], [' second ', /invalid value/],
+    ['a,b', /invalid value/], [VALID.CHRONASENSE_OWNER_SUBJECT, /must differ/]]) {
+    assert.match(bindingProblems({ ...VALID, CHRONASENSE_SECOND_SUBJECT: value }).join('; '), problem);
+    assert.throws(() => wranglerArgs({ ...VALID, CHRONASENSE_SECOND_SUBJECT: value }), /Refusing to deploy/);
+  }
 });
 
 test('every deploy passes all five bindings explicitly and never relies on --keep-vars', () => {

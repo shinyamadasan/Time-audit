@@ -5246,3 +5246,34 @@ changed:
 tests: C8 before 21/96 failed, after 0/192; HUD race window before 12/12 failed, after 12/12 pass; mutant fails 3/3. Full browser 972/972 at 4 workers and 972/972 at 2 workers.
 blockers: none. Independent review PASS-with-notes.
 → TASK-026 and TASK-027 set to `approved` (held; no merge).
+
+## TASK-029 — two-user authentication for the conversational MCP bridge (branch: task-029, 2026-10-25)
+base: origin/main `8057e2e`. Owner-direct. Staged only: no commit to main, no merge, no deploy.
+preflight (read-only, no values printed): live Worker version `ebdbbd1c` (2026-10-14) is byte-identical to a local
+  dry-run bundle of origin/main source; its bindings are the expected seven. Live Function `chronasenseactionapi-00007-mon`:
+  identity.js, service-auth.js, action-api.js, user-scoped-rtdb.js, receipts.js, nonce-store.js and config.js are
+  identical to origin/main. (origin/main also has the undeployed TASK-018 completion endpoint, which is unaffected.)
+  The Worker and Function owner subjects are equal; the owner subject has Access-UUID shape; no second-user config exists.
+changed:
+  - functions/src/identity.js: `identityAllowlist()` — the owner pair plus an optional complete, distinct second pair.
+    Half-set, colliding or malformed config refuses every call. `bindIdentity()` maps the signed subject to its own
+    UID and room.
+  - functions/index.js: params CHRONASENSE_SECOND_SUBJECT / CHRONASENSE_SECOND_FIREBASE_UID (default empty = owner only).
+  - workers/.../src/mcp.js: `allowedSubjects(env)`. Every tool call requires the grant's userId to be allowlisted and
+    to equal props.ownerSubject, then signs exactly that subject.
+  - workers/.../src/index.js: /authorize admits allowlisted subs only; the grant userId and props come from that sub.
+    The consent page names the signed-in person (Access email, display only).
+  - workers/.../scripts/deploy.mjs: optional, validated, redacted CHRONASENSE_SECOND_SUBJECT (absent = removed).
+  - Tests: workers test/two-user.test.js (9), functions test/two-user-identity.test.js (8), deploy-bindings (+1).
+  - Docs: both READMEs, docs/CHRONASENSE_ACTION_API_V1.md §2 amendment, TASKS.md, REVIEW.md.
+not done (owner approval required): identifying the second user's Access sub/Firebase UID, Access policy change,
+  production params/vars, deploy.
+tests: see TEST_REPORT.md "TASK-029".
+→ TASK-029 `approved` (held, red-zone).
+
+## TASK-029 continuation — verification, re-review and commit preparation (branch: task-029, 2026-10-25)
+changed: TASK_029_HANDOFF.md (new): residual risks, read-only production config checks, the staged deployment sequence
+  G0–G6 (backend then Worker; gcloud source-only update for the Function, matching the live revision's method), owner
+  acceptance tests, and rollback R1/R2. No code change after the first review's fixes.
+tests: see TEST_REPORT.md "TASK-029 continuation".
+→ TASK-029 stays `approved` (held, red-zone). Committed on task-029 only; no merge, push, deploy, config or policy change.

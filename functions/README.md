@@ -87,7 +87,7 @@ No domain data is accessed until authentication, envelope, owner binding, scope 
 
 | Concern | Mechanism | Module |
 |---|---|---|
-| Owner binding | signed subject == `CHRONASENSE_OWNER_SUBJECT` → `CHRONASENSE_OWNER_FIREBASE_UID` → room `uid_<uid>` | `src/identity.js` |
+| Identity binding (TASK-029) | signed subject == `CHRONASENSE_OWNER_SUBJECT` → `CHRONASENSE_OWNER_FIREBASE_UID`, or == `CHRONASENSE_SECOND_SUBJECT` → `CHRONASENSE_SECOND_FIREBASE_UID` → room `uid_<uid>`; anything else `FORBIDDEN` | `src/identity.js` |
 | UID validation + custom token | Admin SDK `getUser` / `createCustomToken` | `src/user-scoped-rtdb.js` |
 | Domain reads | custom token → `accounts:signInWithCustomToken` → ID token → RTDB REST `?auth=`; existing rules enforce `auth.uid` | `src/user-scoped-rtdb.js` |
 | Brain Dump create | action-scoped custom claim → owner ID token → conditional REST create at `bdc1_<uuid>` → exact user-scoped readback; rules require immutable `creationActionId` | `src/user-scoped-rtdb.js`, `src/brain-dump-action.js` |
@@ -110,11 +110,14 @@ attributed readback prove the result. ETag compare-and-set protects receipt tran
 |---|---|---|
 | `CHRONASENSE_WORKER_HMAC_KEYS` | Secret Manager secret | JSON `{"<keyId>":"<lowercase hex, 32–128 random bytes>"}`; two entries only during rotation |
 | `CHRONASENSE_OWNER_SUBJECT` | param | the one allowed Cloudflare Access `sub` |
-| `CHRONASENSE_OWNER_FIREBASE_UID` | param | the one Firebase UID it maps to |
+| `CHRONASENSE_OWNER_FIREBASE_UID` | param | the owner's Firebase UID |
+| `CHRONASENSE_SECOND_SUBJECT` | param (default empty) | TASK-029: the second allowed Access `sub`; must equal the Worker's `CHRONASENSE_SECOND_SUBJECT` |
+| `CHRONASENSE_SECOND_FIREBASE_UID` | param (default empty) | the second user's own Firebase UID |
 | `CHRONASENSE_RTDB_URL` | param | `https://<db>.firebaseio.com` or `https://<db>.<region>.firebasedatabase.app` |
 | `CHRONASENSE_FIREBASE_WEB_API_KEY` | param | the project's public Web API key (for the token exchange) |
 
-Any missing or malformed value fails closed (every call refused).
+Any missing or malformed value fails closed (every call refused). Both second-user params empty means owner only.
+Exactly one set, either equal to its owner counterpart, or a malformed value refuses every call, the owner's included.
 
 ## Tests (local only, no network to production)
 

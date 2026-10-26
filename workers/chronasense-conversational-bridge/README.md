@@ -4,7 +4,7 @@ This Worker preserves TASK-009's five read tools, TASK-010's Brain Dump create a
 
 ## Routes and grants
 
-- `/authorize` verifies a Cloudflare Access JWT (RS256, exact issuer/audience, `type=app`) and binds its `sub` to the configured owner subject. Email is never an identity key.
+- `/authorize` verifies a Cloudflare Access JWT (RS256, exact issuer/audience, `type=app`) and admits its `sub` only if it is on the explicit allowlist: `CHRONASENSE_OWNER_SUBJECT`, plus `CHRONASENSE_SECOND_SUBJECT` when set (TASK-029). Email is never an identity key. The grant's `userId` and `props.ownerSubject` (the subject that owns the grant) are both that verified `sub`. Every MCP call re-checks that they agree and are still allowlisted, then signs exactly that subject to the backend. Removing the second subject from config (and redeploying) therefore makes every `/mcp` call with that user's existing tokens fail. This rejects the tokens but does not revoke them. Their grant and refresh token stay in `OAUTH_KV` (refresh TTL 14 days), and would work again if the same `sub` were re-allowlisted. When removing a user, also delete that subject's grant and token records from `OAUTH_KV`. List the keys first and check the prefix; never delete owner keys.
 - `/authorize` consent POST reads at most 8,192 body bytes before parsing its form, using the same inclusive form bound as `/oauth/token`.
 - `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. Reads require `chronasense:read`; each create also requires explicit step-up to its own write scope (`brain_dump_add`: `chronasense:brain-dump.write`; `plan_create`: `chronasense:plan.write`). A grant for one write scope never unlocks the other. The Worker signs only the one required scope to the backend.
 - CIMD is enabled. No dynamic client registration endpoint is configured. The provider enforces S256 PKCE for public authorization-code clients.
@@ -24,11 +24,12 @@ The `OAUTH_KV` binding uses the dedicated `chronasense-conversational-bridge-oau
 | `ACCESS_TEAM_DOMAIN` | Exact HTTPS Cloudflare Access team issuer. |
 | `ACCESS_POLICY_AUD` | Access application audience for `/authorize`. |
 | `CHRONASENSE_OWNER_SUBJECT` | The **real verified Access JWT `sub`**, also configured as the Action API owner subject. Never derive it from email. |
+| `CHRONASENSE_SECOND_SUBJECT` | Optional (TASK-029). The second user's real verified Access JWT `sub`. It must differ from the owner's and equal the backend's `CHRONASENSE_SECOND_SUBJECT`. It is passed only when present in `.deploy-vars.json`; a deploy without it removes it (owner only). It is deliberately absent from `deploy-vars.example.json`, so that a copied placeholder can never allowlist anyone. |
 | `CHRONASENSE_ACTION_API_URL` | HTTPS Firebase Function URL ending exactly `/v1/query`; the command client derives the sibling `/v1/command` URL. |
 | `CHRONASENSE_WORKER_HMAC_KEY_ID` | ID of a key in the backend's `CHRONASENSE_WORKER_HMAC_KEYS` map. |
 | `CHRONASENSE_WORKER_HMAC_KEY_HEX` | Matching 32–128 random-byte lowercase hex key, stored as a secret. |
 
-Cloudflare Access should protect `/authorize` only. Do not place Access in front of `/mcp`, `/oauth/token`, or `.well-known` discovery. The matching backend owner Firebase UID and RTDB URL are configured in Firebase separately. Production owner-sub discovery, secret setup, Access policy and deployment are outside this local milestone.
+Cloudflare Access should protect `/authorize` only, with an Allow policy naming exactly the allowlisted people. Keep Cloudflare Managed OAuth **off**: this Worker is its own OAuth server. Do not place Access in front of `/mcp`, `/oauth/token`, or `.well-known` discovery. The matching backend owner Firebase UID and RTDB URL are configured in Firebase separately. Production owner-sub discovery, secret setup, Access policy and deployment are outside this local milestone.
 
 ## Local checks
 

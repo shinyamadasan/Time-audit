@@ -2427,3 +2427,48 @@ result: C8 x12 before 9/48 (w4) and 12/48 (w2) failed; after x24, 96/96 and 96/9
 evidence: c8 traces show B's claim stamped before the capture's createdAt and dropped by normalizeCapture (harness clock behind). HUD timeline: selector valid at ~0.9 s, projection at ~1.45 s, fixed sample at 1.5 s.
 review: independent review PASS-with-notes, no must-fix in test changes. It reported a separate pre-existing cross-device clock-skew defect (confirmed; recorded in ROADMAP as P1; not fixed).
 untested: hosted CI, production, native/Android. Runtime and Node tests are unchanged from a056713, so TASK-026 npm/lint/mirror results carry over.
+
+## TASK-029 · 2026-10-25
+suite: workers/chronasense-conversational-bridge `npm test` + `npm run check:bundle`; functions `npm test`; root `npm test`;
+  mutation check (5 injected regressions).
+result: Worker 42/42 (baseline 32). Backend 246/246 (baseline 238). Root npm test exit 0: 2315 pass, 0 fail, 1 pre-existing
+  skip. Bundle dry-run compiles (1537 KiB). Mutants killed 5/5: dropping userId/props agreement, dropping per-call
+  allowlist membership, /authorize admitting any sub, mapping every subject to the owner UID, and accepting a
+  colliding second UID.
+evidence: A->A and B->B read only their own room through the real Worker signer + backend pipeline. A->B / B->A
+  tampered grants, unknown subject, removed second user, expired or not-yet-valid grant, stale/forged HMAC,
+  post-signing subject swap and invalid identity config are all refused before any domain read. A B write lands in B's
+  room with receipt `serverActionReceipts/<B uid>/…` and B actor provenance; the same actionId from A is a separate
+  action. Backend logs carry no subject, UID or capture text.
+review: independent adversarial security review PASS-with-notes, no must-fix; both SHOULD-FIX items addressed.
+untested: production (not deployed); the real workers-oauth-provider consent/refresh path (stubbed in unit tests);
+  refresh-token behaviour after removal (documented: rejected at /mcp, KV records must be deleted); hosted CI; coverage.
+
+## TASK-029 continuation — isolated real-OAuth verification + re-review · 2026-10-25
+suite: Worker npm test + check:bundle; functions npm test; root npm test; isolated real-OAuth harness (outside the repo:
+  the real Worker bundles and the real @cloudflare/workers-oauth-provider in local workerd via Miniflare; fake Access
+  JWKS/client/backend stores; no network); a negative-control mutant bundle.
+result: Worker 42/42. Backend 246/246. Root exit 0: 2315 pass, 0 fail, 1 pre-existing skip. Bundle compiles. Harness 34/34.
+  Control (per-call allowlist check removed) fails exactly the 2 revocation checks.
+evidence:
+  - Branch base is still the current origin/main (8057e2e).
+  - Owner compatibility: the production-identical bundle (byte-identical to live ebdbbd1c) issued an owner grant. The
+    candidate accepted it, refreshed it, and the refreshed token read the owner's room.
+  - B is refused (401) until configured. Once configured, B completes real consent + PKCE using the SAME client as the
+    owner (as with ChatGPT), and each token reads only its own room. Each call is asserted to touch exactly that room.
+  - B authorizing the shared client does not replace the owner's grant. Replacement is per user, client, redirect and
+    resource.
+  - Blocked: a tampered or absent bearer; a consent handle without its browser cookie; an unknown sub (also with B's
+    email); deny returns access_denied.
+  - Removing B denies B's existing and refreshed tokens at /mcp. Refresh still issues tokens (documented). Re-adding B
+    without KV cleanup revives them (documented). Deleting the grant:/token: records under B's prefix kills refresh and
+    leaves the owner's records and access untouched.
+  - Backend logs contain no subject, UID or capture id.
+  - Observation: if the Access session changes between consent GET and POST, the grant binds to the POST identity
+    (residual risk 1).
+review: second independent adversarial review PASS-with-notes, no blocking finding. Its notes are addressed in
+  TASK_029_HANDOFF.md (the deploy method switched to the proven gcloud source-only path, residual risks 5–7, owner-only
+  steps, KV consistency, traffic-pin note, single-account guard) and in the harness (per-call room assertion,
+  non-vacuous P4–P6, observation must grant).
+untested: real Cloudflare Access sub semantics; ChatGPT's real CIMD client; production KV consistency; B's write/plan
+  scopes end to end through the real provider (covered by unit tests only); production.

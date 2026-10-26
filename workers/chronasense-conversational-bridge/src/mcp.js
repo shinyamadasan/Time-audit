@@ -130,13 +130,28 @@ function unknownWriteResult(spec, parameters, code) {
     text: `${code}: The ${spec.noun} may already ${spec.revised ? 'be applied' : 'exist'}. Retry with the same actionId, capturedAt and ${fields}. Keep the actionId unchanged.` }], isError: true };
 }
 
+const SUBJECT = /^[\x21-\x2b\x2d-\x7e]{1,256}$/;
+
+/** TASK-029: the explicit allowlist — the owner, plus CHRONASENSE_SECOND_SUBJECT when it is set. A malformed owner,
+ *  or a set second subject that is malformed or equal to the owner, is a configuration fault: everything is refused. */
+export function allowedSubjects(env) {
+  const owner = env.CHRONASENSE_OWNER_SUBJECT;
+  const second = env.CHRONASENSE_SECOND_SUBJECT ?? '';
+  if (typeof owner !== 'string' || !SUBJECT.test(owner)) throw new Error('owner-not-configured');
+  if (second === '') return [owner];
+  if (typeof second !== 'string' || !SUBJECT.test(second) || second === owner) throw new Error('owner-not-configured');
+  return [owner, second];
+}
+
 function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const subject = env.CHRONASENSE_OWNER_SUBJECT;
-  if (typeof subject !== 'string' || !subject || !/^[\x21-\x2b\x2d-\x7e]{1,256}$/.test(subject)) throw new Error('owner-not-configured');
+  const allowed = allowedSubjects(env);
   const auth = ctx?.auth;
   const props = ctx?.props;
+  // The grant's userId and its props.ownerSubject (the subject that owns this grant) were both set from the one
+  // Access-verified subject at /authorize; they must still agree and still be allowlisted on every call.
+  const subject = auth?.userId;
   if (!auth || !props || typeof auth.token !== 'string' || !auth.token || auth.audience !== RESOURCE
-      || props.resource !== RESOURCE || props.issuer !== ISSUER || auth.userId !== subject
+      || props.resource !== RESOURCE || props.issuer !== ISSUER || typeof subject !== 'string' || !allowed.includes(subject)
       || props.ownerSubject !== subject || !Number.isFinite(props.notBefore) || props.notBefore > nowSeconds
       || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= nowSeconds) throw new Error('invalid-token');
   if (!Array.isArray(auth.scope) || !auth.scope.includes(requiredScope) || (requiredScope !== READ_SCOPE && !auth.scope.includes(READ_SCOPE))

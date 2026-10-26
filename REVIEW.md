@@ -394,6 +394,39 @@ and an independent fixture harness rather than a second read of the same code.
 → TASK-002 status set to `approved` in TASKS.md. Land with `/merge TASK-002` then
 `/merge TASK-002 yes`.
 
+## Review TASK-029 - APPROVED, HELD (two-user authentication for the MCP bridge)
+branch: task-029 (base origin/main 8057e2e; staged, uncommitted)
+verdict: approved, held for the owner
+
+### Findings
+Independent adversarial review (fresh read-only security agent): PASS-with-notes, no must-fix.
+- Cross-user isolation: no path found. The Worker takes the subject only from the grant's userId. That userId
+  must equal props.ownerSubject and be allowlisted on every call. The backend maps the HMAC-signed subject to
+  its own configured UID and room. Receipts are per UID, and actor provenance is bound to the signed subject.
+  RTDB rules independently confine a token to `uid_<auth.uid>`.
+- Fail-closed configuration: verified for a half-set pair, equal subjects or UIDs, malformed values, and a
+  Worker/backend allowlist mismatch in either direction.
+- Existing protections unchanged: Access JWT checks, resource binding, scopes/step-up, expiry/nbf, HMAC,
+  idempotency. Existing owner grants keep validating (same userId and props key).
+- SHOULD-FIX 1 (applied): the consent page now names the signed-in person (the Access email, escaped, display
+  only) and says whose account is being granted. This guards a shared-browser Access session.
+- SHOULD-FIX 2 (applied as docs): removing the second subject rejects that user's tokens at /mcp but does not
+  delete the grant in OAUTH_KV. README and rollback steps now require deleting those KV records.
+- Not applied (noted): a hidden-field GET/POST subject binding. The POST already re-verifies the Access JWT,
+  and the label covers the shared-session case.
+- Notes for the owner: each person needs their own ChatGPT account; the second UID is trusted configuration
+  and must be verified in Firebase before deploy; the Access policy must name exactly the two people.
+
+### Verdict
+Gate picked: `approved` (red-zone: authentication and cross-account data access).
+Nothing merged or deployed. Production config, Access policy and second-user enablement need explicit owner
+approval.
+
+### Re-review (2026-10-25, pre-commit)
+A second fresh independent adversarial review covered the staged diff, TASK_029_HANDOFF.md and the isolated real-OAuth
+harness, and re-ran the harness (all checks passed): PASS-with-notes, no blocking finding. Each non-blocking note was
+resolved in the handoff or the harness (see TEST_REPORT.md "TASK-029 continuation"). Gate unchanged: `approved` (held).
+
 <!-- REVIEW TEMPLATE -- copy and fill:
 
 ## Review TASK-<id> - <APPROVED | REWORK>

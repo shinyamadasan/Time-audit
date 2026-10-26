@@ -27,6 +27,9 @@ import { emitSafely } from './src/completion-telemetry.js';
 const HMAC_KEYS = defineSecret('CHRONASENSE_WORKER_HMAC_KEYS');
 const OWNER_SUBJECT = defineString('CHRONASENSE_OWNER_SUBJECT');
 const OWNER_FIREBASE_UID = defineString('CHRONASENSE_OWNER_FIREBASE_UID');
+// TASK-029: the optional second allowlisted user. Both empty = owner only; exactly one set refuses every call.
+const SECOND_SUBJECT = defineString('CHRONASENSE_SECOND_SUBJECT', { default: '' });
+const SECOND_FIREBASE_UID = defineString('CHRONASENSE_SECOND_FIREBASE_UID', { default: '' });
 const RTDB_URL = defineString('CHRONASENSE_RTDB_URL');
 const WEB_API_KEY = defineString('CHRONASENSE_FIREBASE_WEB_API_KEY');
 // No IAM mutation here: a reviewed dedicated service account must be provisioned before deployment.
@@ -43,7 +46,8 @@ function getHandler() {
   const idTokens = createIdTokenProvider({ authAdmin: getAuth(), webApiKey: requireValue('CHRONASENSE_FIREBASE_WEB_API_KEY', WEB_API_KEY.value()) });
   handler = createActionApiHandler({
     keys: parseHmacKeys(HMAC_KEYS.value()),
-    owner: { ownerSubject: OWNER_SUBJECT.value(), ownerFirebaseUid: OWNER_FIREBASE_UID.value() },
+    owner: { ownerSubject: OWNER_SUBJECT.value(), ownerFirebaseUid: OWNER_FIREBASE_UID.value(),
+      secondSubject: SECOND_SUBJECT.value(), secondFirebaseUid: SECOND_FIREBASE_UID.value() },
     nonces: createNonceStore({ infra }),
     receipts: createReceiptStore({ infra }),
     domain: createUserScopedRtdb({ databaseUrl, idTokens }),

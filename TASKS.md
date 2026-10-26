@@ -1637,6 +1637,49 @@ verification:
   - Before/after focused repeats (workers 4 and 2); full browser suite; npm test if affected;
     scope audit against a056713; independent review.
 
+### TASK-029 - Two-user authentication for the conversational MCP bridge
+status: approved
+owner: claude (owner explicitly asked Claude to implement)
+source: owner-direct
+priority: P2
+depends-on: none
+files: workers/chronasense-conversational-bridge/{src/index.js, src/mcp.js, scripts/deploy.mjs, deploy-vars.example.json, README.md, test/*}, functions/{src/identity.js, src/action-api.js, index.js, README.md, test/*}, CHANGELOG.md (append), TEST_REPORT.md (append)
+
+context:
+  Owner's current-session instruction "Implement two-user authentication support for the existing
+  ChronaSense conversational MCP bridge", 2026-10-25. Users: the owner and the owner's wife, each with a
+  separate ChronaSense account. Today the Worker binds /authorize and every MCP call to one configured
+  Access subject, and the backend maps that one subject to one Firebase UID (functions/src/identity.js).
+  Cloudflare Managed OAuth stays OFF; the Worker's OAuth server, URLs, scopes and owner integration stay.
+
+objective:
+  Replace the single-owner checks with an explicit, fail-closed two-user allowlist (Worker) and an
+  explicit allowlisted subject -> Firebase UID map (backend), so each verified identity reaches only its
+  own room.
+
+acceptance:
+  - Deployed configuration and source alignment verified first, without exposing secrets.
+  - Worker: the same verified Access subject is bound through /authorize, the grant (userId + props) and
+    every MCP tool call; unknown subjects and token/props subject mismatches are refused.
+  - Backend: signed subject -> exact allowlisted UID -> room uid_<uid>; malformed, partial or colliding
+    identity config refuses every call.
+  - HMAC, Access JWT signature/issuer/audience, resource binding, scopes, expiry and idempotency unchanged.
+  - Tests: A->A and B->B allowed; A->B, B->A, unknown subject, mismatched token subject, expired
+    credentials and invalid identity config denied; existing owner flows still pass.
+  - No credentials, raw tokens, subjects, UIDs or schedule data logged.
+  - Independent review; evidence, risks, deployment and rollback plans documented.
+
+constraints:
+  - Stage a review-ready branch only: no merge, deploy, production config change, Cloudflare Access
+    policy change, or authorization of the second user without explicit owner approval.
+  - Never invent identifiers or map users by email alone; stop if the identity mapping cannot be
+    verified safely.
+  - Red zone (auth): approved gate, held for the human.
+
+verification:
+  - npm test in workers/chronasense-conversational-bridge and functions; npm run check:bundle;
+    deploy-script plan with fixture vars; independent review.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

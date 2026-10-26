@@ -6,7 +6,7 @@
 //
 //   1. service authentication (method, canonical path, headers, service, key, freshness, HMAC over raw body)
 //   2. strict envelope (JSON, unknown fields, contractVersion, requestId == signed requestId, known kind)
-//   3. identity binding (signed subject == configured owner -> configured UID -> room uid_<uid>)
+//   3. identity binding (signed subject == an allowlisted subject -> its configured UID -> room uid_<uid>)
 //   4. required scope present in the SIGNED scopes
 //   5. replay nonce: atomic create-if-absent (duplicate fails closed)
 //   6. the typed query, one guarded create (Brain Dump capture, plan item) or one guarded plan item mutation,
@@ -36,7 +36,7 @@ const COMMANDS = Object.freeze({ brain_dump_add: createBrainDumpAction, plan_cre
   plan_set_completion: mutatePlanAction, plan_edit: mutatePlanAction, plan_move: mutatePlanAction, plan_delete: mutatePlanAction });
 
 /**
- * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string},
+ * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string, secondSubject?:string, secondFirebaseUid?:string},
  *          nonces:ReturnType<import('./nonce-store.js').createNonceStore>,
  *          receipts?:ReturnType<import('./receipts.js').createReceiptStore>,
  *          domain:{readRoomCollection(identity:object, collection:string):Promise<unknown>,
