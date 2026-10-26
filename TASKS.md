@@ -1680,6 +1680,58 @@ verification:
   - npm test in workers/chronasense-conversational-bridge and functions; npm run check:bundle;
     deploy-script plan with fixture vars; independent review.
 
+closure (2026-10-27, owner-directed):
+  - Merged f6f18a5. Rolled out by gate: backend chronasenseactionapi-00009-son and Worker
+    d1dc8053-1b90-4066-8c5a-0588799a1d57, both with the second-user mapping. Evidence in TEST_REPORT.md
+    and TASK_029_HANDOFF.md.
+  - G6 acceptance PASS:
+    - Her Access identity matches the configured subject; her ChatGPT OAuth connection works; her
+      get_brain_dump returns only her captures.
+    - The owner's get_today and get_brain_dump are unchanged. No cross-account data was observed.
+    - G6.6: exactly 2 OAuth grants (1 owner, 1 second user); both mappings verified; production config
+      unchanged.
+  - Known issue, NOT resolved here: her get_today (and get_intelligence) returns CONFLICT
+    malformed-commitments / malformed-entries. Her stored commitment and time-entry records fail the
+    Action API's strict fail-closed validators, which the app's lenient reads tolerate. It is not a
+    TASK-029 regression (the read path is unchanged) and is tracked as TASK-032. Her get_today does NOT
+    work yet.
+
+### TASK-032 - Second-account read compatibility for get_today
+status: todo
+owner: claude
+source: owner-direct
+priority: P2
+depends-on: TASK-029 (merged f6f18a5)
+files: none yet (diagnosis only); any repair or code change is a separate approval
+
+context:
+  Owner instruction, 2026-10-27: "Create a separate task titled 'Second-account read compatibility for
+  get_today'". Since TASK-029, the second user's get_today and get_intelligence fail with 409 CONFLICT,
+  reasons malformed-commitments and malformed-entries (functions/src/read-queries.js:17-28 and 56-101;
+  validator functions/shared/commitments-model.js:276). The app's own list reads skip invalid records
+  (commitments-model.js:417-421), so the records are invisible in the app. The owner's account is
+  unaffected.
+
+objective:
+  Identify exactly which validator checks her stored commitment and time-entry records fail, then
+  propose the smallest safe repair with backup, rollback and verification.
+
+acceptance:
+  - A read-only, counts-only diagnostic (owner-approved, subject to the permission prompt) reports
+    affected record counts and failing validator names only.
+  - Proposal: the smallest safe repair, with backup, rollback and verification steps.
+
+constraints:
+  - No personal record content printed, exported or retained. No record modified, deleted, normalized
+    or migrated.
+  - The strict fail-closed read behaviour is preserved. No elevated access beyond the approved
+    diagnostic; stop if broader access is needed or no-content output cannot be guaranteed.
+  - Any data repair or code deploy needs separate explicit owner approval.
+
+verification:
+  - Diagnostic output reviewed for content leakage (counts and check names only).
+  - The proposal is reviewed before any repair approval is requested.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

@@ -2525,3 +2525,22 @@ result:
     The retry PASSED (user-scoped plan, no reconnect, no writes).
 open (not TASK-029): with min instances 0, cold starts can exceed the Worker's 10 s read limit on the first call after
   a deploy or idle period.
+
+## TASK-029 rollout — G5.2, G6 and closure · 2026-10-27
+result:
+  - G5.2: vars file = the 5 live values + CHRONASENSE_SECOND_SUBJECT (14/14: equals the private file and the backend;
+    differs from the owner). Plan: 6 redacted --var entries. Dry run clean. The owner deployed Worker
+    d1dc8053-1b90-4066-8c5a-0588799a1d57.
+  - G5.2v 19/19: 100%; 8 bindings; secret and KV preserved; 5 values unchanged; second subject equal across Worker,
+    backend and file; module byte-identical to the reviewed bundle; live and discovery unchanged; vars file deleted.
+    Owner canary PASS.
+  - G6 (owner-run): her identity page rendered; her OAuth connection succeeded; her get_brain_dump returned her 5
+    captures; the owner's get_today and get_brain_dump (16 captures) were unchanged; no cross-account data observed.
+  - Her get_today: FAILED with 409 CONFLICT. Backend reasons malformed-commitments (x2) and malformed-entries (x1);
+    her get_brain_dump 200. Cause: her stored records fail the strict fail-closed validators. Not a TASK-029
+    regression (read path unchanged 8057e2e..f6f18a5). Tracked as TASK-032. The counts-only record diagnostic was
+    blocked by the permission system pending explicit approval.
+  - G6.6: OAuth grants = 2 (owner 1, second user 1; none under any other subject). Both mappings verified (the
+    second subject is equal across Worker, backend and file; the UID's mutual in-app link is confirmed). Worker
+    G5.2v re-pass. Backend config unchanged except the documented SECOND values. Access unchanged.
+  - TASK-029 closed, with her get_today recorded as NOT working.

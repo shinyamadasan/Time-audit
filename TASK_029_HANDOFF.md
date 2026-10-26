@@ -12,7 +12,11 @@ Merged to main `f6f18a5` (G1, 2026-10-25). Rollout progress:
 - G5.1: done. Backend `chronasenseactionapi-00009-son` with both second-user values; 24/24 checks; owner canary PASS
   on retry. The first call timed out on a cold start: the backend answered in 12.2 s, past the Worker's 10 s read
   limit. This is pre-existing and not a regression.
-- G5.2 onward: not started. The Worker still refuses the second user.
+- G5.2: done. Worker `d1dc8053-1b90-4066-8c5a-0588799a1d57` (8 bindings), 19/19 checks, owner canary PASS.
+- G6: PASS for identity, OAuth, her Brain Dump, the owner's data unchanged and no cross-account data. G6.6 PASS.
+  Known issue: her get_today/get_intelligence returns CONFLICT (malformed commitments/entries in her account). Not a
+  TASK-029 regression; tracked as TASK-032.
+- TASK-029: CLOSED (2026-10-27).
 This document contains no real Access subject, Firebase UID, token or secret, and none may be added to it.
 
 ## What changes

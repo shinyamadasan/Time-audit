@@ -119,6 +119,12 @@ is recorded here for visibility, not as an approval.)*
 
 ## Known Issues & Debt
 
+- **Second-account get_today CONFLICT (TASK-032).** After TASK-029, the second user's ChatGPT get_today and
+  get_intelligence return 409 `malformed-commitments` / `malformed-entries`. At least one stored commitment and one
+  time entry in her account fail the Action API's strict validators, which the app's lenient reads skip silently.
+  Not a TASK-029 regression; isolation is unaffected. Diagnosis is owner-approved (counts only); any repair needs
+  separate approval.
+
 ### Deferred from Phase 11.7 (audited, not actioned -- kept scope to high-confidence changes)
 
 - **Gated-pipeline dormant layers.** `PLAN.md`, `planning/BUILD_QUEUE.md`, `planning/DONE.md`,

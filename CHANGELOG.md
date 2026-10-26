@@ -5288,3 +5288,11 @@ recorded: the owner confirmed the second /authorize Allow-policy email is the wi
 deployed: Worker e0a99bd6-7da4-46b1-91f4-1c3a247f94c9 (from main f6f18a5; bindings and values unchanged; no second
   subject). Owner canary PASS. Backend, Access, KV and secrets untouched.
 → G3 complete. Next: G4 identity preparation (read-only); G5 activation needs separate approval.
+
+## TASK-029 rollout — G5/G6 and closure (2026-10-27)
+deployed: backend chronasenseactionapi-00009-son (second-user mapping) and Worker
+  d1dc8053-1b90-4066-8c5a-0588799a1d57 (CHRONASENSE_SECOND_SUBJECT). Both canaries PASS. G6 identity, OAuth and
+  isolation PASS.
+known issue: her get_today/get_intelligence -> CONFLICT malformed-commitments/entries (data compatibility, not
+  TASK-029) -> TASK-032 (new, todo). planning/ROADMAP.md Known Issues updated.
+→ TASK-029 closed.
