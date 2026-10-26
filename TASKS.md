@@ -1732,6 +1732,19 @@ verification:
   - Diagnostic output reviewed for content leakage (counts and check names only).
   - The proposal is reviewed before any repair approval is requested.
 
+diagnosis (2026-10-27, owner-approved, read-only, counts only; nothing modified, exported or retained):
+  - commitments: 2 records, 2 invalid. Both are live date-only commitments whose `time` key is ABSENT
+    (Firebase RTDB cannot store null, so `time: null` is pruned on write). normalizeCommitment requires
+    `time === null` (commitments-model.js:284). Both are fully valid once the pruned null is restored. This is
+    a code defect, not bad data. The app's remote merge (mergeCommitmentRecords -> normalizeCommitment) drops
+    the same records, which survive only through the creating device's local copy.
+  - entries: 2032 records (2028 ids), 2 invalid, each a single record with no duplicate and no tombstone:
+    1 exactly zero-length (tsStart === ts, blockIntervalMin 0) and 1 negative (tsStart > ts). The 4 duplicate
+    numeric/e_ pairs are identical (no conflict).
+  - Not diagnosed (outside the approved scope): coarseLifeEvidence and plan authority. Her get_today may expose
+    further issues after these are fixed.
+status-note: awaiting the owner's decision on the repair proposal; nothing implemented.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
