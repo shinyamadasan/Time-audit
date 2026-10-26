@@ -408,6 +408,63 @@ test('normalization rejects malformed records rather than half-accepting them', 
   assert.equal(normalizeCommitment({ ...base, startMs: base.startMs + 60000 }), null);
 });
 
+test('TASK-032: a date-only record read back from Realtime Database (pruned time:null) is the same valid record', () => {
+  const dateOnly = ok(buildCommitment({ id: 'cdateonly', title: 'Dentist sometime', date: '2026-09-30',
+    precision: 'date', timezone: MANILA, now: T0, updatedBy: DEVICE })).record;
+  assert.equal(dateOnly.time, null);
+  const { time: _pruned, ...wire } = dateOnly; // RTDB never stores null: the key comes back absent
+  assert.equal(Object.hasOwn(wire, 'time'), false);
+  const fromWire = normalizeCommitment(wire);
+  assert.deepEqual(fromWire, normalizeCommitment(dateOnly), 'absent time normalizes to the exact null-time record');
+  assert.equal(fromWire.time, null);
+  assert.equal(normalizeCommitment({ ...wire, time: undefined })?.time, null, 'an explicit undefined is the same absence');
+
+  // Strictness is unchanged everywhere else: a date-only record still may not carry ANY time value...
+  for (const time of ['', '09:30', '00:00', 0, false, '12:00']) {
+    assert.equal(normalizeCommitment({ ...wire, time }), null, `date-only with time ${JSON.stringify(time)} is refused`);
+  }
+  // ...a timed record still needs a valid time (absent, null or bad all refused)...
+  const timed = dentist();
+  const { time: _t, ...timedWithoutTime } = timed;
+  assert.equal(normalizeCommitment(timedWithoutTime), null);
+  assert.equal(normalizeCommitment({ ...timed, time: null }), null);
+  // ...and every other check still applies to a pruned date-only record.
+  assert.equal(normalizeCommitment({ ...wire, startMs: wire.startMs + 60000 }), null);
+  assert.equal(normalizeCommitment({ ...wire, precision: undefined }), null);
+  assert.equal(normalizeCommitment({ ...wire, schemaVersion: 2 }), null);
+});
+
+test('TASK-032: sync keeps a peer\'s date-only commitment that arrived with time pruned (no cross-device loss)', () => {
+  const dateOnly = ok(buildCommitment({ id: 'cdateonly', title: 'Dentist sometime', date: '2026-09-30',
+    precision: 'date', timezone: MANILA, now: T0, updatedBy: DEVICE })).record;
+  const { time: _pruned, ...wire } = dateOnly;
+  // A device that never had it locally now accepts the remote copy instead of dropping it.
+  assert.deepEqual(mergeCommitmentRecords(undefined, wire), normalizeCommitment(dateOnly));
+  assert.equal(mergeCommitmentMaps({}, { [wire.id]: wire })[wire.id]?.time, null);
+  assert.equal(activeCommitments({ [wire.id]: wire }).length, 1);
+});
+
+test('TASK-032: last-write-wins and tombstones hold across the pruned encoding (no stale overwrite, no resurrection)', () => {
+  const older = ok(buildCommitment({ id: 'cdateonly', title: 'Dentist sometime', date: '2026-09-30',
+    precision: 'date', timezone: MANILA, now: T0, updatedBy: DEVICE })).record;
+  const newer = ok(updateCommitment(older, { title: 'Dentist (moved)', now: T0 + 5000, updatedBy: 'device-b' })).record;
+  const { time: _n, ...newerWire } = newer;
+  // A newer remote edit that arrived pruned wins over a stale local copy, in both merge directions.
+  assert.equal(mergeCommitmentRecords(older, newerWire).title, 'Dentist (moved)');
+  assert.equal(mergeCommitmentRecords(newerWire, older).title, 'Dentist (moved)');
+  // A pruned remote tombstone deletes; a stale live copy cannot resurrect it.
+  const tomb = ok(deleteCommitment(older, { now: T0 + 9000, updatedBy: 'device-b' })).record;
+  const { time: _d, ...tombWire } = tomb;
+  assert.equal(normalizeCommitment(tombWire).deleted, true);
+  assert.equal(normalizeCommitment(tombWire).time, null);
+  assert.equal(mergeCommitmentRecords(older, tombWire).deleted, true);
+  assert.equal(mergeCommitmentRecords(tombWire, older).deleted, true);
+  assert.equal(activeCommitments({ [tombWire.id]: tombWire }).length, 0);
+  // Both encodings of the same record merge to the identical canonical record (no tie-break flip).
+  const { time: _o, ...olderWire } = older;
+  assert.deepEqual(mergeCommitmentRecords(older, olderWire), mergeCommitmentRecords(olderWire, older));
+});
+
 test('a duration is optional and bounded to a single continuous block', () => {
   const point = dentist();
   assert.deepEqual(commitmentWindow(point), { startMs: point.startMs, endMs: point.startMs });

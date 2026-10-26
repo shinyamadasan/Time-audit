@@ -598,3 +598,25 @@ test('wrong signed subject, wrong scope, replay, duplicate keys and caller paths
   const duplicate = await harness({ rooms: rooms(), nowMs: NOW }).handle(signedRequest({ requestId: id, rawBody, signed: { timestamp: Math.floor(NOW / 1000) } }));
   assert.equal(duplicate.body.error.code, 'INVALID_INPUT');
 });
+
+test('TASK-032: get_today and get_intelligence accept a date-only commitment whose time:null RTDB pruned; malformed still fail closed', async () => {
+  const { buildCommitment } = await import('../shared/commitments-model.js');
+  const built = buildCommitment({ id: 'cdateonly', title: 'Dentist sometime', date: DAY, precision: 'date',
+    timezone: 'UTC', now: NOW - 50_000, updatedBy: 'fixture' });
+  assert.equal(built.ok, true);
+  const { time: _pruned, ...wire } = built.record; // exactly what RTDB returns for a stored time:null
+  for (const kind of ['get_today', 'get_intelligence']) {
+    const ok = await query(harness({ rooms: rooms({ commitments: { [wire.id]: wire } }), nowMs: NOW }), kind);
+    assert.equal(ok.status, 200, `${kind}: ${JSON.stringify(ok.body)}`);
+  }
+  for (const time of ['', '09:30']) {
+    const bad = await query(harness({ rooms: rooms({ commitments: { [wire.id]: { ...wire, time } } }), nowMs: NOW }), 'get_today');
+    assert.equal(bad.status, 409);
+    assert.equal(bad.body.error.code, 'CONFLICT');
+    assert.equal(bad.reason, 'malformed-commitments');
+  }
+  const { time: _t, ...timedWithoutTime } = buildCommitment({ id: 'ctimed', title: 'Call', date: DAY, time: '09:30',
+    timezone: 'UTC', now: NOW - 50_000, updatedBy: 'fixture' }).record;
+  const timed = await query(harness({ rooms: rooms({ commitments: { ctimed: timedWithoutTime } }), nowMs: NOW }), 'get_today');
+  assert.equal(timed.reason, 'malformed-commitments', 'a timed commitment without time is still refused');
+});

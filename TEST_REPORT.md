@@ -2544,3 +2544,24 @@ result:
     second subject is equal across Worker, backend and file; the UID's mutual in-app link is confirmed). Worker
     G5.2v re-pass. Backend config unchanged except the documented SECOND values. Access unchanged.
   - TASK-029 closed, with her get_today recorded as NOT working.
+
+## TASK-032 Fix 1 · 2026-10-27
+suite: commitments-model.test.js (+3 tests), functions/test/conversational-read.test.js (+1 test); npm test; lint; www
+  parity; functions/shared parity; rules builder; Worker npm test.
+result:
+  - npm test exit 0: 2319 pass, 0 fail, 1 pre-existing skip (was 2315).
+  - Lint 0 errors (48 pre-existing warnings). www, functions/shared and rules in parity; diff --check clean; Worker 42/42.
+  - The 3 tests added first all FAILED with the pre-fix validator restored in all three copies, and pass with the fix.
+evidence:
+  - A pruned date-only record normalizes to the identical null-time record.
+  - A date-only record with any time value (including '') is still refused; a timed record without time is refused;
+    a startMs mismatch is refused.
+  - get_today and get_intelligence return 200 for a pruned date-only commitment; '' or '09:30' on a date-only record,
+    and a timed record without time, still return 409 malformed-commitments.
+  - Sync keeps a peer's pruned date-only commitment. LWW and tombstones hold in both merge directions across the two
+    encodings.
+not run: Playwright browser specs (the owner declined the run in this session); hosted CI; production.
+review: independent adversarial review PASS-with-notes, no blocking finding. Its notes are addressed: tombstone and
+  LWW tests added, task contract recorded, DECISIONS #40, evidence logged, held gate.
+known: her get_today still returns CONFLICT malformed-entries until her 2 invalid time entries are fixed (Fix 2,
+  not approved).

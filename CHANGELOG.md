@@ -5296,3 +5296,12 @@ deployed: backend chronasenseactionapi-00009-son (second-user mapping) and Worke
 known issue: her get_today/get_intelligence -> CONFLICT malformed-commitments/entries (data compatibility, not
   TASK-029) -> TASK-032 (new, todo). planning/ROADMAP.md Known Issues updated.
 → TASK-029 closed.
+
+## TASK-032 Fix 1 — date-only commitment time: absent == null (branch: task-032, 2026-10-27)
+changed:
+  - commitments-model.js: one condition, regenerated into functions/shared/ and www/ (byte-identical). Date-only
+    commitments accept a missing time (Realtime Database prunes null); every other rule is unchanged.
+  - Tests: commitments-model.test.js (+3), functions/test/conversational-read.test.js (+1). DECISIONS.md #40.
+effect: date-only commitments no longer make the fail-closed get_today/get_intelligence return CONFLICT, and no longer
+  vanish from other devices on sync.
+→ TASK-032 `approved` (held, red-zone sync/validator). Not merged, not deployed. Her get_today still needs Fix 2.

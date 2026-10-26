@@ -941,3 +941,20 @@ mirrors whatever ChronaSense reports and never projects it while Focus is active
 carry titles in `sessionKey`; or project a timer this device/account does not own.
 
 ---
+
+## 40. TASK-032 date-only commitment time: absent and null are the same fact
+
+**Context:** Date-only commitments are built with `time: null`. Realtime Database never stores null, so the key reads
+back ABSENT. `normalizeCommitment()` required `time === null`, so every date-only commitment that went through RTDB was
+refused. The fail-closed Action API read (`get_today`/`get_intelligence`) returned CONFLICT malformed-commitments, and
+the app's sync merge dropped the record on other devices. In the push transaction, a stale local copy could also beat a
+newer remote edit or tombstone.
+
+**Decision:** For `precision: 'date'` only, an absent/undefined `time` normalizes exactly like `time: null`; the output
+record is identical. Every other rule is unchanged: a date-only record carrying ANY time value (including `''`) is
+refused; a timed record needs a valid time; startMs is still re-derived and must match. Fail-closed reads still refuse
+any record the validator rejects.
+
+**Do not:** widen this to other fields or precisions, or treat `''`/`0`/`false` as "no time".
+
+---

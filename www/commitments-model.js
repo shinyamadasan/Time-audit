@@ -281,7 +281,9 @@ export function normalizeCommitment(value) {
   if (!title) return null;
   if (!COMMITMENT_PRECISIONS.has(value.precision)) return null;
   if (!validCommitmentDate(value.date)) return null;
-  if (value.precision === 'timed' ? !validCommitmentTime(value.time) : value.time !== null) return null;
+  // A date-only record stores `time: null`, but Realtime Database never stores null: the key comes back ABSENT. Absent and
+  // null are the same fact here (TASK-032); any other value (including '') is still a competing time and is refused.
+  if (value.precision === 'timed' ? !validCommitmentTime(value.time) : (value.time !== null && value.time !== undefined)) return null;
   if (!validOperationalDayTimezone(value.timezone)) return null;
   const createdAt = timestamp(value.createdAt);
   const updatedAt = timestamp(value.updatedAt);

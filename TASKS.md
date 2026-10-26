@@ -1697,12 +1697,14 @@ closure (2026-10-27, owner-directed):
     work yet.
 
 ### TASK-032 - Second-account read compatibility for get_today
-status: todo
+status: approved
 owner: claude
 source: owner-direct
 priority: P2
 depends-on: TASK-029 (merged f6f18a5)
-files: none yet (diagnosis only); any repair or code change is a separate approval
+files: Fix 1 = commitments-model.js (+ generated functions/shared and www copies), commitments-model.test.js,
+  functions/test/conversational-read.test.js, DECISIONS.md #40, CHANGELOG.md, TEST_REPORT.md, REVIEW.md. Fix 2 (data) is not
+  approved.
 
 context:
   Owner instruction, 2026-10-27: "Create a separate task titled 'Second-account read compatibility for
@@ -1735,7 +1737,7 @@ verification:
 diagnosis (2026-10-27, owner-approved, read-only, counts only; nothing modified, exported or retained):
   - commitments: 2 records, 2 invalid. Both are live date-only commitments whose `time` key is ABSENT
     (Firebase RTDB cannot store null, so `time: null` is pruned on write). normalizeCommitment requires
-    `time === null` (commitments-model.js:284). Both are fully valid once the pruned null is restored. This is
+    `time === null` (commitments-model.js:284 before the fix; :286 after). Both are fully valid once the pruned null is restored. This is
     a code defect, not bad data. The app's remote merge (mergeCommitmentRecords -> normalizeCommitment) drops
     the same records, which survive only through the creating device's local copy.
   - entries: 2032 records (2028 ids), 2 invalid, each a single record with no duplicate and no tombstone:
@@ -1743,7 +1745,16 @@ diagnosis (2026-10-27, owner-approved, read-only, counts only; nothing modified,
     numeric/e_ pairs are identical (no conflict).
   - Not diagnosed (outside the approved scope): coarseLifeEvidence and plan authority. Her get_today may expose
     further issues after these are fixed.
-status-note: awaiting the owner's decision on the repair proposal; nothing implemented.
+fix-1 (2026-10-27, owner approved: "APPROVE implementation of Fix 1: accept missing or null time only for date-only
+  commitments. Preserve all other strict validation rules. Add regression tests, run the test suites, and obtain
+  independent review. Stop before merge or deployment."):
+  - acceptance: date-only with absent/undefined time normalizes to the identical null-time record; every other
+    rule is unchanged (any date-only time value including '' refused; timed needs a valid time; startMs
+    re-derived); fail-closed reads unchanged; sync LWW and tombstones hold across encodings; three copies identical.
+  - result: implemented and independently reviewed (PASS-with-notes, notes addressed). Held (red-zone sync/validator);
+    not merged, not deployed.
+  - Her get_today STILL FAILS until Fix 2: 2 malformed time entries -> CONFLICT malformed-entries.
+status-note: Fix 2 (her 2 entries) is under investigation and not approved; no data touched.
 
 <!-- Paste new tasks above this line. -->
 

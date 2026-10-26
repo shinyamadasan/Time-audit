@@ -445,3 +445,20 @@ Gate picked: `done` (reversible) | `approved` (red-zone: <why>)
 - item
 
 -->
+
+## Review TASK-032 Fix 1 - APPROVED, HELD (date-only commitment time: absent == null)
+branch: task-032 (on task-029-rollout)
+verdict: approved, held for the owner
+
+### Findings
+Independent adversarial review: PASS-with-notes, no blocking finding.
+- Scope is exact. The change is reachable only for precision 'date'. Timed validation, '' refusal, startMs
+  re-derivation and the fail-closed server reads are unchanged. The output is identical to the null-time record, so
+  the merge tie-break cannot flip.
+- Downstream it is a correctness improvement. A stale local copy can no longer beat a newer pruned remote edit or
+  tombstone in the sync push transaction. update and delete work on pruned records. No rules change is needed.
+- Notes addressed: tombstone and LWW tests added; task contract recorded; DECISIONS #40; evidence logged.
+
+### Verdict
+Gate picked: `approved` (red-zone: commitment sync and validator shared by the app and the Action API). Browser
+specs were not run (declined by the owner).
