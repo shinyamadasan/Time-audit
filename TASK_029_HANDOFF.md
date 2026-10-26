@@ -5,7 +5,8 @@ Merged to main `f6f18a5` (G1, 2026-10-25). Rollout progress:
   intentionally. This is an authorized early G4.1 (owner confirmation, 2026-10-25).
 - G1: done.
 - G2: done. Function `chronasenseactionapi-00008-wur`, owner canary PASS.
-- G3 onward: not started. The second user is NOT active.
+- G3: done. Worker `e0a99bd6-7da4-46b1-91f4-1c3a247f94c9`, 16/16 checks, owner canary PASS.
+- G4: preparation only (read-only). G5 onward: not started. The second user is NOT active.
 This document contains no real Access subject, Firebase UID, token or secret, and none may be added to it.
 
 ## What changes

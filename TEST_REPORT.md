@@ -2492,3 +2492,16 @@ result:
   - Owner canary (ChatGPT, existing connector, no reconnect or consent): get_today returned contractVersion 1 with the
     correct user-scoped plan (3 existing items). No writes.
 untested: G3+ (Worker unchanged). The HMAC secret was not read; no value was printed.
+
+## TASK-029 rollout — G3 Worker owner-only · 2026-10-25/26
+result:
+  - G3.1 preflight PASS: ebdbbd1c with 7 bindings, Function 00008-wur, Worker source identical to f6f18a5, bundle
+    c86c87216b60fe3a.
+  - G3.2/3.3: vars file built from live ebdbbd1c with exactly the 5 plaintext keys, all equal to live; no second-user
+    key, no secret. Plan: 5 redacted --var entries. Dry run clean.
+  - Deployed Worker e0a99bd6-7da4-46b1-91f4-1c3a247f94c9 (100%). The vars file and logs were deleted afterwards.
+  - G3.7 16/16: same 7 bindings (HMAC secret preserved, same KV namespace, no second-user binding); 5 plaintext values
+    identical by hash; deployed module byte-identical to the reviewed bundle; owner subject equal to the backend;
+    /authorize 302 to Access; /mcp 401; discovery and protected-resource metadata unchanged.
+  - Owner canary (existing ChatGPT connection, no reconnect or consent): get_today PASS (3 items), get_brain_dump PASS
+    (16 captures). No writes.

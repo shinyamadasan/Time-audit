@@ -5283,3 +5283,8 @@ deployed: Function chronasenseActionApi -> chronasenseactionapi-00008-wur (gclou
   configuration unchanged; second-user mapping unset). Owner canary PASS. Worker, Access, KV and secrets untouched.
 recorded: the owner confirmed the second /authorize Allow-policy email is the wife's (authorized early G4.1).
 → G2 complete. Next: G3 (Worker owner-only), separate approval required.
+
+## TASK-029 rollout — G3 Worker owner-only (2026-10-26)
+deployed: Worker e0a99bd6-7da4-46b1-91f4-1c3a247f94c9 (from main f6f18a5; bindings and values unchanged; no second
+  subject). Owner canary PASS. Backend, Access, KV and secrets untouched.
+→ G3 complete. Next: G4 identity preparation (read-only); G5 activation needs separate approval.
