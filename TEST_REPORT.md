@@ -2472,3 +2472,23 @@ review: second independent adversarial review PASS-with-notes, no blocking findi
   non-vacuous P4–P6, observation must grant).
 untested: real Cloudflare Access sub semantics; ChatGPT's real CIMD client; production KV consistency; B's write/plan
   scopes end to end through the real provider (covered by unit tests only); production.
+
+## TASK-029 rollout — G0/G2 production verification · 2026-10-25
+suite: production checks only (backend owner-only deploy; runtime = main f6f18a5).
+result:
+  - G0: main f6f18a5, CI and Pages success, working tree clean.
+    - Worker ebdbbd1c at 100%: the 7 expected bindings, no second-user binding. /authorize 302, /mcp 401.
+    - Access /authorize app: path-scoped, Managed OAuth not enabled.
+    - The Allow policy has 2 distinct emails: the owner's, and the wife's, which the owner confirmed (authorized
+      early G4.1).
+    - Owner subject equal in the Worker and the Function; no second-user config on either side.
+  - G2: gcloud source-only update of chronasenseActionApi from a git archive of f6f18a5 functions/ (62 files, identical
+    to the committed tree, LF, no node_modules or .env).
+    - Revision 00007-mon -> chronasenseactionapi-00008-wur, ACTIVE, 100% traffic.
+    - Pre/post diff by name and hash: only the revision changed. Env names and values, the secret binding, service
+      account, runtime, entry point, sizing, ingress, timeout and invoker IAM are all unchanged.
+    - Second-user params unset. Unauthenticated /v1/query and /v1/command return 401 AUTH_REQUIRED.
+    - New-revision logs have no errors.
+  - Owner canary (ChatGPT, existing connector, no reconnect or consent): get_today returned contractVersion 1 with the
+    correct user-scoped plan (3 existing items). No writes.
+untested: G3+ (Worker unchanged). The HMAC secret was not read; no value was printed.

@@ -5277,3 +5277,9 @@ changed: TASK_029_HANDOFF.md (new): residual risks, read-only production config 
   acceptance tests, and rollback R1/R2. No code change after the first review's fixes.
 tests: see TEST_REPORT.md "TASK-029 continuation".
 → TASK-029 stays `approved` (held, red-zone). Committed on task-029 only; no merge, push, deploy, config or policy change.
+
+## TASK-029 rollout — G2 backend owner-only (2026-10-25)
+deployed: Function chronasenseActionApi -> chronasenseactionapi-00008-wur (gcloud source-only update from main f6f18a5;
+  configuration unchanged; second-user mapping unset). Owner canary PASS. Worker, Access, KV and secrets untouched.
+recorded: the owner confirmed the second /authorize Allow-policy email is the wife's (authorized early G4.1).
+→ G2 complete. Next: G3 (Worker owner-only), separate approval required.

@@ -1,7 +1,11 @@
 # TASK-029 Handoff — second user (owner's wife) on the conversational MCP bridge
 
-Branch `task-029` (base origin/main `8057e2e`). Status: `approved` (held, red-zone). Nothing is merged, pushed or
-deployed. No Cloudflare policy, production configuration or secret has been changed. The second user is NOT active.
+Merged to main `f6f18a5` (G1, 2026-10-25). Rollout progress:
+- G0: PASS. The `/authorize` Allow policy names two emails: the owner's, and the wife's, which the owner added
+  intentionally. This is an authorized early G4.1 (owner confirmation, 2026-10-25).
+- G1: done.
+- G2: done. Function `chronasenseactionapi-00008-wur`, owner canary PASS.
+- G3 onward: not started. The second user is NOT active.
 This document contains no real Access subject, Firebase UID, token or secret, and none may be added to it.
 
 ## What changes
