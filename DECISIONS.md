@@ -958,3 +958,30 @@ any record the validator rejects.
 **Do not:** widen this to other fields or precisions, or treat `''`/`0`/`false` as "no time".
 
 ---
+
+## 41. TASK-036 conversational completion on legacy plan targets: completion only, one item replaced in place
+
+**Decision:** `plan_set_completion` (and no other mutation) accepts the exact legacy target `{ store: 'legacy', id:
+'YYYY-MM-DD' }` that `get_today`/`get_plan` return for an account that never ran the calendar cutover (#29). It uses
+the TASK-012 receipt, item-revision, intent and recovery machinery unchanged (#38); the revision already carries the
+store, so a calendar revision can never authorize a legacy write or vice versa. An array item is written by ONE
+ordinary-owner compare-and-set of `plans/<date>` in which only that item is replaced (and the record's
+`updatedAt`/`updatedBy` stamped); a legacy-fenced `bdp1|` item by a compare-and-set of its `planFences/<date>/<id>`
+child. A legacy target is writable only while Plan Authority still routes that date to the legacy record (a date a
+Personal Day boundary owns is NOT_FOUND), and the day ends where Plan Authority ends it (its 00:00 anchor's zone, or
+earlier where a boundary revision began); once any activation fact exists it is
+ended outright (`PAST_TARGET_IMMUTABLE`); the rules refuse legacy writes after cutover anyway. No carryover exception,
+no rules change, no migration.
+
+**Why:** the second account's `get_today` returned a legacy target that every mutation refused, so ChatGPT could read
+tasks it could not complete. Activating the cutover instead would make that day's legacy plan read-only and move its
+tasks to new carry ids, which changes the tasks the owner asked to preserve. Replacing the one item in place, rather
+than rebuilding the record with `mergeDatePlans`, is deliberate: the legacy merge does not restore RTDB-pruned fields,
+so a merged rewrite could silently drop a pruned `preparation`. The app's own legacy merge still converges on the
+completed item (newer `updatedAt`).
+
+**Do not:** widen this to `plan_edit`/`plan_move`/`plan_delete`/`plan_create` or to operational targets without their
+own review; do not route legacy writes through `mergeDatePlans`; do not add a legacy carryover exception; do not
+treat a legacy target as writable after activation.
+
+---

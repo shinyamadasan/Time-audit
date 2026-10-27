@@ -2613,3 +2613,44 @@ production (read-only, PASS/FAIL output only):
 data (re-run): repair verify PASS (0 invalid active, 2032 records, other 2030 byte-identical, commitments 2/2 valid);
   counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 0 invalid.
 result: TASK-032 accepted and closed.
+
+## TASK-036 — legacy-target task completion (branch task-036) · 2026-10-27
+suite (local, Node v24.19.0, deps installed as CI does):
+  - functions `npm test`: 261 tests, 261 pass, 0 fail (247 before; +13 legacy completion, +1 adapter pinning).
+  - workers/chronasense-conversational-bridge `npm test`: 43 tests, 43 pass, 0 fail (42 before; 1 updated, +1 e2e).
+  - Worker `npm run check:bundle`: dry-run OK.
+  - root `npm test`: exit 0 — 2334 tests, 2333 pass, 0 fail, 1 skipped (pre-existing env-gated control proof in
+    scripts/cross-repo-compat-check.test.js; skipped is NOT passed). Generated files (rules, functions/shared) no drift.
+  - eslint on changed files: 0 problems. `git diff --check` clean.
+  - Note: a first root run with no root node_modules failed at firebase-rules.test.js (missing `targaryen`) and
+    stopped the && chain; rerun after `npm ci --legacy-peer-deps` (the CI install) is the result above.
+not run: Playwright browser suite (no browser/app code changed); RTDB rules emulator suites (no rules changed);
+  any production call. Production acceptance (second user completes the two Oct 27 tasks) is NOT run: it needs deploy
+  plus explicit authorization.
+
+## TASK-036 after review rework · 2026-10-27
+  - functions `npm test`: 263/263 pass. Worker `npm test`: 43/43 pass; `check:bundle` OK.
+  - root `npm test`: exit 0 — 2337 tests, 2336 pass, 0 fail, 1 skipped (same pre-existing env-gated control proof).
+  - eslint on changed functions/worker code: 0 problems. firebase-rules.test.js fails to parse under the repo's
+    eslint config on main too (pre-existing config gap, not this change); it runs green under node --test (25/25).
+  - Mutation checks: removing the legacyDay refusal turns "review M1" red; removing the interval replacement turns
+    "review S2/N-a" red; both restored.
+  - Independent re-review: PASS WITH NOTES (REVIEW.md).
+not run: Playwright, RTDB emulator, production.
+
+## TASK-036 G1 pre-merge verification · 2026-10-27
+  - origin/main 0e04ebb unchanged; task-036 = 0e04ebb + reviewed commits ba603e7, ac09d4b + this test-only commit.
+    Production code (functions/src, worker src) identical to the reviewed ac09d4b.
+  - NEW real RTDB emulator integration (firebase-rules-emulator.test.js, emulator 4.11.2 checksum-verified, real
+    firebase.rules.json, real createUserScopedRtdb + createActionApiHandler): 3 tests — legacy completion of two
+    tasks + replay + Undo (pruned doneAt) + stale revision refused with the app edit kept, neighbour/preparation/
+    other account byte-identical; legacy-fenced Brain Dump done/undo at its child, origin pinned; ETag
+    conditional write (stale 412 -> changed, real ETag -> written), another account token FORBIDDEN on read and
+    write, a command bound to another account never touches this room, post-cutover legacy write FORBIDDEN by the
+    rules and PAST_TARGET_IMMUTABLE from the Function.
+  - npm run test:fence (CI's firebase-fence job): exit 0 — 160 tests, 160 pass, 0 fail, 0 skipped.
+  - root npm test: exit 0 — 2337 tests, 2336 pass, 0 fail, 1 skipped (pre-existing env-gated control proof).
+  - functions 263/263; worker 43/43; check:bundle OK; eslint on changed functions/worker code 0 problems.
+  - Finding while writing the isolation test: an item revision is a content hash (store, date, item) without the
+    room, so identical content in two accounts has identical revisions. Not an isolation defect: every command is
+    bound to the verified subject's own room (TASK-029) and writes only there; the calendar path is the same.

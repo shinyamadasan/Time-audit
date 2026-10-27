@@ -121,6 +121,47 @@ export function planDomain(seed = {}, hooks = {}) {
       if (hooks.afterFenceRead) await hooks.afterFenceRead(planId, itemId, result.value);
       return result;
     },
+    // ── TASK-036: the legacy store (plans/<date>, planFences/<date>/<bdp1|id>), under the same rules as the app's writes.
+    ownerLegacyRecord(dateKey, record) { (room.plans ??= {})[dateKey] = store(record); bump(`lrec:${dateKey}`); },
+    async readLegacyPlanWithEtag(identity, dateKey) {
+      own(identity);
+      if (hooks.beforeLegacyRecordRead) await hooks.beforeLegacyRecordRead(dateKey);
+      const value = room.plans?.[dateKey];
+      return { value: structuredClone(value ?? null), etag: etag(`lrec:${dateKey}`, value !== undefined) };
+    },
+    async putLegacyPlanIfMatch(identity, dateKey, record, tag) {
+      own(identity);
+      if (hooks.beforeLegacyRecordPut) await hooks.beforeLegacyRecordPut(dateKey, record);
+      // The rules: no legacy write once any activation fact exists; no fenced/Action API item in an array.
+      if (Object.keys(room.calendarPlanAuthority ?? {}).length) throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
+      for (const item of Object.values(record.items || {})) assert.ok(!item?.creationActionId && !String(item?.id).startsWith('api1_') && !item?.brainDumpOrigin, 'no fenced item in an array');
+      if (tag !== etag(`lrec:${dateKey}`, room.plans?.[dateKey] !== undefined)) return 'changed';
+      room.plans[dateKey] = store(record);
+      bump(`lrec:${dateKey}`);
+      writes.push({ planId: dateKey, where: 'legacy-record' });
+      if (hooks.afterLegacyRecordPut) await hooks.afterLegacyRecordPut(dateKey);
+      return 'written';
+    },
+    async readLegacyPlanFenceItemWithEtag(identity, dateKey, itemId) {
+      own(identity);
+      assert.match(itemId, /^bdp1\|/, 'only a Brain Dump item can be a legacy fence child');
+      const value = room.planFences?.[dateKey]?.[itemId];
+      return { value: structuredClone(value ?? null), etag: etag(`lfence:${dateKey}/${itemId}`, value !== undefined) };
+    },
+    async putLegacyPlanFenceItemIfMatch(identity, dateKey, itemId, record, tag) {
+      own(identity);
+      const current = room.planFences?.[dateKey]?.[itemId];
+      assert.ok(current !== undefined && tag !== 'null_etag', 'an update never creates a fence child');
+      if (tag !== etag(`lfence:${dateKey}/${itemId}`, true)) return 'changed';
+      if (JSON.stringify(record.brainDumpOrigin) !== JSON.stringify(current.brainDumpOrigin) || (current.deleted === true && record.deleted !== true)
+        || JSON.stringify(record.relocationRevision ?? null) !== JSON.stringify(current.relocationRevision ?? null)) {
+        throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
+      }
+      room.planFences[dateKey][itemId] = store(record);
+      bump(`lfence:${dateKey}/${itemId}`);
+      writes.push({ planId: dateKey, itemId, where: 'legacy-fence' });
+      return 'written';
+    },
     async putPlanFenceItemIfMatch(identity, planId, itemId, record, tag) {
       own(identity);
       if (hooks.beforeFencePut) await hooks.beforeFencePut(planId, itemId);

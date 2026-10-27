@@ -65,8 +65,11 @@ export const PLAN_MUTATION_KINDS = Object.freeze(['plan_set_completion', 'plan_e
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = (a, b) => canonicalize(a) === canonicalize(b);
+/** TASK-036: the store a validated plan id names (a `cal1:` calendar id, otherwise a legacy `YYYY-MM-DD`). */
+const storeOf = planId => (parseCalendarPlanId(planId) ? 'calendar' : 'legacy');
+const dateOf = planId => parseCalendarPlanId(planId) ?? planId;
 /** get_plan's own item revision (a transient TASK-012 move lock is not item content). */
-const itemRevision = (planId, item) => readRevision('calendar', planId, item);
+const itemRevision = (planId, item) => readRevision(storeOf(planId), planId, item);
 /** The item without a move lock: what every planned post-state is built from. */
 const withoutLock = item => { if (!item || !Object.hasOwn(item, 'moveLock')) return item; const { moveLock: _lock, ...content } = item; return content; };
 const SERVER_TIME = Object.freeze({ '.sv': 'timestamp' });
@@ -95,8 +98,10 @@ const fenceCandidate = itemId => isActionPlanItemId(itemId) || captureIdOfPlanIt
 
 /** The item's ONE authoritative physical copy, with the ETag every write to it is conditional on. */
 async function readPhysical(identity, domain, planId, itemId) {
-  if (fenceCandidate(itemId)) {
-    const child = await domain.readPlanFenceItemWithEtag(identity, planId, itemId);
+  // A legacy plan holds no Action API item (plan_create is calendar-only): only a bdp1| id can name a legacy fence child.
+  const legacy = storeOf(planId) === 'legacy';
+  if (legacy ? captureIdOfPlanItem(itemId) !== null : fenceCandidate(itemId)) {
+    const child = await (legacy ? domain.readLegacyPlanFenceItemWithEtag(identity, planId, itemId) : domain.readPlanFenceItemWithEtag(identity, planId, itemId));
     if (child.value !== null) {
       if (!object(child.value) || child.value.id !== itemId || !isFencedItem(child.value)) throw malformed('malformed-fence-item');
       return { where: 'fence', etag: child.etag, item: child.value };
@@ -106,7 +111,7 @@ async function readPhysical(identity, domain, planId, itemId) {
 }
 
 async function readRecord(identity, domain, planId, itemId) {
-  const { value, etag } = await domain.readCalendarPlanWithEtag(identity, planId);
+  const { value, etag } = await (storeOf(planId) === 'legacy' ? domain.readLegacyPlanWithEtag(identity, planId) : domain.readCalendarPlanWithEtag(identity, planId));
   if (value !== null && !object(value)) throw malformed('malformed-plan-record');
   const raw = value?.items ?? [];
   if (!Array.isArray(raw) && !object(raw)) throw malformed('malformed-plan-items');
@@ -119,6 +124,10 @@ async function readRecord(identity, domain, planId, itemId) {
  *  mergeCalendarPlanRecords (per-item relocation order, then updatedAt), with the plan origin frozen if absent.
  *  @returns {Promise<'written'|'changed'>} */
 async function writePhysical(identity, domain, planId, physical, next, { stampMs, writer, homeZone }) {
+  if (storeOf(planId) === 'legacy') {
+    return physical.where === 'fence' ? domain.putLegacyPlanFenceItemIfMatch(identity, planId, next.id, next, physical.etag)
+      : domain.putLegacyPlanIfMatch(identity, planId, inPlaceRecord(physical.record, next, { stampMs, writer }), physical.etag);
+  }
   if (physical.where === 'fence') return domain.putPlanFenceItemIfMatch(identity, planId, next.id, next, physical.etag);
   return domain.putCalendarPlanIfMatch(identity, planId, mergedRecord(physical.record, planId, next, { stampMs, writer, homeZone }), physical.etag);
 }
@@ -132,6 +141,16 @@ function mergedRecord(record, planId, next, { stampMs, writer, homeZone }) {
   // The stored copy must not out-rank the action's item (a newer relocation elsewhere): never write a merge that drops it.
   if (!same(merged.items.find(item => item.id === next.id), next)) throw conflict('That plan item has a newer move or edit.', 'plan-item-outranked');
   return merged;
+}
+
+/** TASK-036: the legacy record with ONLY `next` replaced and its writer stamped; every other byte exactly as stored.
+ *  Deliberately not mergeDatePlans: the legacy merge does not restore RTDB-pruned fields, so a merged rewrite could
+ *  silently drop a pruned preparation. The app's own legacy merge still converges on `next` (newer updatedAt). */
+function inPlaceRecord(record, next, { stampMs, writer }) {
+  const swap = item => (object(item) && item.id === next.id ? next : item);
+  const items = Array.isArray(record.items) ? record.items.map(swap)
+    : Object.fromEntries(Object.entries(record.items).map(([key, item]) => [key, swap(item)]));
+  return { ...record, items, updatedAt: Math.max(Number.isSafeInteger(record.updatedAt) ? record.updatedAt : 0, stampMs), updatedBy: writer };
 }
 
 /** A move's view of the calendarPlans collection: the source copy, the destination copy, and the collection ETag. */
@@ -190,10 +209,12 @@ function assertValidOn(date, item) {
  * no-op. Pure apart from the Plan Authority facts in `facts`. Throws a definitive ApiError for a domain refusal.
  * @returns {{noop:true} | {source:object, destination?:object}}
  */
-export function planMutation(kind, parameters, pre, { stampMs, writer, date, ended, today, accountZone, destination }) {
+export function planMutation(kind, parameters, pre, { stampMs, writer, date, ended, today, accountZone, destination, store = 'calendar' }) {
   const stamped = item => wireForm({ ...item, updatedAt: stampMs, updatedBy: writer });
   if (kind === 'plan_set_completion') {
     if (ended) {
+      // TASK-036: a legacy day has no carryover exception here; its unfinished tasks go through the Unfinished flow.
+      if (store !== 'calendar') throw pastTarget();
       // completeCarryoverItem: an ended plan's item is still live only when its own start lands on today's date.
       const instants = calendarItemInstants(date, pre);
       if (!(instants.ok && instants.timed && localPlanDate(instants.startMs, accountZone) === today)) throw pastTarget();
@@ -228,12 +249,14 @@ export function planMutation(kind, parameters, pre, { stampMs, writer, date, end
 }
 
 /** Bounded, title-free projection of where the item now is (the receipt never copies task text). */
-function resultFor({ command, location, item, previousRevision, changed }) {
-  const date = parseCalendarPlanId(location);
+function resultFor({ command, location, item, previousRevision, changed, accountZone }) {
+  const date = dateOf(location);
+  // A legacy item's wall time is in the account's own zone (it carries no whenTz of its own).
+  const zoned = storeOf(location) === 'legacy' && !item.whenTz && accountZone ? { ...item, whenTz: accountZone } : item;
   return { actionId: command.actionId, itemId: command.parameters.itemId, operation: command.kind,
-    target: { store: 'calendar', id: command.parameters.target.id, date: parseCalendarPlanId(command.parameters.target.id) },
+    target: { store: storeOf(command.parameters.target.id), id: command.parameters.target.id, date: dateOf(command.parameters.target.id) },
     ...(command.kind === 'plan_move' ? { destination: { store: 'calendar', id: location, date } } : {}),
-    item: { completed: item.done === true, deleted: item.deleted === true, schedule: item.deleted === true ? null : scheduleOf(date, item) },
+    item: { completed: item.done === true, deleted: item.deleted === true, schedule: item.deleted === true ? null : scheduleOf(date, zoned) },
     revision: itemRevision(location, item), previousRevision, changed };
 }
 
@@ -251,12 +274,13 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
   if (!PLAN_MUTATION_KINDS.includes(kind)) throw new Error(`not a plan mutation: ${kind}`);
   const { itemId } = parameters;
   const planId = parameters.target.id;
-  const date = parseCalendarPlanId(planId);
+  const store = parameters.target.store;
+  const date = dateOf(planId);
   const destinationId = kind === 'plan_move' ? parameters.destination.id : null;
   const actorRef = actionProvenance.actorRef;
   const requestHash = canonicalRequestHash(command);
   const claim = await receipts.claim({ firebaseUid: identity.firebaseUid, actionId, requestHash,
-    kind, attemptId, nowMs, leaseMs: LEASE_MS, plannedRecordId: itemId, plannedTarget: { store: 'calendar', id: planId },
+    kind, attemptId, nowMs, leaseMs: LEASE_MS, plannedRecordId: itemId, plannedTarget: { store, id: planId },
     authorizationContext: { actorRef, requiredScope: 'chronasense:plan.write',
       grantedScopes: identity.scopes, serviceIdentity: 'chronasense-plugin-worker-v1' },
     actionProvenanceRefs: { sourceKind: actionProvenance.sourceKind, capturedAt: actionProvenance.capturedAt } });
@@ -266,7 +290,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
   if (existing.requestHash !== requestHash || existing.kind !== kind) {
     throw new ApiError('IDEMPOTENCY_CONFLICT', 'This action ID was used for a different command.', { reason: 'action-id-reuse' });
   }
-  if (existing.plannedRecordId !== itemId || existing.plannedTarget?.store !== 'calendar' || existing.plannedTarget?.id !== planId) {
+  if (existing.plannedRecordId !== itemId || existing.plannedTarget?.store !== store || existing.plannedTarget?.id !== planId) {
     throw conflict('The action receipt names a different item.', 'receipt-record-id-mismatch');
   }
   if (existing.state === 'applied') return { result: { ...existing.result, idempotentReplay: true }, authority: existing.authority };
@@ -295,6 +319,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
   let relocationRefused = false;
   let lockRefused = false;
   let relockNeeded = false;
+  let accountZone = null;
 
   const unknown = async (reason, details) => {
     await settle(receipts, identity, actionId, snapshot, { state: 'pending_unknown', leaseExpiresAt: nowMs, updatedAt: nowMs });
@@ -309,11 +334,11 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     throw error;
   };
   const applied = async (location, item, changed) => {
-    const result = resultFor({ command, location, item, previousRevision: expectedRevision, changed });
-    const authority = { authority: 'plan_authority', store: 'calendar', access: 'user_scoped', targetId: location,
+    const result = resultFor({ command, location, item, previousRevision: expectedRevision, changed, accountZone });
+    const authority = { authority: 'plan_authority', store: storeOf(location), access: 'user_scoped', targetId: location,
       recordIds: [itemId], readAt: new Date(nowMs).toISOString() };
     const receipt = await settle(receipts, identity, actionId, snapshot, { state: 'applied', recordIds: [itemId],
-      effectiveTarget: { store: 'calendar', id: location, date: parseCalendarPlanId(location) }, authority, result,
+      effectiveTarget: { store: storeOf(location), id: location, date: dateOf(location) }, authority, result,
       resultingRevision: result.revision, appliedAt: nowMs, updatedAt: nowMs, resultCode: 'APPLIED', retryability: 'not_retryable' });
     return { result: { ...receipt.result, idempotentReplay: !claim.claimed }, authority: receipt.authority };
   };
@@ -331,7 +356,14 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     let source, physical, destination = null, reader;
     try {
       reader = await createPlanRead(identity, { domain, nowMs });
-      source = await reader.read({ store: 'calendar', id: planId });
+      accountZone = reader.timezone;
+      source = await reader.read({ store, id: planId });
+      if (store === 'legacy') {
+        // Only a date whose plan is still the legacy record: a boundary-owned date's record is no longer shown.
+        const day = reader.legacyDay(planId);
+        if (!day) throw new ApiError('NOT_FOUND', 'That plan target is not authoritative.', { reason: 'plan-target' });
+        source = { ...source, target: { ...source.target, startMs: day.startMs, endMs: day.endMs } };
+      }
       physical = await readPhysical(identity, domain, planId, itemId);
       if (destinationId) {
         destination = await reader.read({ store: 'calendar', id: destinationId });
@@ -373,7 +405,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
         { reason: 'move-onto-own-history' }));
     }
     if (!source.items.some(item => item.itemId === itemId)) {
-      const inactive = await reader.inactiveItem({ store: 'calendar', id: planId }, itemId).catch(() => null);
+      const inactive = await reader.inactiveItem({ store, id: planId }, itemId).catch(() => null);
       return refuse(conflict('That plan item is no longer active in that plan.', 'plan-item-inactive',
         inactive?.destinationTargetId ? { state: 'relocated', destinationTargetId: inactive.destinationTargetId } : { state: 'inactive' }));
     }
@@ -382,7 +414,9 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     const stampMs = intent?.stampMs ?? Math.max(snapshot.value.createdAt, (Number.isSafeInteger(pre.updatedAt) ? pre.updatedAt : 0) + 1);
     let planned;
     try {
-      planned = planMutation(kind, parameters, withoutLock(pre), { stampMs, writer: actionId, date, ended: source.target.endMs <= nowMs,
+      // A legacy day is also ended once the account has cut over (DECISIONS #29); the rules then refuse its writes too.
+      planned = planMutation(kind, parameters, withoutLock(pre), { stampMs, writer: actionId, date, store,
+        ended: source.target.endMs <= nowMs || (store === 'legacy' && reader.calendarActivated),
         today: reader.today, accountZone: reader.timezone,
         destination: destination && { id: destinationId, sourceId: planId, date: destination.target.date, ended: destination.target.endMs <= nowMs,
           activePriorities: destination.items.filter(item => item.itemId !== itemId && item.kind === 'priority').length } });
@@ -401,7 +435,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
 
     // ── origin: a plan holding only keyed items may have no canonical origin yet. Freeze it (R011-02) before
     // mutating its item, then observe again: the zone that won may differ from the one this round judged in.
-    if (physical.where === 'fence') {
+    if (physical.where === 'fence' && store === 'calendar') {
       try {
         if (!hasOrigin((await domain.readCalendarPlanWithEtag(identity, planId)).value)) {
           await ensurePlanOrigin(identity, { domain, planId, homeZone: source.target.timezone, createdAt: stampMs });

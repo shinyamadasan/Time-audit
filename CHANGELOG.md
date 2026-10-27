@@ -5315,3 +5315,38 @@ data: the second user's 2 invalid time entries (1 zero-length, 1 negative) soft-
 accepted: two-account get_today and get_brain_dump PASS, user-scoped, no cross-account data. planning/ROADMAP.md
   Known Issue removed.
 → TASK-032 `done`.
+
+## TASK-036 — conversational task completion on legacy plan targets (branch: task-036, 2026-10-27)
+base: origin/main `0e04ebb`. Not merged, not deployed. Owner-direct; red zone (plan mutation) -> held at `approved`.
+root cause: `get_today` routes an account that never ran the calendar cutover (DECISIONS #29) to its legacy plan
+  `{ store: 'legacy', id: 'YYYY-MM-DD' }`, but every TASK-012 mutation accepted calendar targets only (Worker schema
+  `store: 'calendar'`; envelope `plan-store-unsupported`). The second user's ChatGPT could read but not complete her
+  tasks. The owner's account is calendar-activated and was unaffected.
+changed:
+  - functions/src/envelope.js: `plan_set_completion` alone accepts an exact legacy target (valid `YYYY-MM-DD`);
+    operational stays `DOMAIN_LIMIT`; edit/move/delete unchanged (calendar only).
+  - functions/src/plan-mutation-action.js: store-aware completion. Legacy array items: one CAS of `plans/<date>`
+    replacing only that item (new `inPlaceRecord`, deliberately not `mergeDatePlans`); legacy `bdp1|` items: CAS of
+    their `planFences` child. Revisions, receipts (`plannedTarget`/`effectiveTarget`/`authority` carry the store),
+    intent and recovery unchanged. Legacy day ended at midnight or at any cutover -> `PAST_TARGET_IMMUTABLE`; no
+    calendar origin freezing and no carryover exception for legacy. Calendar behaviour unchanged.
+  - functions/src/plan-read.js: exposes `calendarActivated`.
+  - functions/src/user-scoped-rtdb.js: `readLegacyPlanWithEtag`, `putLegacyPlanIfMatch`,
+    `readLegacyPlanFenceItemWithEtag`, `putLegacyPlanFenceItemIfMatch`, pinned to `rooms/uid_<bound uid>/plans|planFences/<valid date>`,
+    ordinary owner token, existing ETag only.
+  - workers/chronasense-conversational-bridge/src/mcp.js: `plan_set_completion` input accepts the legacy target; its
+    result target store is `calendar|legacy`; description updated.
+  - tests: new functions/test/plan-legacy-completion.test.js (13); legacy store in plan-domain-support.js; adapter
+    pinning test; Worker forged-argument cases updated (legacy completion now reaches the backend only when exact;
+    legacy edit/move/delete and operational completion still refused) + legacy end-to-end regression.
+  - DECISIONS.md #41; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-036.
+not changed: firebase rules, index.html, www/, app runtime, production data.
+
+## TASK-036 review rework (branch: task-036, 2026-10-27)
+- functions/src/plan-read.js: `legacyDay(date)` — the date routed exactly as Plan Authority routes it; null when a
+  Personal Day boundary owns it. Read paths unchanged.
+- functions/src/plan-mutation-action.js: a legacy completion requires `legacyDay` (else NOT_FOUND) and uses its
+  interval as the day's end (review M1, S2).
+- functions/src/envelope.js: completion with any non-calendar, non-legacy store names both supported stores (N2).
+- tests: M1 and S2 regressions (both red without the fix); firebase-rules.test.js targaryen proof of the legacy
+  write shapes (S1). REVIEW.md entry; TASKS.md TASK-036 -> `approved` (held, red zone).

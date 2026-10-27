@@ -105,7 +105,14 @@ test('forged or untyped mutation arguments never reach the backend', async () =>
     ['plan_set_completion', { ...BASE, completed: 'yes' }],
     ['plan_set_completion', { ...BASE, completed: true, expectedRevision: 'etag-123' }],
     ['plan_set_completion', { ...BASE, completed: true, expectedRevision: undefined }],
-    ['plan_set_completion', { ...BASE, completed: true, target: { store: 'legacy', id: TOMORROW } }],
+    // TASK-036: completion alone takes an exact legacy target; never a malformed one, never on another mutation.
+    ['plan_set_completion', { ...BASE, completed: true, target: { store: 'legacy', id: PLAN } }],
+    ['plan_set_completion', { ...BASE, completed: true, target: { store: 'legacy', id: 'today' } }],
+    ['plan_set_completion', { ...BASE, completed: true, target: { store: 'legacy', id: TOMORROW, roomId: 'uid_victim' } }],
+    ['plan_set_completion', { ...BASE, completed: true, target: { store: 'operational', id: `odv1:rev:${ZONE}:${TOMORROW}` } }],
+    ['plan_edit', { ...BASE, title: 'x', target: { store: 'legacy', id: TOMORROW } }],
+    ['plan_move', { ...TOOLS.plan_move, target: { store: 'legacy', id: TOMORROW } }],
+    ['plan_delete', { ...BASE, target: { store: 'legacy', id: TOMORROW } }],
     ['plan_set_completion', { ...BASE, completed: true, target: { store: 'calendar', id: PLAN, roomId: 'uid_victim' } }],
     ['plan_set_completion', { ...BASE, completed: true, itemId: '' }],
     ['plan_move', { ...BASE, destination: { store: 'calendar', id: 'friday' } }],
@@ -179,4 +186,44 @@ test('end to end through the real Action API: get the revision, complete, lose t
   assert.equal(again.structuredContent.result.item.completed, true);
   assert.equal(writes, 1, 'one effect');
   assert.equal(room.calendarPlans[PLAN].items[0].done, true);
+});
+
+test('TASK-036 end to end: a legacy account completes two of its three tasks; the third and the plan stay exactly as stored', async () => {
+  const TODAY = localPlanDate(NOW_MS, ZONE);
+  const task = (id, title, extra = {}) => ({ id, task: title, when: '', done: false, kind: 'task', updatedAt: 1, updatedBy: 'phone', ...extra });
+  const preparation = { targetDate: TODAY, firstPreparedAt: 1, timezone: ZONE };
+  // No calendarPlanAuthority: the account never cut over, so get_today routes to the legacy plan.
+  const room = { settings: { timezone: ZONE },
+    plans: { [TODAY]: { updatedAt: 1, updatedBy: 'phone', preparation,
+      items: [task('p1', 'Post remaining products'), task('p2', 'Make price menu', { durationMinutes: 60 }), task('p3', 'Pay apartment kuryente')] } } };
+  const third = structuredClone(room.plans[TODAY].items[2]);
+  const h = harness({ domain: {
+    async readRoomCollection(_identity, collection) { return structuredClone(room[collection] ?? null); },
+    async readLegacyPlanWithEtag(_identity, dateKey) { const value = room.plans[dateKey] ?? null; return { value: structuredClone(value), etag: JSON.stringify(value) }; },
+    async putLegacyPlanIfMatch(_identity, dateKey, record, etag) {
+      if (etag !== JSON.stringify(room.plans[dateKey] ?? null)) return 'changed';
+      room.plans[dateKey] = JSON.parse(JSON.stringify(record));
+      return 'written';
+    },
+  } });
+  const deps = { nowSeconds, cryptoImpl: webcrypto, now: () => NOW_MS, fetchImpl: async (url, init) => {
+    const result = await h.handle({ method: init.method, path: new URL(url).pathname, rawHeaders: Object.entries(init.headers).flat(), rawBody: new TextEncoder().encode(init.body) });
+    return new Response(result.payload, { status: result.status });
+  } };
+  const today = (await message(await handleMcpRequest(call('get_today', {}), env, deps, ctx([READ_SCOPE])))).result.structuredContent.result;
+  assert.deepEqual({ store: today.plan.target.store, id: today.plan.target.id }, { store: 'legacy', id: TODAY });
+  for (const [itemId, n] of [['p1', 1], ['p2', 2]]) {
+    const item = today.plan.items.find(candidate => candidate.itemId === itemId);
+    const args = { actionId: ACTION.replace('0b8f1c2e', `0b8f1c2${n}`), capturedAt: CAPTURED, expectedRevision: item.revision,
+      target: { store: 'legacy', id: TODAY }, itemId, completed: true };
+    const done = (await message(await handleMcpRequest(call('plan_set_completion', args), env, deps, ctx([READ_SCOPE, PLAN_WRITE_SCOPE])))).result;
+    assert.equal(done.isError, undefined, JSON.stringify(done));
+    assert.deepEqual(done.structuredContent.result.target, { store: 'legacy', id: TODAY, date: TODAY });
+    assert.equal(done.structuredContent.result.item.completed, true);
+  }
+  const stored = room.plans[TODAY];
+  assert.deepEqual(stored.items.map(item => [item.id, item.done]), [['p1', true], ['p2', true], ['p3', false]], 'same ids, same order');
+  assert.deepEqual(stored.items[2], third, 'the remaining task is byte-identical');
+  assert.deepEqual(stored.preparation, preparation, 'the plan preparation is kept as stored');
+  assert.equal(stored.items[1].durationMinutes, 60);
 });

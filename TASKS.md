@@ -1779,6 +1779,49 @@ closure (2026-10-27):
   - Not diagnosed and not needed: coarseLifeEvidence and plan authority (both read successfully in acceptance).
 status-note: closed. The private backup of the 2 deleted records stays outside the repo.
 
+### TASK-036 - Conversational task completion on legacy plan targets
+status: approved
+owner: claude (owner asked for autonomous investigate/implement/test/review)
+source: owner-direct
+priority: P2
+depends-on: TASK-032 (merged 77651c6, on main)
+files: functions/src/{envelope.js, plan-mutation-action.js, plan-read.js, user-scoped-rtdb.js}, functions/test/*,
+  workers/chronasense-conversational-bridge/{src/mcp.js, test/*}, docs/CHRONASENSE_ACTION_API_V1.md, DECISIONS.md #41,
+  CHANGELOG.md, TEST_REPORT.md, REVIEW.md
+
+context:
+  Owner instruction, 2026-10-27 ("GOAL — Fix ChronaSense Task Completion Through ChatGPT"). The second user's ChatGPT
+  read two tasks through get_today, but plan_set_completion refused the target get_today returned: her account never
+  ran the calendar cutover (DECISIONS #29), so get_today routes her to the `legacy` store, while every TASK-012
+  mutation accepts calendar targets only (DECISIONS #38; Worker schema `store: 'calendar'`, envelope
+  `plan-store-unsupported`). Nothing was modified. The owner's account is calendar-activated and unaffected.
+
+objective:
+  plan_set_completion (only) accepts an exact legacy target { store: 'legacy', id: 'YYYY-MM-DD' } and completes or
+  un-completes exactly that one existing item, with the same receipt, revision, idempotency and recovery guarantees
+  as the calendar path.
+
+acceptance:
+  - Legacy completion and un-completion of an array item and of a legacy-fenced bdp1| item; same item id, date and
+    target; every other item, the record's preparation and all other fields byte-identical.
+  - Revision guard: a wrong/stale expectedRevision, an absent, deleted or inactive item, and an ended or
+    calendar-superseded legacy day are refused; nothing is written.
+  - Idempotent replay, crash/takeover recovery and Undo (completed:false) behave exactly as on calendar.
+  - Calendar behaviour unchanged; plan_edit/plan_move/plan_delete/plan_create still refuse legacy (DOMAIN_LIMIT);
+    operational still refused for every mutation.
+  - User isolation unchanged: every read/write pinned to rooms/uid_<bound uid>/plans|planFences.
+  - The written record converges in the app's own legacy merge (mergeDatePlans) to the completed item.
+  - Regression tests for legacy and current (calendar) formats; functions + worker suites green; independent review.
+
+constraints:
+  - No migration, no rules change, no production data access or modification, no merge, no deploy.
+  - Red zone (plan sync / mutation): approved gate, held for the human.
+  - After deploy + explicit authorization only: the second user completes "Post remaining products" and
+    "Make price menu"; "Pay apartment kuryente" stays unchanged.
+
+verification:
+  - npm test in functions and workers/chronasense-conversational-bridge; npm run check:bundle; independent review.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

@@ -6,6 +6,35 @@
 
 ---
 
+## Review TASK-036 - PASS WITH NOTES, HOLD AT APPROVED (conversational completion on legacy plan targets)
+
+Reviewer: independent general-purpose reviewer (fresh context), two rounds. Branch `task-036`, base `0e04ebb`.
+
+**Round 1 - FIX FIRST.** M1 (must-fix, verified by probe): a legacy target was accepted for a date a Personal Day
+boundary now owns; completion reported APPLIED into a `plans/<date>` record the app no longer shows (reachable only
+with a legacy target get_today did not return). S1: real-rules acceptance of the new write shapes untested. S2: the
+legacy end-of-day was computed in the settings zone, not Plan Authority's stored day-start zone. N1: legacy result
+schedule is zoned while get_plan gives null instants. N2: unknown-store completion error named calendar only. N3:
+non-integer `pre.updatedAt` ignored by the stamp (calendar path identical; theoretical).
+Checked with no defect found: wrong item/date/store/user (envelope, pinned URLs, api1_ on legacy -> NOT_FOUND,
+duplicates refused); calendar path unchanged; revision/intent/recovery; `inPlaceRecord` shapes and app convergence;
+Worker schema. Deliberate code breaks turned tests red (cutover guard, by-index replace, store in the revision).
+
+**Fixes.** M1+S2: `plan-read.js` `legacyDay(date)` routes the date as Plan Authority does (00:00 anchor ->
+`operationalDayContaining` -> `resolvePlanAuthority`); the mutation refuses a non-legacy-owned date (NOT_FOUND) and
+uses that interval as the day's end. S1: targaryen test of the legacy write shapes in firebase-rules.test.js. N2 fixed.
+Regression tests for M1 and S2 both go red without the fix (verified).
+
+**Round 2 - PASS WITH NOTES.** M1 probe now 404/0 writes; legacyDay agrees with get_today for a plain account (writable
+until local midnight), a production-shaped anchor, a future boundary, an LA-stored anchor, and midnight-DST zones.
+Notes carried, not blocking: N-b reads (get_plan/get_item) still use the settings zone in the zone-mismatch case (reads
+deliberately unchanged); N-c a retry after a boundary is created over an already-completed date ends PENDING_UNKNOWN
+(fails safe, same ordering as calendar); N-d rules proof is targaryen, not the RTDB emulator; N1 and N3 unchanged.
+
+**Gate: `approved` (held).** Red zone: plan mutation / RTDB sync of plan items (Hard Rule 9). Not merged, not deployed.
+
+---
+
 ## Review TASK-018 - CLOSED, status `done` (owner real-use acceptance received)
 branch: closure recorded on `docs/task-018-closure-task-016-plan`; the runtime it closes is origin/main
   `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` (PR #9 squash), already merged and deployed under separate

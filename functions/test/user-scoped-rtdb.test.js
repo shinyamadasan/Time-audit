@@ -321,3 +321,40 @@ test('TASK-012 plan_move token: the exchanged ID token must carry every move cla
     await assert.rejects(ok.getIdToken(UID, actionId, broken), error => error.code === 'FORBIDDEN', JSON.stringify(broken));
   }
 });
+
+test('TASK-036: legacy record and fence CAS are pinned to rooms/uid_<uid>/plans|planFences/<valid date>; owner token, existing ETag only', async () => {
+  const dateKey = '2026-10-27';
+  const bdId = 'bdp1|cap_01';
+  const { rtdb, calls, tokenCalls } = ownerPrimitives({ body: { items: [] } });
+  assert.deepEqual(await rtdb.readLegacyPlanWithEtag(IDENTITY, dateKey), { value: { items: [] }, etag: '"e1"' });
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/plans/${dateKey}.json`);
+  assert.equal(calls[0][1].headers['X-Firebase-ETag'], 'true');
+  assert.equal(await rtdb.putLegacyPlanIfMatch(IDENTITY, dateKey, { items: [] }, '"e1"'), 'written');
+  assert.equal(calls[1][1].method, 'PUT');
+  assert.equal(calls[1][1].headers['if-match'], '"e1"');
+  await rtdb.readLegacyPlanFenceItemWithEtag(IDENTITY, dateKey, bdId);
+  assert.equal(new URL(calls[2][0]).pathname, `/rooms/uid_${UID}/planFences/${dateKey}/bdp1%7Ccap_01.json`);
+  assert.equal(await rtdb.putLegacyPlanFenceItemIfMatch(IDENTITY, dateKey, bdId, { id: bdId, task: 'x' }, '"e1"'), 'written');
+  assert.deepEqual(tokenCalls, [[UID], [UID], [UID], [UID]], 'never an action-claimed token');
+  for (const bad of ['cal1:2026-10-27', '2026-02-30', '2026-10-27/items', '../settings', '2026-10-27 ', 'odv1:x']) {
+    await assert.rejects(rtdb.readLegacyPlanWithEtag(IDENTITY, bad), AuthorityBoundaryViolation, bad);
+    await assert.rejects(rtdb.putLegacyPlanIfMatch(IDENTITY, bad, { items: [] }, '"e1"'), AuthorityBoundaryViolation, bad);
+    await assert.rejects(rtdb.readLegacyPlanFenceItemWithEtag(IDENTITY, bad, bdId), AuthorityBoundaryViolation, bad);
+  }
+  for (const bad of ['p1', 'api1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4', 'bdp1|', 'bdp1|a/b', '../x']) {
+    await assert.rejects(rtdb.readLegacyPlanFenceItemWithEtag(IDENTITY, dateKey, bad), AuthorityBoundaryViolation, bad);
+  }
+  for (const identity of [{ firebaseUid: UID, roomId: 'uid_other' }, { firebaseUid: '../x', roomId: 'uid_../x' }]) {
+    await assert.rejects(rtdb.readLegacyPlanWithEtag(identity, dateKey), AuthorityBoundaryViolation);
+  }
+  for (const [record, tag] of [[{ items: [] }, 'null_etag'], [{ items: [] }, undefined], [null, '"e1"'], [[], '"e1"']]) {
+    await assert.rejects(rtdb.putLegacyPlanIfMatch(IDENTITY, dateKey, record, tag), AuthorityBoundaryViolation, JSON.stringify([record, tag]));
+  }
+  for (const [record, tag] of [[{ id: bdId }, 'null_etag'], [{ id: 'other' }, '"e1"'], [null, '"e1"']]) {
+    await assert.rejects(rtdb.putLegacyPlanFenceItemIfMatch(IDENTITY, dateKey, bdId, record, tag), AuthorityBoundaryViolation, JSON.stringify([record, tag]));
+  }
+  for (const [status, expected] of [[412, 'changed'], [403, 'FORBIDDEN'], [503, 'RETRYABLE_TRANSPORT']]) {
+    const outcome = await ownerPrimitives({ status }).rtdb.putLegacyPlanIfMatch(IDENTITY, dateKey, { items: [] }, '"e1"').catch(error => error.code);
+    assert.equal(outcome, expected, String(status));
+  }
+});

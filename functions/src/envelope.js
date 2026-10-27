@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { ACTION_ID } from './command-identity.js';
 import { calendarItemInstants, parseCalendarPlanId, validateCalendarPlanItem } from '../shared/calendar-plan-model.js';
 import { canonicalizeOperationalDayTimezone, validOperationalDayTimezone } from '../shared/personal-day-boundary-model.js';
-import { validPlanItemDuration, validPlanItemTime } from '../shared/plan-tomorrow-model.js';
+import { validPlanDate, validPlanItemDuration, validPlanItemTime } from '../shared/plan-tomorrow-model.js';
 
 /** command kind -> the write scope it requires. Exactly one user-intended mutation per command. */
 export const COMMAND_KINDS = Object.freeze({
@@ -116,6 +116,20 @@ function calendarTarget(target, what = 'plan target') {
   return { store: 'calendar', id: target.id };
 }
 
+/** TASK-036 (DECISIONS #41): plan_set_completion's target — an exact calendar plan, or the exact legacy plan
+ *  (`YYYY-MM-DD`) get_today returns for an account that never cut over. Every other mutation stays calendar-only. */
+function completionTarget(target) {
+  if (target?.store !== 'legacy') {
+    if (typeof target?.store === 'string' && target.store !== 'calendar') {
+      throw new ApiError('DOMAIN_LIMIT', 'Conversational task completion supports calendar-day and legacy plans only.',
+        { reason: 'plan-store-unsupported', details: { supportedStores: ['calendar', 'legacy'] } });
+    }
+    return calendarTarget(target);
+  }
+  if (Object.keys(target).sort().join(',') !== 'id,store' || !validPlanDate(target.id)) throw invalid('Invalid legacy plan identity.', 'plan-target');
+  return { store: 'legacy', id: target.id };
+}
+
 /** An explicit wall time: { when: HH:MM, whenTz: canonical IANA, whenDayOffset?: 0|1 } -> normalized (offset explicit). */
 function wallTime(time) {
   if (!time || typeof time !== 'object' || Array.isArray(time) || Object.keys(time).some(key => !['when', 'whenDayOffset', 'whenTz'].includes(key))) {
@@ -136,7 +150,7 @@ function wallTime(time) {
 function planMutationParameters(kind, parameters) {
   if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)
     || Object.keys(parameters).some(key => !MUTATION_KEYS[kind].includes(key))) throw invalid('Unsupported plan action parameters.', 'plan-parameters');
-  const target = calendarTarget(parameters.target);
+  const target = kind === 'plan_set_completion' ? completionTarget(parameters.target) : calendarTarget(parameters.target);
   if (typeof parameters.itemId !== 'string' || !PLAN_ITEM_ID.test(parameters.itemId)) throw invalid('A stable plan item ID is required.', 'plan-item-id');
   const normalized = { target, itemId: parameters.itemId };
   if (kind === 'plan_set_completion') {
