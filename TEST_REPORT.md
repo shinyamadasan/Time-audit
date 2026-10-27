@@ -2700,7 +2700,7 @@ next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
   - Backend chronasenseactionapi-00011-vup still ACTIVE.
   - Temporary .deploy-vars.json deleted. Rollback: wrangler rollback d1dc8053-1b90-4066-8c5a-0588799a1d57.
 
-## TASK-038 — legacy-target rescheduling (branch task-038, uncommitted) · 2026-10-27
+## TASK-038 — legacy-target rescheduling (branch task-038, 8e937b0) · 2026-10-27
   - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
   - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
   - `npm run test:fence` (real RTDB emulator 4.11.2, real firebase.rules.json): exit 0 — 164/164, 0 skipped (160 before;

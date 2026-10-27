@@ -1780,7 +1780,7 @@ closure (2026-10-27):
 status-note: closed. The private backup of the 2 deleted records stays outside the repo.
 
 ### TASK-036 - Conversational task completion on legacy plan targets
-status: approved
+status: done
 owner: claude (owner asked for autonomous investigate/implement/test/review)
 source: owner-direct
 priority: P2
@@ -1821,6 +1821,13 @@ constraints:
 
 verification:
   - npm test in functions and workers/chronasense-conversational-bridge; npm run check:bundle; independent review.
+
+closure (2026-10-27, owner-directed documentation reconciliation in TASK-038's PR):
+  - Merged cc016c6 (main). Backend chronasenseactionapi-00011-vup (G2) and Worker 4fbc58b6 (G4) deployed; owner
+    calendar canary PASS (G3). Evidence in TEST_REPORT.md G2-G4, carried over unchanged from the task-036 branch.
+  - Legacy acceptance: the owner stated (2026-10-27, TASK-038 goal) that legacy task completion and Undo were verified
+    through ChatGPT. Owner-reported; which tasks and timestamps were not supplied and are not inferred here.
+status-note: closed. The task-036 branch holds no other unmerged work and can be retired after this PR merges.
 
 ### TASK-038 - Conversational rescheduling on legacy plan targets
 status: approved

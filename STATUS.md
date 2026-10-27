@@ -5,6 +5,16 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-10-27 — TASK-036 closed; TASK-038 legacy rescheduling in PR (held, not merged)
+
+**TASK-036** (legacy completion through ChatGPT) is done: merged cc016c6, backend 00011-vup and Worker 4fbc58b6
+live; owner-reported legacy completion + Undo acceptance. **TASK-038** adds legacy -> legacy `plan_move` (DECISIONS
+#42) so both accounts can "move my unfinished tasks to tomorrow"; reviewed APPROVE-WITH-NOTES, held at `approved`
+(red zone). Not merged or deployed. Open: whether the second account's stored legacy history passes the rules
+re-check a whole-collection write triggers (known limit; diagnostic pending). Release order after merge approval:
+backend source-only deploy, then Worker via scripts/deploy.mjs, then a live two-account canary.
+
+
 ## 2026-10-22 — TASK-016 scoped owner acceptance; documentation closure
 
 The owner states that all nine ordinary-use smoke steps (S1–S9) passed and explicitly accepts
