@@ -1761,9 +1761,13 @@ fix-1 (2026-10-27, owner approved: "APPROVE implementation of Fix 1: accept miss
   - owner canary PASS (2026-10-27, owner's ChatGPT connection): get_today (Oct 27 plan) and get_brain_dump (16
     captures), user-scoped, no data modified.
 fix-2 (Phase 3, data): counts-only baseline after deploy: commitments 2/2 valid; entries 2 invalid (1 zero-length,
-  1 negative), neither duplicated nor tombstoned. Repair is app-native by the second user herself (delete the
-  zero-length entry; correct or delete the negative one); not yet performed.
-status-note: waiting on her in-app repair, then the counts-only re-check and two-account acceptance.
+  1 negative), neither duplicated nor tombstoned.
+  - repaired 2026-10-27 (second user explicitly approved deleting both, relayed by the owner): admin soft-delete of
+    exactly those 2 records using the app's tombstone shape ({...record, deleted: true, newer updatedAt}), each an
+    ETag-conditional PUT after re-verifying it against a private backup (outside the repo). Verified: 0 invalid active
+    entries; count 2032 unchanged; tombstones otherwise identical to the backup; the other 2030 entries byte-identical;
+    commitments 2/2 valid and unchanged. Counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 0 invalid.
+status-note: waiting on the final two-account acceptance (both users' get_today / get_brain_dump).
 
 <!-- Paste new tasks above this line. -->
 

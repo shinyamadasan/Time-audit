@@ -2585,3 +2585,15 @@ evidence:
   - Owner canary (owner-run, ChatGPT): get_today PASS (Oct 27 plan), get_brain_dump PASS (16 captures).
   - Second-account counts-only baseline: commitments 2/2 valid (Fix 1 confirmed on real data); entries 2 invalid
     (1 zero-length, 1 negative) — Phase 3 pending.
+
+## TASK-032 Phase 3 — second-account entry repair · 2026-10-27
+scope: exactly 2 records in the second user's room (her explicit approval, relayed by the owner); no code, no deploy.
+method: plan (read-only verify + private backup of the 2 records) -> per record: GET with ETag, fingerprint equal to the
+  backup and still invalid, then conditional PUT (if-match) of {...record, deleted: true, newer updatedAt}.
+result: both writes HTTP 200; no 412.
+verification:
+  - 0 invalid active entries; entry count 2032 unchanged; both tombstones identical to the backup apart from
+    deleted/updatedAt; the other 2030 entries byte-identical to the pre-repair snapshot.
+  - Commitments 2/2 valid and unchanged.
+  - Counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 4 identical duplicate pairs (no conflict), 0 invalid.
+  - Production unchanged: Function 00010-vud, Worker d1dc8053, OAuth grants owner 1 + second 1, none other.
