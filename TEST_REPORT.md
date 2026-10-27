@@ -2715,3 +2715,16 @@ next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
     check; legacy items are now moved as stored (regression test added).
   - Independent review: APPROVE-WITH-NOTES, no blockers (REVIEW.md); should-fix items addressed.
 not run: Playwright (no app/browser code changed); any production read, write or deploy; ChatGPT live acceptance.
+
+## TASK-038 — second-account legacy write compatibility diagnostic (owner-approved, read-only) · 2026-10-27
+question: would current firebase.rules.json accept TASK-038's whole-collection rewrite of the second account's
+  legacy plans exactly as stored (DECISIONS #42 known limit)?
+method: counts-only checker mirroring the plans.$dateKey.items.$i validate rule, proven against the real emulator +
+  rules (15 categories, and whole-collection PUT accepted iff PASS). Project passed explicitly; the account mapping and
+  a short-lived credential held in memory only; 3 GET requests (plans, brainDump, calendarPlanAuthority); no write; no
+  record, identifier or token printed or retained.
+result: PASS — 11 legacy records, 31 items, 0 Brain Dump array items, 0 items the rules would refuse, no failing
+  category, not calendar-activated.
+meaning: the known limit does not affect this account's current data; a future incompatible item would still fail
+  closed (CONFLICT legacy-history-unwritable, nothing written).
+CI on 1782848 before this entry: test pass, Firebase fence / rules integration pass.
