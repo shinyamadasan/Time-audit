@@ -2688,6 +2688,18 @@ next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
   - Not run by Claude: scripts/deploy.mjs plan/--dry-run/--confirm (blocked by the session permission guard as a
     production deploy; left for the owner, as in TASK-012).
 
+## TASK-036 G4 — Worker deploy (owner-run) and post-deploy verification: PASS · 2026-10-28
+  - Owner deployed via scripts/deploy.mjs --confirm: new version 4fbc58b6-1d09-4d25-a836-39829bb34122, 100% traffic.
+  - Bindings: 8, names identical to d1dc8053. All 6 plaintext values identical to d1dc8053 by hash; secret
+    CHRONASENSE_WORKER_HMAC_KEY_HEX present; OAUTH_KV same namespace. Owner and second-user subjects equal the
+    backend mappings.
+  - /authorize -> 302 to the Cloudflare Access team domain; unauthenticated POST /mcp -> 401 with the OAuth
+    WWW-Authenticate challenge; protected-resource metadata -> 200.
+  - Live tail during the probes (45 s window only, not historical): 3 events, all `ok`, 0 exceptions, 0 error logs.
+  - OAuth grants (key listing, ids compared by equality, never printed): exactly 2 — 1 owner, 1 second user, 0 other.
+  - Backend chronasenseactionapi-00011-vup still ACTIVE.
+  - Temporary .deploy-vars.json deleted. Rollback: wrangler rollback d1dc8053-1b90-4066-8c5a-0588799a1d57.
+
 ## TASK-038 — legacy-target rescheduling (branch task-038, uncommitted) · 2026-10-27
   - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
   - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
