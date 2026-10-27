@@ -12520,23 +12520,7 @@ initNativeNotifications();
 setTimeout(() => { checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
 setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); renderGapRecoveryInbox(e); renderRoutinePrompt(e); } }, 60000);
-// Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
-// Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
-// If Firebase says a timer is running, adopt that — don't overwrite it.
 const isMobileBrowser = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) && !isNative;
-if (!isNative && !isMobileBrowser && !running && !sessionStorage.getItem('ta3-session-started')) {
-  sessionStorage.setItem('ta3-session-started', '1');
-  const _pcTimeStart = () => { if (!running) _startTimer('PC Time'); };
-  // If Firebase responds within 5s and timer is already running, skip auto-start
-  const _pcTimeFallback = setTimeout(_pcTimeStart, 5000);
-  const _pcTimeCheck = setInterval(() => {
-    if (fbTimerReceived) {
-      clearInterval(_pcTimeCheck);
-      clearTimeout(_pcTimeFallback);
-      if (!running) _startTimer('PC Time');
-    }
-  }, 200);
-}
 // Auto-start on mobile / native: focus input, show continue chip if returning user, fire after 2s
 if ((isNative || isMobileBrowser) && !running && !sessionStorage.getItem('ta3-session-started')) {
   sessionStorage.setItem('ta3-session-started', '1');
