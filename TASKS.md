@@ -1780,7 +1780,7 @@ closure (2026-10-27):
 status-note: closed. The private backup of the 2 deleted records stays outside the repo.
 
 ### TASK-036 - Conversational task completion on legacy plan targets
-status: review
+status: approved
 owner: claude (owner asked for autonomous investigate/implement/test/review)
 source: owner-direct
 priority: P2

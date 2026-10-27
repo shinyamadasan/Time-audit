@@ -269,6 +269,19 @@ export async function createPlanRead(identity, { domain, nowMs }) {
     return { state: 'inactive', itemId };
   }
 
+  /** TASK-036: the legacy day `dateKey` exactly as Plan Authority routes it — its interval while that date's plan is
+   *  still the legacy record, null once a Personal Day boundary owns it (the interval ends early where a boundary
+   *  revision began, in the anchor's own zone). Writes use this; reads keep resolveExact's projection unchanged. */
+  function legacyDay(dateKey) {
+    const anchor = history.find(entry => entry.effectiveFromInstant === null);
+    if (!validDate(dateKey) || !anchor) return null;
+    try {
+      const ref = operationalDayContaining(calendarPlanInterval(dateKey, anchor.timezone).startMs, history);
+      const authority = resolvePlanAuthority(ref, history);
+      return authority.store === 'legacy' && authority.dateKey === dateKey ? operationalDayInterval(ref, history) : null;
+    } catch { return null; }
+  }
+
   // TASK-036: once any activation fact exists every legacy day is ended (DECISIONS #29); a legacy write is then refused.
-  return { today, timezone, calendarActivated: activation !== null, read, stale, inactiveItem };
+  return { today, timezone, calendarActivated: activation !== null, legacyDay, read, stale, inactiveItem };
 }

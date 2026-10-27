@@ -967,7 +967,9 @@ the TASK-012 receipt, item-revision, intent and recovery machinery unchanged (#3
 store, so a calendar revision can never authorize a legacy write or vice versa. An array item is written by ONE
 ordinary-owner compare-and-set of `plans/<date>` in which only that item is replaced (and the record's
 `updatedAt`/`updatedBy` stamped); a legacy-fenced `bdp1|` item by a compare-and-set of its `planFences/<date>/<id>`
-child. A legacy day is ended at its calendar midnight in the account zone and, once any activation fact exists, is
+child. A legacy target is writable only while Plan Authority still routes that date to the legacy record (a date a
+Personal Day boundary owns is NOT_FOUND), and the day ends where Plan Authority ends it (its 00:00 anchor's zone, or
+earlier where a boundary revision began); once any activation fact exists it is
 ended outright (`PAST_TARGET_IMMUTABLE`); the rules refuse legacy writes after cutover anyway. No carryover exception,
 no rules change, no migration.
 

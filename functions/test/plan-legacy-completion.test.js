@@ -10,6 +10,7 @@ import { COMMAND_PATH } from '../src/action-api.js';
 import { actionActorRef } from '../src/envelope.js';
 import { ApiError } from '../src/errors.js';
 import { addCalendarDays, localPlanDate, mergeDatePlans } from '../shared/plan-tomorrow-model.js';
+import { legacyBoundaryRevision, proposeBoundaryRevision } from '../shared/personal-day-boundary-model.js';
 import { NOW_MS, OWNER, harness, signedRequest } from './support.js';
 import { FACT, ZONE, planDomain } from './plan-domain-support.js';
 
@@ -267,4 +268,34 @@ test('the app converges: its own legacy merge of a stale local copy with the wri
   }
   const { plan } = await query(h, 'get_today', {});
   assert.deepEqual(plan.items.map(item => [item.itemId, item.done]), [['p1', false], ['p2', true], ['p3', false]], 'ChatGPT reads it back');
+});
+
+test('review M1: a date a Personal Day boundary now owns is not writable through its old legacy record (NOT_FOUND, nothing written)', async () => {
+  // A 04:00 boundary since three days ago: today's plan is the operational day, and plans/<today> is a leftover.
+  const history = proposeBoundaryRevision([legacyBoundaryRevision(ZONE)], { id: 'boundary-0400', boundaryTime: '04:00', timezone: ZONE }, NOW_MS - 3 * 86_400_000).revisions;
+  const { store, h } = setup(legacyAccount({ [TODAY]: legacyRecord([products()]) },
+    { dayBoundaryRevisions: Object.fromEntries(history.map(revision => [revision.id, revision])) }));
+  assert.equal((await query(h, 'get_today', {})).plan.target.store, 'operational', 'get_today never names that legacy record');
+  const response = await h.handle(command('plan_set_completion', complete('p1'), { expectedRevision: await revisionOf(h, 'p1') }));
+  assert.equal(code(response), 'NOT_FOUND');
+  assert.equal(store.writes.length, 0);
+  assert.equal(stored(store, 'p1').done, false);
+  // A legacy day from BEFORE the boundary began is still its own legacy plan: ended, so history, not "not found".
+  const before = localPlanDate(NOW_MS - 5 * 86_400_000, ZONE);
+  const old = setup(legacyAccount({ [before]: { updatedAt: T0, updatedBy: 'phone', items: [products()] } },
+    { dayBoundaryRevisions: Object.fromEntries(history.map(revision => [revision.id, revision])) }));
+  const past = await old.h.handle(command('plan_set_completion', complete('p1', true, before), { expectedRevision: await revisionOf(old.h, 'p1', before) }));
+  assert.equal(code(past), 'PAST_TARGET_IMMUTABLE');
+  assert.equal(old.store.writes.length, 0);
+});
+
+test('review S2/N-a: a legacy day ends where Plan Authority ends it (the stored day-start zone), not in the settings zone', async () => {
+  // Settings say Manila, but the account's 00:00 day-start setting was stored in Kiritimati (UTC+14), which has
+  // already passed midnight: Plan Authority has ended that legacy day although Manila has not. Writes follow it.
+  const anchor = legacyBoundaryRevision('Pacific/Kiritimati');
+  assert.notEqual(localPlanDate(NOW_MS, 'Pacific/Kiritimati'), TODAY, 'fixture: the two zones disagree on today');
+  const { store, h } = setup(legacyAccount({ [TODAY]: legacyRecord([products()]) }, { dayBoundaryRevisions: { [anchor.id]: anchor } }));
+  const response = await h.handle(command('plan_set_completion', complete('p1'), { expectedRevision: await revisionOf(h, 'p1') }));
+  assert.equal(code(response), 'PAST_TARGET_IMMUTABLE');
+  assert.equal(store.writes.length, 0);
 });

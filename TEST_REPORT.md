@@ -2627,3 +2627,13 @@ suite (local, Node v24.19.0, deps installed as CI does):
 not run: Playwright browser suite (no browser/app code changed); RTDB rules emulator suites (no rules changed);
   any production call. Production acceptance (second user completes the two Oct 27 tasks) is NOT run: it needs deploy
   plus explicit authorization.
+
+## TASK-036 after review rework · 2026-10-27
+  - functions `npm test`: 263/263 pass. Worker `npm test`: 43/43 pass; `check:bundle` OK.
+  - root `npm test`: exit 0 — 2337 tests, 2336 pass, 0 fail, 1 skipped (same pre-existing env-gated control proof).
+  - eslint on changed functions/worker code: 0 problems. firebase-rules.test.js fails to parse under the repo's
+    eslint config on main too (pre-existing config gap, not this change); it runs green under node --test (25/25).
+  - Mutation checks: removing the legacyDay refusal turns "review M1" red; removing the interval replacement turns
+    "review S2/N-a" red; both restored.
+  - Independent re-review: PASS WITH NOTES (REVIEW.md).
+not run: Playwright, RTDB emulator, production.

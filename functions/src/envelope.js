@@ -120,7 +120,7 @@ function calendarTarget(target, what = 'plan target') {
  *  (`YYYY-MM-DD`) get_today returns for an account that never cut over. Every other mutation stays calendar-only. */
 function completionTarget(target) {
   if (target?.store !== 'legacy') {
-    if (target?.store === 'operational') {
+    if (typeof target?.store === 'string' && target.store !== 'calendar') {
       throw new ApiError('DOMAIN_LIMIT', 'Conversational task completion supports calendar-day and legacy plans only.',
         { reason: 'plan-store-unsupported', details: { supportedStores: ['calendar', 'legacy'] } });
     }

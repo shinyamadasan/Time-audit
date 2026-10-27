@@ -379,3 +379,35 @@ test('action api: serverRequestNonces / serverActionReceipts are explicit nodes 
     }
   }
 });
+
+// TASK-036 (DECISIONS #41): the Action API's legacy completion writes, judged by the deployed rules. A whole-record
+// compare-and-set of plans/<date> replacing one item, and a legacy fence-child update, as the ORDINARY owner.
+test('TASK-036 legacy completion writes: owner record/fence updates allowed; refused after cutover and for another user', async () => {
+  const { STORES, CAPTURE, ITEM_ID, T, capture, fencedItem, promotedCapture } = await import('./fence-rules-fixtures.js');
+  const L = STORES.legacy;
+  const roomOf = at => at.split('/')[1];
+  const room = roomOf(L.planAt);
+  const owner = { uid: room.replace(/^uid_/, '') };
+  const ACT = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const at = p => `/${p}`;
+  const data = extra => ({ rooms: { [room]: { brainDump: { [CAPTURE]: promotedCapture(L) }, ...extra } } });
+  const item = (id, extra = {}) => ({ id, task: id, when: '', done: false, kind: 'task', updatedAt: T, updatedBy: 'phone', ...extra });
+  const record = { updatedAt: T, updatedBy: 'phone', preparation: { targetDate: L.key, firstPreparedAt: T - 1, timezone: 'Asia/Manila' }, items: [item('p1'), item('p2')] };
+  const completed = { ...record, updatedAt: T + 1, updatedBy: ACT, items: [item('p1', { done: true, doneAt: T + 1, updatedAt: T + 1, updatedBy: ACT }), item('p2')] };
+  const plain = data({ plans: { [L.key]: record } });
+  assert.equal(canWrite(plain, owner, at(L.planAt), completed), true, 'one item replaced in place');
+  assert.equal(canWrite(plain, owner, at(L.planAt), { ...completed, items: { 0: completed.items[0], 2: completed.items[1] } }), true, 'sparse items object');
+  assert.equal(canWrite(plain, C, at(L.planAt), completed), false, 'never another user');
+  const activated = data({ plans: { [L.key]: record }, calendarPlanAuthority: { f1: { schemaVersion: 1, id: 'f1', activatedAtMs: T, timezone: 'Asia/Manila', activationDate: '2026-10-01', deviceId: 'd' } } });
+  assert.equal(canWrite(activated, owner, at(L.planAt), completed), false, 'no legacy write after the cutover');
+  // A pre-fence Brain Dump item still in the array, its capture promoted to it, is re-validated and kept.
+  const preFence = capture({ status: 'promoted', disposedAt: T + 3, promotion: { type: 'do-today', store: 'legacy', targetId: L.targetId, planItemId: ITEM_ID, intentRecorded: true, when: '', promotedAt: T + 3 } });
+  const withBd = { rooms: { [room]: { brainDump: { [CAPTURE]: preFence }, plans: { [L.key]: { ...record, items: [...record.items, item(ITEM_ID)] } } } } };
+  assert.equal(canWrite(withBd, owner, at(L.planAt), { ...completed, items: [...completed.items, item(ITEM_ID)] }), true);
+  const fenced = fencedItem(L);
+  const fence = data({ planFences: { [L.key]: { [ITEM_ID]: fenced } } });
+  assert.equal(canWrite(fence, owner, at(L.itemAt), { ...fenced, done: true, doneAt: T + 1, updatedAt: T + 1, updatedBy: ACT }), true, 'fence child done');
+  const { doneAt: _doneAt, ...undone } = { ...fenced, done: false, updatedAt: T + 2, updatedBy: ACT };
+  assert.equal(canWrite(fence, owner, at(L.itemAt), undone), true, 'fence child undo');
+  assert.equal(canWrite(fence, C, at(L.itemAt), undone), false, 'never another user');
+});

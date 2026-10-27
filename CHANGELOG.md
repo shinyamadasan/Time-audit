@@ -5341,3 +5341,12 @@ changed:
     legacy edit/move/delete and operational completion still refused) + legacy end-to-end regression.
   - DECISIONS.md #41; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-036.
 not changed: firebase rules, index.html, www/, app runtime, production data.
+
+## TASK-036 review rework (branch: task-036, 2026-10-27)
+- functions/src/plan-read.js: `legacyDay(date)` — the date routed exactly as Plan Authority routes it; null when a
+  Personal Day boundary owns it. Read paths unchanged.
+- functions/src/plan-mutation-action.js: a legacy completion requires `legacyDay` (else NOT_FOUND) and uses its
+  interval as the day's end (review M1, S2).
+- functions/src/envelope.js: completion with any non-calendar, non-legacy store names both supported stores (N2).
+- tests: M1 and S2 regressions (both red without the fix); firebase-rules.test.js targaryen proof of the legacy
+  write shapes (S1). REVIEW.md entry; TASKS.md TASK-036 -> `approved` (held, red zone).

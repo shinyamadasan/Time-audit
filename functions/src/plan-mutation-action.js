@@ -358,6 +358,12 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       reader = await createPlanRead(identity, { domain, nowMs });
       accountZone = reader.timezone;
       source = await reader.read({ store, id: planId });
+      if (store === 'legacy') {
+        // Only a date whose plan is still the legacy record: a boundary-owned date's record is no longer shown.
+        const day = reader.legacyDay(planId);
+        if (!day) throw new ApiError('NOT_FOUND', 'That plan target is not authoritative.', { reason: 'plan-target' });
+        source = { ...source, target: { ...source.target, startMs: day.startMs, endMs: day.endMs } };
+      }
       physical = await readPhysical(identity, domain, planId, itemId);
       if (destinationId) {
         destination = await reader.read({ store: 'calendar', id: destinationId });
