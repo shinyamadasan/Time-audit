@@ -5305,3 +5305,13 @@ changed:
 effect: date-only commitments no longer make the fail-closed get_today/get_intelligence return CONFLICT, and no longer
   vanish from other devices on sync.
 → TASK-032 `approved` (held, red-zone sync/validator). Not merged, not deployed. Her get_today still needs Fix 2.
+
+## TASK-032 rollout and closure (2026-10-27)
+merged: main f6f18a5..77651c6 (guarded fast-forward); CI and Pages green; live commitment model matches main.
+deployed: backend chronasenseactionapi-00010-vud (gcloud source-only from 77651c6; only the revision changed). Worker,
+  Access, KV, OAuth grants and secrets untouched. Owner canary PASS.
+data: the second user's 2 invalid time entries (1 zero-length, 1 negative) soft-deleted with her approval: the app's
+  tombstone shape, ETag-conditional, private backup outside the repo. Nothing else written.
+accepted: two-account get_today and get_brain_dump PASS, user-scoped, no cross-account data. planning/ROADMAP.md
+  Known Issue removed.
+→ TASK-032 `done`.

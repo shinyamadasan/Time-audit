@@ -1697,7 +1697,7 @@ closure (2026-10-27, owner-directed):
     work yet.
 
 ### TASK-032 - Second-account read compatibility for get_today
-status: approved
+status: done
 owner: claude
 source: owner-direct
 priority: P2
@@ -1767,7 +1767,17 @@ fix-2 (Phase 3, data): counts-only baseline after deploy: commitments 2/2 valid;
     ETag-conditional PUT after re-verifying it against a private backup (outside the repo). Verified: 0 invalid active
     entries; count 2032 unchanged; tombstones otherwise identical to the backup; the other 2030 entries byte-identical;
     commitments 2/2 valid and unchanged. Counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 0 invalid.
-status-note: waiting on the final two-account acceptance (both users' get_today / get_brain_dump).
+closure (2026-10-27):
+  - Two-account acceptance PASS (owner-run, read-only): owner get_today (1 planned task) and get_brain_dump (16
+    captures); second user get_today (3 planned tasks) and get_brain_dump (5 captures). All user-scoped; no
+    cross-account data observed.
+  - Final read-only production check PASS: Function 00010-vud with config identical to the post-deploy capture (IAM,
+    secret version, env by hash); Worker d1dc8053 with 8 bindings matching the backend mapping; Access unchanged
+    (/authorize only, Managed OAuth off, 2 emails); OAuth grants exactly 2 (one per user); unauthenticated calls 401.
+  - Repair verification re-run PASS: 0 invalid active entries, 2032 records, other 2030 entries byte-identical,
+    commitments 2/2 valid.
+  - Not diagnosed and not needed: coarseLifeEvidence and plan authority (both read successfully in acceptance).
+status-note: closed. The private backup of the 2 deleted records stays outside the repo.
 
 <!-- Paste new tasks above this line. -->
 

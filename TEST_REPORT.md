@@ -2597,3 +2597,19 @@ verification:
   - Commitments 2/2 valid and unchanged.
   - Counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 4 identical duplicate pairs (no conflict), 0 invalid.
   - Production unchanged: Function 00010-vud, Worker d1dc8053, OAuth grants owner 1 + second 1, none other.
+
+## TASK-032 final two-account acceptance · 2026-10-27
+acceptance (owner-run, read-only ChatGPT calls):
+  - owner: get_today PASS (1 planned task); get_brain_dump PASS (16 captures).
+  - second user: get_today PASS (3 planned tasks); get_brain_dump PASS (5 captures).
+  - All user-scoped; no cross-account data observed.
+production (read-only, PASS/FAIL output only):
+  - Function chronasenseactionapi-00010-vud ACTIVE at 100%; config identical to the post-deploy capture (no field
+    changed); IAM bindings hash ef04811cab80; secret @v1.
+  - Worker d1dc8053 at 100%; 8 bindings; HMAC key secret; owner and second subjects equal the backend mapping.
+  - Access: /authorize only, Managed OAuth off, 1 allow policy with exactly 2 emails.
+  - OAuth grants: exactly 2 (owner 1, second user 1), none under any other subject.
+  - Live: /authorize 302, /mcp 401; unauthenticated /v1/query and /v1/command 401 AUTH_REQUIRED.
+data (re-run): repair verify PASS (0 invalid active, 2032 records, other 2030 byte-identical, commitments 2/2 valid);
+  counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 0 invalid.
+result: TASK-032 accepted and closed.
