@@ -2654,3 +2654,19 @@ not run: Playwright, RTDB emulator, production.
   - Finding while writing the isolation test: an item revision is a content hash (store, date, item) without the
     room, so identical content in two accounts has identical revisions. Not an isolation defect: every command is
     bound to the verified subject's own room (TASK-029) and writes only there; the calendar path is the same.
+
+## TASK-038 — legacy-target rescheduling (branch task-038, uncommitted) · 2026-10-27
+  - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
+  - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
+  - `npm run test:fence` (real RTDB emulator 4.11.2, real firebase.rules.json): exit 0 — 164/164, 0 skipped (160 before;
+    +4 TASK-038: two moves + replay + Undo with unrelated days/other account byte-identical; collection CAS stale ETag ->
+    changed, app writes after the read kept/stale refused; other account cannot read/write/move, post-cutover write
+    FORBIDDEN by rules and PAST_TARGET_IMMUTABLE from the Function; invalid stored history fails closed, nothing written).
+  - root `npm test`: exit 0 — 2357 pass, 0 fail, 1 skipped (pre-existing env-gated control proof in
+    scripts/cross-repo-compat-check.test.js; skipped is NOT passed).
+  - eslint functions/src + worker src: clean; `npm run lint`: 0 errors (48 pre-existing warnings); `git diff --check` clean.
+    firebase-rules-emulator.test.js has the same pre-existing eslint parse error on main (outside the lint list).
+  - Emulator finding fixed during the run: a stored "duration without a start time" item was refused by a legacy range
+    check; legacy items are now moved as stored (regression test added).
+  - Independent review: APPROVE-WITH-NOTES, no blockers (REVIEW.md); should-fix items addressed.
+not run: Playwright (no app/browser code changed); any production read, write or deploy; ChatGPT live acceptance.

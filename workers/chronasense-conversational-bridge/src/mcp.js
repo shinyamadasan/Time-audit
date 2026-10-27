@@ -81,14 +81,17 @@ const mutationParameters = Object.freeze({
   plan_set_completion: z.strictObject({ ...itemRef, target: z.union([calendarTarget, legacyTarget]), completed: z.boolean() }),
   plan_edit: z.strictObject({ ...itemRef, title: z.string().trim().min(1).max(200).optional(), time: wallTime.optional(),
     durationMinutes: z.number().int().min(1).max(720).optional(), clearSchedule: z.literal(true).optional() }),
-  plan_move: z.strictObject({ ...itemRef, destination: calendarTarget, time: wallTime.optional(), durationMinutes: z.number().int().min(1).max(720).optional() }),
+  // TASK-038: calendar -> calendar (optionally retimed), or legacy -> legacy keeping the task's own time. The backend
+  // refuses a mixed pair or a legacy retime (DOMAIN_LIMIT) before any receipt exists.
+  plan_move: z.strictObject({ ...itemRef, target: z.union([calendarTarget, legacyTarget]), destination: z.union([calendarTarget, legacyTarget]),
+    time: wallTime.optional(), durationMinutes: z.number().int().min(1).max(720).optional() }),
   plan_delete: z.strictObject(itemRef),
 });
 const planRef = z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() });
-const completionPlanRef = z.strictObject({ store: z.enum(['calendar', 'legacy']), id: z.string(), date: z.string() });
+const legacyOrCalendarPlanRef = z.strictObject({ store: z.enum(['calendar', 'legacy']), id: z.string(), date: z.string() });
 const mutationResult = kind => output(kind, z.strictObject({ actionId: z.string(), itemId: z.string(), operation: z.literal(kind),
-  target: kind === 'plan_set_completion' ? completionPlanRef : planRef,
-  ...(kind === 'plan_move' ? { destination: planRef } : {}),
+  target: kind === 'plan_set_completion' || kind === 'plan_move' ? legacyOrCalendarPlanRef : planRef,
+  ...(kind === 'plan_move' ? { destination: legacyOrCalendarPlanRef } : {}),
   item: z.strictObject({ completed: z.boolean(), deleted: z.boolean(), schedule: schedule.nullable() }),
   revision: z.string(), previousRevision: z.string(), changed: z.boolean(), idempotentReplay: z.boolean() }));
 const REVISION_RULES = ' Name the item by itemId and its plan target exactly as get_plan/get_item returned them, and pass that read\'s item revision as expectedRevision. STALE_REVISION means the item changed since that read: read it again and confirm with the user; a new attempt then uses a NEW actionId. An unknown outcome may already be committed: retry with the same actionId, capturedAt, expectedRevision and parameters, never a new actionId.';
@@ -119,7 +122,7 @@ export const WRITE_TOOLS = Object.freeze({
   plan_edit: mutationTool('plan_edit', { title: 'Edit a plan task',
     description: 'Change ONE existing task within the SAME plan day: a new title, a new explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date), a new durationMinutes, or clearSchedule: true to make it an anytime task. Omitted fields stay exactly as they are. It never moves the task to another day (use plan_move), completes or deletes it.' }),
   plan_move: mutationTool('plan_move', { title: 'Move a plan task to another day',
-    description: 'Move ONE existing task to another calendar-day plan (destination cal1:YYYY-MM-DD), keeping the same task identity; optionally give a new explicit time and/or durationMinutes, judged on the destination date. Tasks added from ChatGPT move like any other (same task, same itemId at the destination). Tasks promoted from Brain Dump, tasks recovered from an earlier day, and a ChatGPT task returning to a day it already left cannot be moved yet (DOMAIN_LIMIT): say so instead of deleting and re-adding.' }),
+    description: 'Move ONE existing task to another plan day, keeping the same task identity. A calendar plan (cal1:YYYY-MM-DD) moves to another calendar plan, optionally with a new explicit time and/or durationMinutes judged on the destination date. For an account still on the older plan format, a legacy plan (store legacy, id YYYY-MM-DD, exactly as get_today/get_plan returned it) moves to another legacy plan day (e.g. tomorrow\'s date), keeping its own time; no time or duration may be given. Tasks added from ChatGPT move like any other (same task, same itemId at the destination). Brain Dump tasks bound to their day, tasks recovered from an earlier day, and a ChatGPT task returning to a day it already left cannot be moved yet (DOMAIN_LIMIT): say so instead of deleting and re-adding. To move several tasks (e.g. "move my unfinished tasks to tomorrow"): read the plan, list the exact unfinished tasks and the destination date, get the user\'s approval of that exact selection, then call this tool once per approved task with its own new actionId and that task\'s revision; afterwards read both plan days to verify, and report each task as moved, refused (with the reason) or unknown. Undo is a move back to the original day.' }),
   plan_delete: mutationTool('plan_delete', { title: 'Remove a plan task', destructive: true,
     description: 'Remove ONE existing task from its plan. Confirm with the user which task first. The task is tombstoned (it stops appearing), never physically erased, and cannot be restored by this tool.' }),
 });

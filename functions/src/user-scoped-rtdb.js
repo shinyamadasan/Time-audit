@@ -192,6 +192,17 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     url.searchParams.set('auth', idToken);
     return url;
   }
+  /** TASK-038: the owner's legacy plan collection, for the ONE atomic compare-and-set a legacy cross-day move needs.
+   *  Nothing else, at no other depth. */
+  function legacyPlansUrl(identity, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`) {
+      throw new AuthorityBoundaryViolation('legacy plans address is not derived from the bound UID');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/plans.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
   /** TASK-036: one EXISTING legacy fence child — a fenced Brain Dump item (`bdp1|<captureId>`) only; an Action API item
    *  is never in a legacy plan (plan_create is calendar-only). Never another collection or depth. */
   function legacyFenceItemUrl(identity, dateKey, itemId, idToken) {
@@ -254,6 +265,22 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       }
       const idToken = await idTokens.getIdToken(identity.firebaseUid);
       return putIfMatch(legacyFenceItemUrl(identity, dateKey, itemId, idToken), record, etag, 'legacy-fence-item');
+    },
+    /** TASK-038: every legacy plan record and the collection ETag, as the ordinary owner (bounded like every read). */
+    async readLegacyPlansWithEtag(identity) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return readWithEtag(legacyPlansUrl(identity, idToken), 'legacy-plans');
+    },
+    /** TASK-038: atomic compare-and-set of the whole legacy collection, as the ordinary owner, through the unchanged rules
+     *  (which refuse every legacy write once the account has cut over). Only over an EXISTING collection (a move's source
+     *  plan exists), legacy date keys only. @returns {Promise<'written'|'changed'>} */
+    async putLegacyPlansIfMatch(identity, plans, etag) {
+      if (typeof etag !== 'string' || !etag || etag === 'null_etag' || !plans || typeof plans !== 'object' || Array.isArray(plans)
+        || Object.keys(plans).some(key => !legacyPlanKey(key))) {
+        throw new AuthorityBoundaryViolation('legacy plans write requires legacy plan records and the collection ETag');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return putIfMatch(legacyPlansUrl(identity, idToken), plans, etag, 'legacy-plans');
     },
     /** TASK-012: every calendar plan record and the collection ETag, as the ordinary owner (bounded like every read). */
     async readCalendarPlansWithEtag(identity) {

@@ -16,6 +16,8 @@
 //                        content (ETag), under which the rules refuse every other write; then ONE atomic multi-path
 //                        update the rules accept only under that lock, each end checked against the other (R1). A fenced
 //                        Brain Dump item (bdp1|) is refused: its capture's promotion names its one location.
+//                        TASK-038 (DECISIONS #42): a legacy array item moves legacy -> legacy the same way, both records in
+//                        ONE compare-and-set of the plans collection, each changed in place (#41), its own time kept.
 //   plan_delete          the in-place stamped tombstone (`deleted: true`), never a physical delete
 //
 // Location (decided by the item's own identity, never by the caller): an Action API item (`api1_`) or a fenced
@@ -153,9 +155,22 @@ function inPlaceRecord(record, next, { stampMs, writer }) {
   return { ...record, items, updatedAt: Math.max(Number.isSafeInteger(record.updatedAt) ? record.updatedAt : 0, stampMs), updatedBy: writer };
 }
 
-/** A move's view of the calendarPlans collection: the source copy, the destination copy, and the collection ETag. */
+/** TASK-038: the destination record with `next` in place of its own earlier copy (a tombstone this id left there) or,
+ *  absent one, appended; an absent record is created exactly as the app's legacy save creates one. Every other byte stays
+ *  as stored. */
+function inPlaceDestination(record, next, { stampMs, writer }) {
+  if (record === null) return { items: [next], updatedAt: stampMs, updatedBy: writer };
+  const items = record.items ?? [];
+  if (Object.values(items).some(item => object(item) && item.id === next.id)) return inPlaceRecord(record, next, { stampMs, writer });
+  const keys = Object.keys(items).map(Number).filter(Number.isSafeInteger);
+  const appended = Array.isArray(items) ? [...items, next] : { ...items, [String(keys.length ? Math.max(...keys) + 1 : 0)]: next };
+  return inPlaceRecord({ ...record, items: appended }, next, { stampMs, writer });
+}
+
+/** A move's view of its store's plan collection (calendarPlans, or TASK-038's legacy plans): the source copy, the
+ *  destination copy, and the collection ETag. */
 async function readMove(identity, domain, planId, destinationId, itemId) {
-  const { value, etag } = await domain.readCalendarPlansWithEtag(identity);
+  const { value, etag } = await (storeOf(planId) === 'legacy' ? domain.readLegacyPlansWithEtag(identity) : domain.readCalendarPlansWithEtag(identity));
   if (value !== null && !object(value)) throw malformed('malformed-plan-collection');
   const plans = value ?? {};
   const find = id => {
@@ -239,7 +254,9 @@ export function planMutation(kind, parameters, pre, { stampMs, writer, date, end
   }
   if (destination.ended) throw pastTarget();
   const draft = retimed(pre, parameters);
-  assertValidOn(destination.date, draft);
+  // TASK-038: a legacy move changes no time field (the envelope refuses a retime), and a legacy wall time and duration do not
+  // depend on the date, so the item is kept exactly as stored, never re-judged (stored shapes the editor would now refuse move too).
+  if (store !== 'legacy') assertValidOn(destination.date, draft);
   if (planItemKind(pre) === 'priority' && destination.activePriorities >= PRIORITY_MAX) {
     throw new ApiError('DOMAIN_LIMIT', `That day's Top ${PRIORITY_MAX} is already full. Finish, remove or demote one first.`, { reason: 'priority-cap' });
   }
@@ -255,7 +272,7 @@ function resultFor({ command, location, item, previousRevision, changed, account
   const zoned = storeOf(location) === 'legacy' && !item.whenTz && accountZone ? { ...item, whenTz: accountZone } : item;
   return { actionId: command.actionId, itemId: command.parameters.itemId, operation: command.kind,
     target: { store: storeOf(command.parameters.target.id), id: command.parameters.target.id, date: dateOf(command.parameters.target.id) },
-    ...(command.kind === 'plan_move' ? { destination: { store: 'calendar', id: location, date } } : {}),
+    ...(command.kind === 'plan_move' ? { destination: { store: storeOf(location), id: location, date } } : {}),
     item: { completed: item.done === true, deleted: item.deleted === true, schedule: item.deleted === true ? null : scheduleOf(date, zoned) },
     revision: itemRevision(location, item), previousRevision, changed };
 }
@@ -358,18 +375,22 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       reader = await createPlanRead(identity, { domain, nowMs });
       accountZone = reader.timezone;
       source = await reader.read({ store, id: planId });
-      if (store === 'legacy') {
-        // Only a date whose plan is still the legacy record: a boundary-owned date's record is no longer shown.
-        const day = reader.legacyDay(planId);
+      // Only a date whose plan is still the legacy record: a boundary-owned date's record is no longer shown.
+      const asLegacyDay = read => {
+        const day = reader.legacyDay(read.target.id);
         if (!day) throw new ApiError('NOT_FOUND', 'That plan target is not authoritative.', { reason: 'plan-target' });
-        source = { ...source, target: { ...source.target, startMs: day.startMs, endMs: day.endMs } };
-      }
+        return { ...read, target: { ...read.target, startMs: day.startMs, endMs: day.endMs } };
+      };
+      if (store === 'legacy') source = asLegacyDay(source);
       physical = await readPhysical(identity, domain, planId, itemId);
       if (destinationId) {
-        destination = await reader.read({ store: 'calendar', id: destinationId });
+        destination = await reader.read({ store, id: destinationId });
+        if (store === 'legacy') destination = asLegacyDay(destination);
         // An array item moves through ONE collection compare-and-set; an Action API item through ONE atomic
-        // relocation of its two fence children, so its destination is its own exact child there.
+        // relocation of its two fence children, so its destination is its own exact child there. A legacy fence child is
+        // a Brain Dump item, which never moves (refused below), so nothing is read for it.
         if (physical.where === 'record') physical = await readMove(identity, domain, planId, destinationId, itemId);
+        else if (store === 'legacy') physical.destination = { item: null };
         else physical.destination = { item: (await domain.readPlanFenceItemWithEtag(identity, destinationId, itemId)).value };
       }
     } catch (error) {
@@ -415,6 +436,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     let planned;
     try {
       // A legacy day is also ended once the account has cut over (DECISIONS #29); the rules then refuse its writes too.
+      // (That ends a legacy move's source as well, so its legacy destination needs no separate cutover check.)
       planned = planMutation(kind, parameters, withoutLock(pre), { stampMs, writer: actionId, date, store,
         ended: source.target.endMs <= nowMs || (store === 'legacy' && reader.calendarActivated),
         today: reader.today, accountZone: reader.timezone,
@@ -479,6 +501,12 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
         // only under THIS action's active lock (so the source is still the locked pre-image) with the destination absent.
         outcome = await domain.relocateActionPlanItem(identity, { actionId, sourcePlanId: planId, destinationPlanId: destinationId, itemId,
           tombstone: planned.source, moved: planned.destination });
+      } else if (planned.destination && store === 'legacy') {
+        // TASK-038: both legacy records in ONE compare-and-set of the plans collection, each changed in place (#41).
+        const plans = { ...physical.plans,
+          [planId]: inPlaceRecord(physical.record, planned.source, { stampMs, writer: actionId }),
+          [destinationId]: inPlaceDestination(physical.destination.record, planned.destination, { stampMs, writer: actionId }) };
+        outcome = await domain.putLegacyPlansIfMatch(identity, plans, physical.etag);
       } else if (planned.destination) {
         // Destination origin frozen in the same write when absent, in the zone the destination was judged in.
         const plans = { ...physical.plans,
@@ -491,6 +519,12 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       if (outcome === 'written') ownWriteLanded = true;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'RETRYABLE_TRANSPORT') { ownWriteUnknown = true; continue; }
+      // TASK-038: the rules re-check every stored legacy item on a collection write, so a refusal here most often means
+      // unrelated history they no longer accept (DECISIONS #42 known limit). Nothing landed; say so, not "access refused".
+      if (error instanceof ApiError && error.code === 'FORBIDDEN' && physical.where === 'collection' && store === 'legacy') {
+        return refuse(conflict('ChronaSense could not move this task from the conversation (its stored plan history blocks this kind of change). Nothing was moved; move it in the ChronaSense app.',
+          'legacy-history-unwritable'));
+      }
       if (error instanceof ApiError && error.code === 'FORBIDDEN' && physical.where === 'fence') {
         const holds = pre.moveLock?.actionId === actionId && pre.moveLock?.destination === destinationId;
         // Our own lock was refused at relocation: it expired (server clock). Take it again, once, from the same pre-image.

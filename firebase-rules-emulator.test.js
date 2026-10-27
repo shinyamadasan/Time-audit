@@ -1146,3 +1146,114 @@ test('TASK-036 (emulator): conditional writes and isolation of the legacy primit
   assert.equal(superseded.body.error?.code, 'PAST_TARGET_IMMUTABLE', JSON.stringify(superseded.body));
   assert.equal((await db.read(planAt)).items[0].done, false);
 });
+
+// ── TASK-038 legacy -> legacy move (DECISIONS #42) ──────────────────────────
+// The Function's legacy move against the REAL server and rules: ONE owner-token ETag compare-and-set of rooms/<uid>/plans
+// carrying the source tombstone and the destination copy, a race that changes the collection between read and write,
+// the cutover refusal, account isolation, and the fail-closed answer when unrelated stored history no longer validates.
+const addDays = (dateKey, days) => { const d = new Date(`${dateKey}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+const LEGACY_NEXT = addDays(LEGACY_DATE, 1);
+const moveTo = (itemId, from = LEGACY_DATE, to = LEGACY_NEXT) => ({ target: { store: 'legacy', id: from }, itemId, destination: { store: 'legacy', id: to } });
+async function legacyItemOn(handle, itemId, dateKey) {
+  const requestId = randomUUID();
+  const response = await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_item',
+    parameters: { source: 'plan', id: itemId, target: { store: 'legacy', id: dateKey } } } }));
+  return response.body.result;
+}
+async function legacyPlanItems(handle, dateKey) {
+  const requestId = randomUUID();
+  const response = await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_plan', parameters: { target: { store: 'legacy', id: dateKey } } } }));
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  return response.body.result.plan.items.map(item => item.itemId);
+}
+
+test('TASK-038 (emulator): move two tasks to tomorrow through the real rules in one CAS each; replay; Undo; unrelated days and the other account untouched', async () => {
+  const { db, handle } = await legacyAccount();
+  const plansAt = `${ROOM}/plans`;
+  const older = addDays(LEGACY_DATE, -3);
+  assert.equal((await asClient(db, 'PUT', `${plansAt}/${older}`, ALICE, { updatedAt: T, updatedBy: 'phone', items: [legacyTask('o1', 'Old day task')] })).status, 200);
+  const before = await db.read(plansAt);
+  const mallory = await db.read('rooms/uid_mallory/plans');
+  for (const itemId of ['p1', 'p2']) {
+    const actionId = `act1_${randomUUID()}`;
+    const revision = (await legacyItemOn(handle, itemId, LEGACY_DATE)).item.revision;
+    const moved = await handle(mutationCommand('plan_move', moveTo(itemId), revision, actionId));
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.deepEqual(moved.body.result.destination, { store: 'legacy', id: LEGACY_NEXT, date: LEGACY_NEXT });
+    assert.equal(moved.body.result.revision, (await legacyItemOn(handle, itemId, LEGACY_NEXT)).item.revision, 'readback revision == result');
+    const replay = await handle(mutationCommand('plan_move', moveTo(itemId), revision, actionId));
+    assert.equal(replay.body.result.idempotentReplay, true);
+  }
+  const after = await db.read(plansAt);
+  assert.deepEqual(after[older], before[older], 'an unrelated day is byte-identical');
+  assert.deepEqual(after[LEGACY_DATE].items[2], before[LEGACY_DATE].items[2], 'the unselected task is byte-identical');
+  assert.deepEqual(after[LEGACY_DATE].preparation, before[LEGACY_DATE].preparation);
+  assert.deepEqual(after[LEGACY_DATE].items.slice(0, 2).map(item => [item.id, item.deleted, item.movedToDayId]), [['p1', true, LEGACY_NEXT], ['p2', true, LEGACY_NEXT]]);
+  assert.deepEqual(after[LEGACY_NEXT].items.map(item => [item.id, item.task, item.durationMinutes ?? null, item.relocationRevision.toDayId]),
+    [['p1', 'Post remaining products', null, LEGACY_NEXT], ['p2', 'Make price menu', 60, LEGACY_NEXT]]);
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_DATE), ['p3']);
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_NEXT), ['p1', 'p2']);
+  assert.deepEqual(await db.read('rooms/uid_mallory/plans'), mallory, 'the other account is untouched');
+
+  // Undo p2: back to today, through the same rules; no duplicate either day.
+  const back = await handle(mutationCommand('plan_move', moveTo('p2', LEGACY_NEXT, LEGACY_DATE), (await legacyItemOn(handle, 'p2', LEGACY_NEXT)).item.revision));
+  assert.equal(back.status, 200, JSON.stringify(back.body));
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_DATE), ['p2', 'p3']);
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_NEXT), ['p1']);
+  assert.equal((await db.read(`${plansAt}/${LEGACY_DATE}`)).items.filter(item => item.id === 'p2').length, 1);
+});
+
+test('TASK-038 (emulator): the collection CAS refuses a stale ETag; app writes after ChatGPT read keep another day and refuse a stale item (mid-call interleaving: plan-legacy-move.test.js)', async () => {
+  const { db, domain, handle } = await legacyAccount();
+  const identity = { firebaseUid: 'alice', roomId: 'uid_alice' };
+  // The collection CAS: a stale ETag never lands (412 -> 'changed').
+  const { value } = await domain.readLegacyPlansWithEtag(identity);
+  assert.equal(await domain.putLegacyPlansIfMatch(identity, { ...value, [LEGACY_NEXT]: { updatedAt: T, updatedBy: 'x', items: [legacyTask('z', 'z')] } }, STALE_ETAG), 'changed');
+  assert.equal(await db.read(`${ROOM}/plans/${LEGACY_NEXT}`), null);
+  // The app writes tomorrow's plan after ChatGPT read today's: the move still lands and keeps the app's plan.
+  assert.equal((await asClient(db, 'PUT', `${ROOM}/plans/${LEGACY_NEXT}`, ALICE, { updatedAt: T + 3, updatedBy: 'phone', items: [legacyTask('t1', 'Planned in the app')] })).status, 200);
+  const moved = await handle(mutationCommand('plan_move', moveTo('p1'), (await legacyItemOn(handle, 'p1', LEGACY_DATE)).item.revision));
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.deepEqual((await db.read(`${ROOM}/plans/${LEGACY_NEXT}`)).items.map(item => item.id), ['t1', 'p1']);
+  // The app renames p2 after ChatGPT read it: the old revision is refused and nothing moves.
+  const stale = (await legacyItemOn(handle, 'p2', LEGACY_DATE)).item.revision;
+  const record = await db.read(`${ROOM}/plans/${LEGACY_DATE}`);
+  record.items = record.items.map(item => (item.id === 'p2' ? { ...item, task: 'Make price menu (v2)', updatedAt: item.updatedAt + 9 } : item));
+  assert.equal((await asClient(db, 'PUT', `${ROOM}/plans/${LEGACY_DATE}`, ALICE, record)).status, 200);
+  const refused = await handle(mutationCommand('plan_move', moveTo('p2'), stale));
+  assert.equal(refused.body.error?.code, 'STALE_REVISION', JSON.stringify(refused.body));
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_DATE), ['p2', 'p3']);
+  assert.deepEqual(await legacyPlanItems(handle, LEGACY_NEXT), ['p1', 't1']);
+});
+
+test('TASK-038 (emulator): isolation and cutover; another account can neither read nor move these tasks; no legacy move after cutover', async () => {
+  const { db, domain, handle, handlerFor } = await legacyAccount();
+  const identity = { firebaseUid: 'alice', roomId: 'uid_alice' };
+  const intruder = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: { getIdToken: async () => MALLORY } });
+  await assert.rejects(intruder.readLegacyPlansWithEtag(identity), error => error.code === 'FORBIDDEN');
+  const fresh = await domain.readLegacyPlansWithEtag(identity);
+  await assert.rejects(intruder.putLegacyPlansIfMatch(identity, { ...fresh.value, [LEGACY_NEXT]: { items: [] } }, fresh.etag), error => error.code === 'FORBIDDEN');
+  const revision = (await legacyItemOn(handle, 'p1', LEGACY_DATE)).item.revision;
+  const crossed = await handlerFor('mallory')(mutationCommand('plan_move', moveTo('p1'), revision));
+  assert.equal(crossed.body.error?.code, 'STALE_REVISION', 'the bound account only ever sees its own room');
+  assert.equal(await db.read(`${ROOM}/plans/${LEGACY_NEXT}`), null);
+  assert.equal(await db.read(`rooms/uid_mallory/plans/${LEGACY_NEXT}`), null);
+  // After the cutover the rules refuse the collection write, and the Function refuses before writing.
+  await seedCalendarAuthority(db);
+  const afterCutover = await domain.readLegacyPlansWithEtag(identity);
+  await assert.rejects(domain.putLegacyPlansIfMatch(identity, { ...afterCutover.value, [LEGACY_NEXT]: { items: [] } }, afterCutover.etag), error => error.code === 'FORBIDDEN');
+  const superseded = await handle(mutationCommand('plan_move', moveTo('p1'), (await legacyItemOn(handle, 'p1', LEGACY_DATE)).item.revision));
+  assert.equal(superseded.body.error?.code, 'PAST_TARGET_IMMUTABLE', JSON.stringify(superseded.body));
+  assert.equal(await db.read(`${ROOM}/plans/${LEGACY_NEXT}`), null);
+});
+
+test('TASK-038 (emulator, known limit): stored history the rules no longer accept fails the move closed; refused, nothing written', async () => {
+  const { db, handle } = await legacyAccount();
+  // A pre-fence Brain Dump array item whose capture no longer exists: readable, but not writable again.
+  await db.seed(`${ROOM}/plans/${addDays(LEGACY_DATE, -30)}`, { updatedAt: T, updatedBy: 'phone', items: [legacyTask('bdp1|gone01', 'Old Brain Dump task')] });
+  const before = await db.read(`${ROOM}/plans`);
+  const response = await handle(mutationCommand('plan_move', moveTo('p1'), (await legacyItemOn(handle, 'p1', LEGACY_DATE)).item.revision));
+  assert.equal(response.body.error?.code, 'CONFLICT', JSON.stringify(response.body));
+  assert.match(response.body.error.message, /Nothing was moved; move it in the ChronaSense app/);
+  assert.deepEqual(await db.read(`${ROOM}/plans`), before, 'nothing written');
+});

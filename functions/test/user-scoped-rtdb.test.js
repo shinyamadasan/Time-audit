@@ -358,3 +358,26 @@ test('TASK-036: legacy record and fence CAS are pinned to rooms/uid_<uid>/plans|
     assert.equal(outcome, expected, String(status));
   }
 });
+
+test('TASK-038: the legacy move collection CAS is pinned to rooms/uid_<uid>/plans, legacy date keys only, existing collection only', async () => {
+  const { rtdb, calls, tokenCalls } = ownerPrimitives({ body: {} });
+  await rtdb.readLegacyPlansWithEtag(IDENTITY);
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/plans.json`);
+  assert.equal(calls[0][1].headers['X-Firebase-ETag'], 'true');
+  assert.equal(await rtdb.putLegacyPlansIfMatch(IDENTITY, { '2026-10-27': { items: [] }, '2026-10-28': { items: [] } }, '"e1"'), 'written');
+  assert.equal(calls[1][1].method, 'PUT');
+  assert.equal(calls[1][1].headers['if-match'], '"e1"');
+  assert.deepEqual(tokenCalls, [[UID], [UID]], 'never an action-claimed token');
+  for (const [plans, tag] of [[{ '2026-10-27': {} }, 'null_etag'], [{ '2026-10-27': {} }, ''], [{ settings: {} }, '"e1"'],
+    [{ 'cal1:2026-10-27': {} }, '"e1"'], [{ '2026-02-30': {} }, '"e1"'], [{ '../x': {} }, '"e1"'], [[], '"e1"'], [null, '"e1"']]) {
+    await assert.rejects(rtdb.putLegacyPlansIfMatch(IDENTITY, plans, tag), AuthorityBoundaryViolation, JSON.stringify(plans));
+  }
+  for (const identity of [{ firebaseUid: UID, roomId: 'uid_other' }, { firebaseUid: '../x', roomId: 'uid_../x' }]) {
+    await assert.rejects(rtdb.readLegacyPlansWithEtag(identity), AuthorityBoundaryViolation);
+    await assert.rejects(rtdb.putLegacyPlansIfMatch(identity, { '2026-10-27': {} }, '"e1"'), AuthorityBoundaryViolation);
+  }
+  for (const [status, expected] of [[412, 'changed'], [401, 'FORBIDDEN'], [403, 'FORBIDDEN'], [503, 'RETRYABLE_TRANSPORT']]) {
+    const outcome = await ownerPrimitives({ status }).rtdb.putLegacyPlansIfMatch(IDENTITY, { '2026-10-27': {} }, '"e1"').catch(error => error.code);
+    assert.equal(outcome, expected, String(status));
+  }
+});
