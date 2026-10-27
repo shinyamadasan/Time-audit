@@ -2637,3 +2637,20 @@ not run: Playwright browser suite (no browser/app code changed); RTDB rules emul
     "review S2/N-a" red; both restored.
   - Independent re-review: PASS WITH NOTES (REVIEW.md).
 not run: Playwright, RTDB emulator, production.
+
+## TASK-036 G1 pre-merge verification · 2026-10-27
+  - origin/main 0e04ebb unchanged; task-036 = 0e04ebb + reviewed commits ba603e7, ac09d4b + this test-only commit.
+    Production code (functions/src, worker src) identical to the reviewed ac09d4b.
+  - NEW real RTDB emulator integration (firebase-rules-emulator.test.js, emulator 4.11.2 checksum-verified, real
+    firebase.rules.json, real createUserScopedRtdb + createActionApiHandler): 3 tests — legacy completion of two
+    tasks + replay + Undo (pruned doneAt) + stale revision refused with the app edit kept, neighbour/preparation/
+    other account byte-identical; legacy-fenced Brain Dump done/undo at its child, origin pinned; ETag
+    conditional write (stale 412 -> changed, real ETag -> written), another account token FORBIDDEN on read and
+    write, a command bound to another account never touches this room, post-cutover legacy write FORBIDDEN by the
+    rules and PAST_TARGET_IMMUTABLE from the Function.
+  - npm run test:fence (CI's firebase-fence job): exit 0 — 160 tests, 160 pass, 0 fail, 0 skipped.
+  - root npm test: exit 0 — 2337 tests, 2336 pass, 0 fail, 1 skipped (pre-existing env-gated control proof).
+  - functions 263/263; worker 43/43; check:bundle OK; eslint on changed functions/worker code 0 problems.
+  - Finding while writing the isolation test: an item revision is a content hash (store, date, item) without the
+    room, so identical content in two accounts has identical revisions. Not an isolation defect: every command is
+    bound to the verified subject's own room (TASK-029) and writes only there; the calendar path is the same.

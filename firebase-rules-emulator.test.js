@@ -27,6 +27,7 @@ import { createReceiptStore } from './functions/src/receipts.js';
 import { createUserScopedRtdb } from './functions/src/user-scoped-rtdb.js';
 import { getBrainDump } from './functions/src/brain-dump-query.js';
 import { KEYS, NOW_MS, signedRequest } from './functions/test/support.js';
+import { localPlanDate } from './functions/shared/plan-tomorrow-model.js';
 import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, finalizePromotion,
   mergeCaptureRecords, normalizeCapture, reopenCapture, triageCapture } from './brain-dump-model.js';
 import {
@@ -1026,3 +1027,122 @@ function createHandler(db, domain) {
   return createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: 'alice' },
     nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS });
 }
+
+// ── TASK-036 legacy-target completion (DECISIONS #41) ───────────────────────
+// The Function's legacy completion against the REAL server and rules: the owner-token ETag compare-and-set of
+// plans/<date> (one item replaced) and of a legacy planFences child, the cutover refusal, and account isolation.
+const LEGACY_DATE = localPlanDate(NOW_MS, 'Asia/Manila');
+const LEGACY = { store: 'legacy', targetId: LEGACY_DATE, key: LEGACY_DATE };
+const legacyTask = (id, task, extra = {}) => ({ id, task, when: '', done: false, kind: 'task', updatedAt: T, updatedBy: 'phone', ...extra });
+const legacyPlan = (stamp = T) => ({ updatedAt: stamp, updatedBy: 'phone', preparation: { targetDate: LEGACY_DATE, firstPreparedAt: T - 1, timezone: 'Asia/Manila' },
+  items: [legacyTask('p1', 'Post remaining products', { updatedAt: stamp }), legacyTask('p2', 'Make price menu', { durationMinutes: 60, updatedAt: stamp }),
+    legacyTask('p3', 'Pay apartment kuryente', { updatedAt: stamp })] });
+async function legacyAccount() {
+  const db = await freshDb();
+  for (const [uid, auth, stamp] of [['alice', ALICE, T], ['mallory', MALLORY, T + 7]]) {
+    assert.equal((await asClient(db, 'PUT', `rooms/uid_${uid}/settings`, auth, { timezone: 'Asia/Manila' })).status, 200);
+    assert.equal((await asClient(db, 'PUT', `rooms/uid_${uid}/plans/${LEGACY_DATE}`, auth, legacyPlan(stamp))).status, 200, `${uid} wrote a legacy plan normally`);
+  }
+  const infra = infraFor(db);
+  const domain = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens });
+  const handlerFor = uid => createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: uid },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS, log: () => {} });
+  return { db, domain, handle: handlerFor('alice'), handlerFor };
+}
+const atLegacy = () => ({ store: 'legacy', id: LEGACY_DATE });
+async function legacyItem(handle, itemId) {
+  const requestId = randomUUID();
+  const response = await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_item',
+    parameters: { source: 'plan', id: itemId, target: atLegacy() } } }));
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  return response.body.result;
+}
+
+test('TASK-036 (emulator): legacy completion and Undo through the real rules; one item replaced; replay; stale refused; neighbours and the other account untouched', async () => {
+  const { db, handle } = await legacyAccount();
+  const planAt = `${ROOM}/plans/${LEGACY_DATE}`;
+  const malloryAt = `rooms/uid_mallory/plans/${LEGACY_DATE}`;
+  const before = await db.read(planAt);
+  const mallory = await db.read(malloryAt);
+  const doneIds = [];
+  for (const itemId of ['p1', 'p2']) {
+    const actionId = `act1_${randomUUID()}`;
+    const revision = (await legacyItem(handle, itemId)).item.revision;
+    const done = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId, completed: true }, revision, actionId));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.deepEqual(done.body.result.target, { store: 'legacy', id: LEGACY_DATE, date: LEGACY_DATE });
+    assert.equal(done.body.result.revision, (await legacyItem(handle, itemId)).item.revision, 'readback revision == result');
+    const replay = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId, completed: true }, revision, actionId));
+    assert.equal(replay.body.result.idempotentReplay, true);
+    doneIds.push(actionId);
+  }
+  const after = await db.read(planAt);
+  assert.deepEqual(after.items.map(item => [item.id, item.done]), [['p1', true], ['p2', true], ['p3', false]]);
+  assert.deepEqual(after.items[2], before.items[2], 'the remaining task is byte-identical');
+  assert.deepEqual(after.preparation, before.preparation, 'preparation kept');
+  assert.equal(after.items[1].durationMinutes, 60);
+  assert.equal(after.items[1].updatedBy, doneIds[1]);
+  assert.deepEqual(await db.read(malloryAt), mallory, 'the other account is untouched');
+
+  // Undo: completed:false; RTDB prunes doneAt and the planned post-state still proves APPLIED.
+  const undo = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId: 'p2', completed: false }, (await legacyItem(handle, 'p2')).item.revision));
+  assert.equal(undo.status, 200, JSON.stringify(undo.body));
+  const undone = (await db.read(planAt)).items[1];
+  assert.equal(undone.done, false);
+  assert.equal(undone.doneAt, undefined);
+
+  // The owner's app edits after ChatGPT read: the old revision is refused and the app's edit stands.
+  const stale = (await legacyItem(handle, 'p1')).item.revision;
+  const record = await db.read(planAt);
+  record.items = record.items.map(item => item.id === 'p1' ? { ...item, done: false, task: 'Post remaining products (shop)', updatedAt: item.updatedAt + 1, updatedBy: 'phone' } : item);
+  assert.equal((await asClient(db, 'PUT', planAt, ALICE, record)).status, 200);
+  const refused = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId: 'p1', completed: true }, stale));
+  assert.equal(refused.body.error?.code, 'STALE_REVISION', JSON.stringify(refused.body));
+  const kept = (await db.read(planAt)).items[0];
+  assert.deepEqual([kept.task, kept.done], ['Post remaining products (shop)', false]);
+});
+
+test('TASK-036 (emulator): a legacy-fenced Brain Dump task completes and un-completes at its own child through the real fence rules', async () => {
+  const { db, handle } = await legacyAccount();
+  const childAt = `${ROOM}/planFences/${LEGACY_DATE}/${ITEM_ID}`;
+  await db.seed(captureAt(), promotedCapture(LEGACY));
+  await db.seed(childAt, fencedItem(LEGACY));
+  const record = await db.read(`${ROOM}/plans/${LEGACY_DATE}`);
+  for (const completed of [true, false]) {
+    const response = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId: ITEM_ID, completed }, (await legacyItem(handle, ITEM_ID)).item.revision));
+    assert.equal(response.status, 200, `${completed}: ${JSON.stringify(response.body)}`);
+    assert.equal((await db.read(childAt)).done, completed);
+  }
+  assert.deepEqual((await db.read(childAt)).brainDumpOrigin, origin(LEGACY), 'origin pinned');
+  assert.deepEqual(await db.read(`${ROOM}/plans/${LEGACY_DATE}`), record, 'the plan record is untouched');
+});
+
+test('TASK-036 (emulator): conditional writes and isolation of the legacy primitives; no legacy write after the cutover', async () => {
+  const { db, domain, handle, handlerFor } = await legacyAccount();
+  const identity = { firebaseUid: 'alice', roomId: 'uid_alice' };
+  const planAt = `${ROOM}/plans/${LEGACY_DATE}`;
+  // A stale ETag never lands (412 -> 'changed'); the real ETag does.
+  const { value, etag } = await domain.readLegacyPlanWithEtag(identity, LEGACY_DATE);
+  assert.equal(await domain.putLegacyPlanIfMatch(identity, LEGACY_DATE, { ...value, updatedAt: T + 1 }, STALE_ETAG), 'changed');
+  assert.equal((await db.read(planAt)).updatedAt, T);
+  assert.equal(await domain.putLegacyPlanIfMatch(identity, LEGACY_DATE, { ...value, updatedAt: T + 1 }, etag), 'written');
+  // Another account's token is refused by the unchanged rules at the owner's paths.
+  const intruder = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: { getIdToken: async () => MALLORY } });
+  await assert.rejects(intruder.readLegacyPlanWithEtag(identity, LEGACY_DATE), error => error.code === 'FORBIDDEN');
+  const fresh = await domain.readLegacyPlanWithEtag(identity, LEGACY_DATE);
+  await assert.rejects(intruder.putLegacyPlanIfMatch(identity, LEGACY_DATE, { ...fresh.value, updatedBy: 'mallory' }, fresh.etag), error => error.code === 'FORBIDDEN');
+  // The Action API bound to the other account only ever sees that account's own room.
+  const revision = (await legacyItem(handle, 'p1')).item.revision;
+  const crossed = await handlerFor('mallory')(mutationCommand('plan_set_completion', { target: atLegacy(), itemId: 'p1', completed: true }, revision));
+  // The binding is the verified subject -> that account's own room (TASK-029); a revision is content, not authority.
+  assert.equal(crossed.body.error?.code, 'STALE_REVISION', 'another account never completes this account task by its revision');
+  assert.equal((await db.read(planAt)).items[0].done, false);
+  assert.equal((await db.read(`rooms/uid_mallory/plans/${LEGACY_DATE}`)).items[0].done, false);
+  // After the cutover the rules refuse every legacy write, and the Function refuses before writing.
+  await seedCalendarAuthority(db);
+  const afterCutover = await domain.readLegacyPlanWithEtag(identity, LEGACY_DATE);
+  await assert.rejects(domain.putLegacyPlanIfMatch(identity, LEGACY_DATE, { ...afterCutover.value, updatedAt: T + 2 }, afterCutover.etag), error => error.code === 'FORBIDDEN');
+  const superseded = await handle(mutationCommand('plan_set_completion', { target: atLegacy(), itemId: 'p1', completed: true }, (await legacyItem(handle, 'p1')).item.revision));
+  assert.equal(superseded.body.error?.code, 'PAST_TARGET_IMMUTABLE', JSON.stringify(superseded.body));
+  assert.equal((await db.read(planAt)).items[0].done, false);
+});
