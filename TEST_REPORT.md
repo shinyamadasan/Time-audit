@@ -2670,6 +2670,24 @@ evidence:
   - Not touched: Worker, Cloudflare Access, OAuth grants, Firebase user data, rules.
 next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
 
+## TASK-036 G3 — owner canary: PASS (owner-run, live ChatGPT) · 2026-10-28
+  - Backend 00011-vup, Worker d1dc8053 (calendar-only schema). get_today: calendar target cal1:2026-10-28.
+  - Completed "Other — Grocery shopping": changed=true; Undo: changed=true; final get_today shows it not done.
+  - The other 5 tasks kept their completion state. All calls user-scoped. Reported by the owner; not machine-captured here.
+
+## TASK-036 G4 — Worker release prepared (NOT deployed) · 2026-10-28
+  - Candidate: workers/chronasense-conversational-bridge at main cc016c6 (tree identical; source unchanged since the
+    reviewed ac09d4b; only src/mcp.js differs from pre-task main). npm test 43/43. Local bundle compile OK,
+    .wrangler-dist/index.js sha256 prefix ffea8471b90c64ba, contains the legacy target schema.
+  - Backend still chronasenseactionapi-00011-vup ACTIVE.
+  - Live Worker: d1dc8053-1b90-4066-8c5a-0588799a1d57 at 100% (rollback target). Its 8 bindings: 6 plaintext
+    (ACCESS_TEAM_DOMAIN, ACCESS_POLICY_AUD, CHRONASENSE_OWNER_SUBJECT, CHRONASENSE_SECOND_SUBJECT,
+    CHRONASENSE_ACTION_API_URL, CHRONASENSE_WORKER_HMAC_KEY_ID), secret CHRONASENSE_WORKER_HMAC_KEY_HEX (present in
+    `wrangler secret list`), OAUTH_KV. The 6 plaintext values were recovered into the gitignored .deploy-vars.json
+    (never printed); both subjects equal the backend mappings; the API URL is the backend's Cloud Run URI + /v1/query.
+  - Not run by Claude: scripts/deploy.mjs plan/--dry-run/--confirm (blocked by the session permission guard as a
+    production deploy; left for the owner, as in TASK-012).
+
 ## TASK-038 — legacy-target rescheduling (branch task-038, uncommitted) · 2026-10-27
   - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
   - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
