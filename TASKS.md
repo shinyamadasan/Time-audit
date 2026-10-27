@@ -1754,7 +1754,16 @@ fix-1 (2026-10-27, owner approved: "APPROVE implementation of Fix 1: accept miss
   - result: implemented and independently reviewed (PASS-with-notes, notes addressed). Held (red-zone sync/validator);
     not merged, not deployed.
   - Her get_today STILL FAILS until Fix 2: 2 malformed time entries -> CONFLICT malformed-entries.
-status-note: Fix 2 (her 2 entries) is under investigation and not approved; no data touched.
+  - merged: main f6f18a5..77651c6 (fast-forward, owner-approved M1+M2); CI and Pages green.
+  - deployed (Phase 4, owner-approved): chronasenseActionApi source-only from 77651c6 -> chronasenseactionapi-00010-vud
+    (was 00009-son). Only the revision changed (env, secret version, service account, IAM, scaling by hash);
+    unauthenticated /v1/query and /v1/command 401; 0 error logs. Worker d1dc8053 untouched.
+  - owner canary PASS (2026-10-27, owner's ChatGPT connection): get_today (Oct 27 plan) and get_brain_dump (16
+    captures), user-scoped, no data modified.
+fix-2 (Phase 3, data): counts-only baseline after deploy: commitments 2/2 valid; entries 2 invalid (1 zero-length,
+  1 negative), neither duplicated nor tombstoned. Repair is app-native by the second user herself (delete the
+  zero-length entry; correct or delete the negative one); not yet performed.
+status-note: waiting on her in-app repair, then the counts-only re-check and two-account acceptance.
 
 <!-- Paste new tasks above this line. -->
 

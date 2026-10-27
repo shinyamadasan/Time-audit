@@ -2572,3 +2572,16 @@ suite: every Playwright spec that exercises commitments (15 specs: calendar-nati
   plan-tomorrow-ui, plan, planning-continuity-fixes, planning-continuity, single-plan-authority, today-simplification,
   tomorrow-timeline-preview, tomorrow-view), chromium, 2 workers, on task-032 bb010ba.
 result: 289 passed, 0 failed (8.1 min). This closes the earlier "not run" gap.
+
+## TASK-032 Phase 4 — backend deploy and owner canary · 2026-10-27
+deploy: chronasenseActionApi, gcloud source-only from an archive of main 77651c6 functions/ (62 files, every blob equal
+  to the commit; differs from the 00009-son source only in commitments-model.js and one test file).
+result: chronasenseactionapi-00010-vud ACTIVE, 100% traffic.
+evidence:
+  - Config before/after (names, settings and value hashes): only `revision` changed. IAM bindings hash unchanged;
+    secret still @v1; both second-user mappings present.
+  - Unauthenticated POST /v1/query and /v1/command -> 401 AUTH_REQUIRED. New revision logs: 0 errors (the 2 warnings
+    are those 401 probes). Worker d1dc8053 unchanged; /authorize 302, /mcp 401.
+  - Owner canary (owner-run, ChatGPT): get_today PASS (Oct 27 plan), get_brain_dump PASS (16 captures).
+  - Second-account counts-only baseline: commitments 2/2 valid (Fix 1 confirmed on real data); entries 2 invalid
+    (1 zero-length, 1 negative) — Phase 3 pending.
