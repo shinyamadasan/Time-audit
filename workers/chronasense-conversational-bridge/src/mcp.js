@@ -72,18 +72,22 @@ const schedule = z.strictObject({ when: z.string(), whenDayOffset: z.number().in
 // TASK-012: one existing plan item, named by its stable itemId + exact plan target + the item revision a read returned.
 const ITEM_REVISION = /^rev1:[A-Za-z0-9_-]{43}$/;
 const calendarTarget = z.strictObject({ store: z.literal('calendar'), id: z.string().regex(/^cal1:\d{4}-\d{2}-\d{2}$/) });
+// TASK-036: completion alone also takes the exact legacy plan get_today returns for an account that never cut over.
+const legacyTarget = z.strictObject({ store: z.literal('legacy'), id: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 const itemRef = { target: calendarTarget, itemId: z.string().min(1).max(200) };
 const wallTime = z.strictObject({ when: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), whenTz: z.string().min(1).max(64),
   whenDayOffset: z.union([z.literal(0), z.literal(1)]).optional() });
 const mutationParameters = Object.freeze({
-  plan_set_completion: z.strictObject({ ...itemRef, completed: z.boolean() }),
+  plan_set_completion: z.strictObject({ ...itemRef, target: z.union([calendarTarget, legacyTarget]), completed: z.boolean() }),
   plan_edit: z.strictObject({ ...itemRef, title: z.string().trim().min(1).max(200).optional(), time: wallTime.optional(),
     durationMinutes: z.number().int().min(1).max(720).optional(), clearSchedule: z.literal(true).optional() }),
   plan_move: z.strictObject({ ...itemRef, destination: calendarTarget, time: wallTime.optional(), durationMinutes: z.number().int().min(1).max(720).optional() }),
   plan_delete: z.strictObject(itemRef),
 });
 const planRef = z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() });
-const mutationResult = kind => output(kind, z.strictObject({ actionId: z.string(), itemId: z.string(), operation: z.literal(kind), target: planRef,
+const completionPlanRef = z.strictObject({ store: z.enum(['calendar', 'legacy']), id: z.string(), date: z.string() });
+const mutationResult = kind => output(kind, z.strictObject({ actionId: z.string(), itemId: z.string(), operation: z.literal(kind),
+  target: kind === 'plan_set_completion' ? completionPlanRef : planRef,
   ...(kind === 'plan_move' ? { destination: planRef } : {}),
   item: z.strictObject({ completed: z.boolean(), deleted: z.boolean(), schedule: schedule.nullable() }),
   revision: z.string(), previousRevision: z.string(), changed: z.boolean(), idempotentReplay: z.boolean() }));
@@ -111,7 +115,7 @@ export const WRITE_TOOLS = Object.freeze({
       target: z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() }), schedule: schedule.nullable(),
       createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })), unknownWrite(planCreateParameters)]) },
   plan_set_completion: mutationTool('plan_set_completion', { title: 'Mark a plan task done or not done',
-    description: 'Mark ONE existing plan task done (completed: true) or not done again (completed: false). Already in that state is a no-op success. A task on an ended day can only be completed if it is scheduled to happen today.' }),
+    description: 'Mark ONE existing plan task done (completed: true) or not done again (completed: false). The target is the plan exactly as get_today/get_plan returned it: a calendar plan (cal1:YYYY-MM-DD) or, for an account still on the older plan format, a legacy plan (store legacy, id YYYY-MM-DD). Already in that state is a no-op success. A task on an ended day can only be completed if it is scheduled to happen today (calendar plans only).' }),
   plan_edit: mutationTool('plan_edit', { title: 'Edit a plan task',
     description: 'Change ONE existing task within the SAME plan day: a new title, a new explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date), a new durationMinutes, or clearSchedule: true to make it an anytime task. Omitted fields stay exactly as they are. It never moves the task to another day (use plan_move), completes or deletes it.' }),
   plan_move: mutationTool('plan_move', { title: 'Move a plan task to another day',

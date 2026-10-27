@@ -2613,3 +2613,17 @@ production (read-only, PASS/FAIL output only):
 data (re-run): repair verify PASS (0 invalid active, 2032 records, other 2030 byte-identical, commitments 2/2 valid);
   counts-only diagnostic: 2028 valid, 4 deleted/missed markers, 0 invalid.
 result: TASK-032 accepted and closed.
+
+## TASK-036 — legacy-target task completion (branch task-036) · 2026-10-27
+suite (local, Node v24.19.0, deps installed as CI does):
+  - functions `npm test`: 261 tests, 261 pass, 0 fail (247 before; +13 legacy completion, +1 adapter pinning).
+  - workers/chronasense-conversational-bridge `npm test`: 43 tests, 43 pass, 0 fail (42 before; 1 updated, +1 e2e).
+  - Worker `npm run check:bundle`: dry-run OK.
+  - root `npm test`: exit 0 — 2334 tests, 2333 pass, 0 fail, 1 skipped (pre-existing env-gated control proof in
+    scripts/cross-repo-compat-check.test.js; skipped is NOT passed). Generated files (rules, functions/shared) no drift.
+  - eslint on changed files: 0 problems. `git diff --check` clean.
+  - Note: a first root run with no root node_modules failed at firebase-rules.test.js (missing `targaryen`) and
+    stopped the && chain; rerun after `npm ci --legacy-peer-deps` (the CI install) is the result above.
+not run: Playwright browser suite (no browser/app code changed); RTDB rules emulator suites (no rules changed);
+  any production call. Production acceptance (second user completes the two Oct 27 tasks) is NOT run: it needs deploy
+  plus explicit authorization.

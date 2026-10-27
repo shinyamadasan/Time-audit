@@ -269,5 +269,6 @@ export async function createPlanRead(identity, { domain, nowMs }) {
     return { state: 'inactive', itemId };
   }
 
-  return { today, timezone, read, stale, inactiveItem };
+  // TASK-036: once any activation fact exists every legacy day is ended (DECISIONS #29); a legacy write is then refused.
+  return { today, timezone, calendarActivated: activation !== null, read, stale, inactiveItem };
 }

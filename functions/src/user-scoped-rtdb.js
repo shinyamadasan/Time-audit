@@ -13,6 +13,7 @@ import { ApiError, AuthorityBoundaryViolation } from './errors.js';
 import { ACTION_ID, captureIdForAction } from './command-identity.js';
 import { validFirebaseUid } from './identity.js';
 import { parseCalendarPlanId } from '../shared/calendar-plan-model.js';
+import { validPlanDate } from '../shared/plan-tomorrow-model.js';
 import { actionPlanItemIdFor, captureIdOfPlanItem, isActionPlanItemId } from '../shared/plan-item-origin.js';
 
 /** The only room collections a user-scoped read may name. Paths are built here, never taken from a request. */
@@ -61,6 +62,8 @@ function jwtClaims(idToken) {
 
 /** A calendar plan's own Firebase key (`cal1:<valid date>`), never a path. */
 const calendarPlanKey = value => typeof value === 'string' && parseCalendarPlanId(value) !== null && value === `cal1:${parseCalendarPlanId(value)}`;
+/** TASK-036: a legacy plan's own Firebase key (a valid `YYYY-MM-DD`), never a path. */
+const legacyPlanKey = value => validPlanDate(value);
 
 /** The custom claims of an action-scoped token. Brain Dump (TASK-010) keeps exactly its original single claim;
  *  a plan create (TASK-011) also names its kind and its ONE target plan, so the rules let that token create
@@ -179,7 +182,79 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     url.searchParams.set('auth', idToken);
     return url;
   }
+  /** TASK-036: the one legacy plan record (`plans/<YYYY-MM-DD>`) a legacy completion compare-and-sets; nothing else. */
+  function legacyPlanRecordUrl(identity, dateKey, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}` || !legacyPlanKey(dateKey)) {
+      throw new AuthorityBoundaryViolation('legacy plan record address is not derived from the bound UID and plan');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/plans/${dateKey}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
+  /** TASK-036: one EXISTING legacy fence child — a fenced Brain Dump item (`bdp1|<captureId>`) only; an Action API item
+   *  is never in a legacy plan (plan_create is calendar-only). Never another collection or depth. */
+  function legacyFenceItemUrl(identity, dateKey, itemId, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
+      || !legacyPlanKey(dateKey) || captureIdOfPlanItem(itemId) === null) {
+      throw new AuthorityBoundaryViolation('legacy fence item address is not derived from the bound UID, plan and a fenced item id');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/planFences/${dateKey}/${encodeURIComponent(itemId)}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
+  /** An ordinary-owner GET with its ETag (value null = authoritatively absent). */
+  async function readWithEtag(url, label) {
+    let response;
+    try { response = await fetchImpl(url, { method: 'GET', headers: { 'X-Firebase-ETag': 'true' }, signal: AbortSignal.timeout(timeoutMs) }); }
+    catch { throw transport(`domain-${label}-read-network`); }
+    if (response.status === 401 || response.status === 403) throw denied(`domain-${label}-read-${response.status}`);
+    if (response.status !== 200) throw transport(`domain-${label}-read-${response.status}`);
+    const etag = response.headers.get('ETag');
+    if (!etag) throw transport(`domain-${label}-etag-missing`);
+    return { value: await boundedSourceJson(response), etag };
+  }
+  /** An ordinary-owner PUT conditional on `etag`, through the unchanged rules. @returns {Promise<'written'|'changed'>} */
+  async function putIfMatch(url, record, etag, label) {
+    let response;
+    try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': etag, 'content-type': 'application/json' },
+      body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+    catch { throw transport(`domain-${label}-write-network`); }
+    if (response.status === 200) return 'written';
+    if (response.status === 412) return 'changed';
+    if (response.status === 401 || response.status === 403) throw denied(`domain-${label}-write-${response.status}`);
+    throw transport(`domain-${label}-write-${response.status}`);
+  }
   return Object.freeze({
+    /** TASK-036: the legacy plan record and its ETag, as the ordinary owner (no action claim). */
+    async readLegacyPlanWithEtag(identity, dateKey) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return readWithEtag(legacyPlanRecordUrl(identity, dateKey, idToken), 'legacy-plan-record');
+    },
+    /** TASK-036: compare-and-set of an EXISTING legacy plan record, as the ordinary owner, through the unchanged rules
+     *  (which refuse every legacy write once the account has cut over). Never a create and never a delete. */
+    async putLegacyPlanIfMatch(identity, dateKey, record, etag) {
+      if (typeof etag !== 'string' || !etag || etag === 'null_etag' || !record || typeof record !== 'object' || Array.isArray(record)) {
+        throw new AuthorityBoundaryViolation('legacy plan record write requires the existing record and its ETag');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return putIfMatch(legacyPlanRecordUrl(identity, dateKey, idToken), record, etag, 'legacy-plan-record');
+    },
+    /** TASK-036: the exact legacy fence child and its ETag, as the ordinary owner (value null = authoritatively absent). */
+    async readLegacyPlanFenceItemWithEtag(identity, dateKey, itemId) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return readWithEtag(legacyFenceItemUrl(identity, dateKey, itemId, idToken), 'legacy-fence-item');
+    },
+    /** TASK-036: compare-and-set of an EXISTING legacy fence child through the unchanged fence rules. Never a create or delete. */
+    async putLegacyPlanFenceItemIfMatch(identity, dateKey, itemId, record, etag) {
+      if (typeof etag !== 'string' || !etag || etag === 'null_etag' || !record || typeof record !== 'object'
+        || Array.isArray(record) || record.id !== itemId) {
+        throw new AuthorityBoundaryViolation('legacy fence item update requires the existing item, its id and its ETag');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      return putIfMatch(legacyFenceItemUrl(identity, dateKey, itemId, idToken), record, etag, 'legacy-fence-item');
+    },
     /** TASK-012: every calendar plan record and the collection ETag, as the ordinary owner (bounded like every read). */
     async readCalendarPlansWithEtag(identity) {
       const idToken = await idTokens.getIdToken(identity.firebaseUid);
