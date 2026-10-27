@@ -2655,6 +2655,21 @@ not run: Playwright, RTDB emulator, production.
     room, so identical content in two accounts has identical revisions. Not an isolation defect: every command is
     bound to the verified subject's own room (TASK-029) and writes only there; the calendar path is the same.
 
+## TASK-036 G2 — backend deploy (owner-approved) · 2026-10-27
+deploy: chronasenseActionApi, gcloud source-only from a verified archive of main cc016c6 functions/ (63 files, every
+  blob equal to the commit, LF, no node_modules). Pre-check: live revision was chronasenseactionapi-00010-vud.
+result: chronasenseactionapi-00011-vup ACTIVE, 100% traffic.
+evidence:
+  - Config before/after (values compared by hash, never printed): only `revision` changed. Service account, ingress,
+    memory, CPU, concurrency 1, max instances 1, min instances absent, timeout 120, VPC none, env names and values
+    hash, all four identity-mapping values, HMAC secret binding (same secret, version 1), IAM bindings hash and URL
+    all unchanged.
+  - Unauthenticated POST /v1/query and /v1/command -> 401 AUTH_REQUIRED. New revision logs: 0 errors; the only 2
+    warnings are those 401 probes.
+  - Rollback ready: 00010-vud still present and Ready (traffic shift back to it is the documented rollback).
+  - Not touched: Worker, Cloudflare Access, OAuth grants, Firebase user data, rules.
+next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
+
 ## TASK-038 — legacy-target rescheduling (branch task-038, uncommitted) · 2026-10-27
   - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
   - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
