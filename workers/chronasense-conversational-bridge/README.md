@@ -36,3 +36,9 @@ Cloudflare Access should protect `/authorize` only, with an Allow policy naming 
 Run `npm ci`, `npm test`, and `npm run check:bundle` in this directory. The bundle check is a Wrangler dry run; it compiles without uploading or deploying. Tests use explicit fixture subjects and keys, exercise MCP tool routing/scope and HMAC compatibility with the existing Action API, and make no external calls.
 
 `get_intelligence` recomputes the shipped deterministic model from server-readable plan, entries, Brain Dump, appointment and broad-evidence records. Device-local routine completion and live timer state are reported as unevaluated; the read does not infer their absence or convert derived interpretation into canonical truth.
+
+## ChatGPT OAuth renewal
+
+This Worker advertises `offline_access` so ChatGPT can request refresh-token renewal in addition to the narrowly scoped ChronaSense permissions. The token endpoint, Cloudflare OAuth provider and dedicated `OAUTH_KV` remain unchanged: access tokens expire after 15 minutes, and refresh tokens after 14 days. `offline_access` grants **no** ChronaSense data-write permission; tool calls must still satisfy `chronasense:read` and the specific write scope when applicable.
+
+After an **explicitly approved** Worker deployment, verify live `.well-known/oauth-authorization-server` metadata advertises `offline_access`, then validate the authorization-code response includes a refresh token, and test a `grant_type=refresh_token` exchange against `/oauth/token` using a test account. Never log token values. Recreate/reconnect the private ChatGPT connection if it cached old discovery metadata. Run a read-only tool call, allow the 15-minute access token to expire, and run another; confirm it succeeds without a new login. Custom MCP mobile support is not guaranteed, so test the mobile surface separately. Do not deploy as part of this documentation change.
