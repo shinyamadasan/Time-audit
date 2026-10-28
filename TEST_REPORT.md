@@ -2767,3 +2767,25 @@ verification:
   - Temporary .deploy-vars.json and private captures deleted after verification.
   - Rollback: wrangler rollback 4fbc58b6-1d09-4d25-a836-39829bb34122 (Worker); traffic to 00011-vup (backend).
 not run: G4 live ChatGPT acceptance (no task moved).
+
+## TASK-038 G4 — calendar-account acceptance: PASS · 2026-10-28
+scope (owner-revised): move unfinished tasks today -> tomorrow through ChatGPT with no duplicate or missing task; Undo is
+  optional, not an acceptance criterion (existing Undo kept, not expanded).
+connector: all three ChatGPT connections first showed the pre-TASK-038 calendar-only plan_move. The live Worker
+  f8630fd7 bundle was byte-identical to the reviewed build (sha256 f15bc8104bc45837) and its tools/list accepts legacy
+  targets: ChatGPT's cached tool list, cleared by refreshing the connector. No server change.
+move: owner-approved plan_move of one ChatGPT-created calendar task cal1:2026-10-28 -> cal1:2026-10-29 (one /v1/command,
+  14:48:13Z, 200, 21.4 s).
+evidence (read-only, structure only):
+  - Firebase: source fence child deleted + movedToDayId cal1:2026-10-29, no move lock; ONE live copy at the destination,
+    same id, relocationRevision sequence 1; no copy in any other plan store or plan array; other tasks untouched.
+  - Action API: absent on 10-28, present once on 10-29.
+  - The app showed the task in both date views: the owner's Daily View length is 48 h, so the 10-28 view extends past
+    10-29 17:00 and projects that row under "THURSDAY, OCTOBER 29 · NEXT DAY" labelled "Thursday's plan" (same item, by
+    design). Reproduced with the real app (Playwright, production-shaped data): 36 h -> once on 10-29 only; 48 h -> the
+    labelled projection; local store deleted on 10-28 / live on 10-29, unchanged by reload. Owner confirmed 48 h.
+  - Legacy client (same harness): a server legacy move shows the task once on the new day, gone from the old day, no
+    client write-back.
+  - Later move-back attempts never reached the backend (no other /v1/command): nothing pending or half-applied.
+result: PASS (owner-confirmed). No duplicate, data issue or app defect; no fix.
+pending: legacy-account move acceptance.
