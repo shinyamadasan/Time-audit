@@ -1,0 +1,94 @@
+{
+  "base": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+  "approvedCandidate": "bd96cccfec9bb893a44bc6573d0e04356cd80333",
+  "generation": "20261027-task039-release-integration-v1",
+  "localIntegration": "PASS",
+  "production": "NO-GO; hosted CI/formal review and separate production authorization pending",
+  "fullBrowser": {
+    "actualPasses": 1027,
+    "failures": 0,
+    "skips": 0,
+    "expectedFailures": 0,
+    "minutes": 17.1
+  },
+  "browserBaseRefreshProof": "BROWSER_GATE_SURFACE_PROOF.json; 98 runtime files + 94 static dependencies from 59 tests unchanged",
+  "focusedBrowser": {
+    "actualPasses": 30,
+    "repetitions": 3,
+    "uniqueCases": 10
+  },
+  "warmCache": {
+    "strictRedFailures": 1,
+    "actualGreenPasses": 3,
+    "fixturePortable": true
+  },
+  "strictOriginalSeven": {
+    "actualPasses": 21,
+    "repetitions": 3,
+    "fileUnchangedFromApproved": true
+  },
+  "node": {
+    "tests": 2393,
+    "pass": 2392,
+    "fail": 0,
+    "skipped": 1,
+    "cancelled": 0,
+    "legacyHarnessPasses": 455,
+    "skip": "Existing opt-in lower-case-drive diagnostic"
+  },
+  "firebaseFenceSDKMutation": {
+    "tests": 177,
+    "pass": 177,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "worker": {
+    "tests": 44,
+    "pass": 44,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "workerBundle": "PASS; dry-run only",
+  "lint": {
+    "errors": 0,
+    "existingWarnings": 48
+  },
+  "generatedParity": {
+    "runtimeFiles": 98,
+    "shared": "PASS",
+    "rules": "PASS"
+  },
+  "independentReview": {
+    "verdict": "PASS",
+    "backendActualPasses": 86,
+    "warmBrowserActualPasses": 1,
+    "approvedImports": 340,
+    "retainedMainPaths": 35
+  },
+  "preservation": {
+    "pass": true,
+    "base": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+    "approvedCandidate": "bd96cccfec9bb893a44bc6573d0e04356cd80333",
+    "protectedTrees": 11,
+    "protectedTrackedHashes": 9091,
+    "localMainUnchanged": true,
+    "approvedRulesExact": true,
+    "mainBackendWorkerAndCommitmentFixExact": true,
+    "indexDeltaFromApproved": "retain main desktop PC-autostart removal; add commitment-model map entry; unified generation",
+    "approvedRuntimeAndOriginalStrictTestsRetained": true
+  },
+  "phoneRetesting": "none requested or performed",
+  "hostedCI": "not run; no push/PR authorization",
+  "formalRepositoryReview": "pending exact head/base",
+  "nextApproval": "push exact isolated branch and open draft PR for hosted CI/formal review only; no merge/deploy",
+  "attemptNotes": [
+    "Initial warm fixture lacked precision; corrected before actual red.",
+    "Initial browser run interrupted to remove historical Git-object dependency from fixture; no product/assertion change.",
+    "Remote main advanced0d9ab8f toce24092; browser surface unchanged independently verified; full backend/fence/Worker gates rerun.",
+    "Imported historical evidence newline-only copies restored; generated outputs archived before approved-copy restoration.",
+    "Windows long-path evidence lookup used blob IDs instead of path-form git show; verification assertions unchanged."
+  ],
+  "noProductionActions": true
+}

@@ -1,0 +1,28 @@
+{
+  "baseline": "ff3d4268fc1faf76cc45ec142cd8ee8dc3c5b1f2",
+  "branch": "task-033-visual-refinement",
+  "method": "Actual isolated local application; same synthetic fixture; fixed Oct 26 2026 clock; real 18:00 Asia/Manila Personal Day resolver. Before served from untouched task-033-product-quality. PNGs unretouched; comparison sheets label/resize only.",
+  "sha256": {
+    "review-artifacts/task-033-visual-refinement/before/my-day-desktop.png": "b27d1cb24ec13fa4941ab40706ec8e0ffe33a79ea8fb5140be999f3a5e181330",
+    "review-artifacts/task-033-visual-refinement/before/my-day-laptop.png": "0e7e7663bd318997c2a9782d7c89a3a2bcaf5a414156e325ec289b0b1942c730",
+    "review-artifacts/task-033-visual-refinement/before/my-day-mobile-detail.png": "7f2d4886741da2f5e3f7f959f369e1ee365ed6d131ea33a12bb35c9b4a6a46a6",
+    "review-artifacts/task-033-visual-refinement/before/my-day-mobile.png": "0ad69dfe90e0e3ee48aecf693034a36ddd49e2a297ebf17b1d54ba65ef23d862",
+    "review-artifacts/task-033-visual-refinement/before/planner-desktop.png": "814988307b15254382a188621d4d1dd104b584a6c54b1c4c327da4b7864a28a5",
+    "review-artifacts/task-033-visual-refinement/before/planner-laptop.png": "be4fce3f7a58ebdc60f494dd75281bba9d6af3a0a08483af76712749a0336332",
+    "review-artifacts/task-033-visual-refinement/before/planner-mobile.png": "704d095ee3857550fedeee7bb5f857729de61d96982e7aa26e8911578a92a0f8",
+    "review-artifacts/task-033-visual-refinement/after/mobile-more.png": "2df4f325a7ac67f69292de78558ccee435ea93949421548d5230d268a5218306",
+    "review-artifacts/task-033-visual-refinement/after/my-day-desktop.png": "4384fd3022cf3a5ce9a0ab711d7bb3a1a051ff45e88c2c1459e13e01ba2cb00c",
+    "review-artifacts/task-033-visual-refinement/after/my-day-laptop.png": "a7a4c3d8df73a8fda6f8394bb45aec32d5ad9e7c1537e8d1626636f1d4c42d35",
+    "review-artifacts/task-033-visual-refinement/after/my-day-mobile-detail.png": "153aa786bc5789f3a43568dd65c2f1ce38632b9df4226f4a7f6b8842d8a09e4d",
+    "review-artifacts/task-033-visual-refinement/after/my-day-mobile.png": "2e6186884637ae04643f9495aee10412734ff640ef646769343ddea765e7600d",
+    "review-artifacts/task-033-visual-refinement/after/planner-desktop.png": "ee81c8b582d0d2fc8bcee8a5cc73750ea7b8ee03b465d0a9f41d246c4bb6dab3",
+    "review-artifacts/task-033-visual-refinement/after/planner-laptop.png": "6659dbc38970460af51a966e589a0b999d53a3c7acab7bc0b884af0f3051dd33",
+    "review-artifacts/task-033-visual-refinement/after/planner-mobile-ideas.png": "681a3633f9eaf9309f0a3ad6c7baa664bdf9c99c8ce27393e7d5c527fe9eae26",
+    "review-artifacts/task-033-visual-refinement/after/planner-mobile.png": "97ad9f0f2df84c4081337a46d0ee5b2879d47ae77c9fb64ff337182f37754366",
+    "daily-command-center.css": "1b95fe2f4e3a949252ac9865f87673db47af6184bbe2ac0f9897f1d3c0560e1f",
+    "index.html": "0e6ef368919b8e848b048360580aab5a3ecf60c9c8372c843c6a74f2965cdce5",
+    "plan-tomorrow.css": "f44358c9efd5fe63eaac1bf2db8290f43dc8b049a6468fb50dad80f8abc1ccae",
+    "plan-tomorrow-ui.js": "de5c17db31074dbfc3ba81a0ee811865a312107d888af2d0012583181a663d5f",
+    "tests/daily-command-center.spec.js": "f16f824d68d414baa460fbd798e70fc6a83632a81e9cfe4b944b6f73286ed938"
+  }
+}

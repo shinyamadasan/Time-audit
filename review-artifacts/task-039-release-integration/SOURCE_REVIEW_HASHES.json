@@ -1,0 +1,30 @@
+{
+  "reviewer": "/root/task037_independent_review",
+  "verdict": "PASS",
+  "sha256": {
+    "index.html": "e660522ddd80120ab30c2b9a7ddb2f35c6071138ac12db5f91b4232fdb6677a9",
+    "www/index.html": "e660522ddd80120ab30c2b9a7ddb2f35c6071138ac12db5f91b4232fdb6677a9",
+    "firebase.rules.json": "5ab8052c89117c8067dce7bc120eac59ccc6b7fe48f78f106961770c09e181b1",
+    "tests/release-integration.spec.js": "6f80cbac1e9781763f490e15567afcb9f70aed47f9a7460eec47aa90cf50ab39",
+    "fixtures/release-integration/commitments-model-before-task032.txt": "890edb01fd41bc3f65db90ede88fa431dd1e7e8dbaede92841142eb0a42de0cd",
+    "functions/src/envelope.js": "1cec6a2db787fd43aef22b386606b0ac84cbf10807ba34e7c5f8f47d99e85c9e",
+    "functions/src/plan-mutation-action.js": "3e49adc873ae161cf1a4c9a632c3dbe5eb7c865c50a990f98c3bfeefa9446c03",
+    "functions/src/user-scoped-rtdb.js": "1fe01780144360cb69b2f2dee64e4e7092f69b4280987fd759a3d6c92ae844c0",
+    "functions/test/plan-legacy-move.test.js": "dada8372c6f7d0bdb006feabfdfe6d89bce71af137de3e6391640d118d26e9a0",
+    "workers/chronasense-conversational-bridge/src/mcp.js": "704dd4e981f3244ccfa4a53fd961ccd536430caf0fd9791a46f478c53c3aecdb",
+    "firebase-rules-emulator.test.js": "c8b35a555cac1198d8a0c6f3b3d809b07e466712dbd80260849ac660fac47274"
+  },
+  "canonicalLfSha256": {
+    "index.html": "fc4f1a26b31381ac1eeb9df521d09cfdcadd83d045a2e0dc0cc8449aa85206aa",
+    "www/index.html": "fc4f1a26b31381ac1eeb9df521d09cfdcadd83d045a2e0dc0cc8449aa85206aa",
+    "firebase.rules.json": "96e457169c6231b9a43101ff89d8bb3258a988df2f66aacba1bea873466bfcc3",
+    "tests/release-integration.spec.js": "6f80cbac1e9781763f490e15567afcb9f70aed47f9a7460eec47aa90cf50ab39",
+    "fixtures/release-integration/commitments-model-before-task032.txt": "890edb01fd41bc3f65db90ede88fa431dd1e7e8dbaede92841142eb0a42de0cd",
+    "functions/src/envelope.js": "b1578adf92ff34826fa5bb3c276cdbed6e97f2745fc213bf03a9929181ed6429",
+    "functions/src/plan-mutation-action.js": "cdd0d8239ed2981bd206746cf853f838d209d0cfecacce74c0493937f747000e",
+    "functions/src/user-scoped-rtdb.js": "d2921a6f539b7f30dc955973bc46c3e322f6d628aadf9b54df0001b892b547a1",
+    "functions/test/plan-legacy-move.test.js": "051d073a8b9d7d03a39c9780a7701ddc2fac70142be4d8e6343a40e1d56ee8a2",
+    "workers/chronasense-conversational-bridge/src/mcp.js": "ef5fad300ee8aae0eabca8198949c86b2019eadf2effcda34a6a0d4b275f0f2e",
+    "firebase-rules-emulator.test.js": "eb9afa4b7fa3137349ebe61358693c9b941748257e4f7f656e2878b7851e7ad5"
+  }
+}

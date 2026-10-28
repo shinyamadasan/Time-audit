@@ -852,13 +852,16 @@ export function arbitratePromotionClaim(remoteValue, candidate) {
     // A REVOKED claim is being resolved (its day ended): nobody may (re-)claim over it either.
     return mine && !remote.promotionClaim.revokedAt && samePromotionIntent(remote.promotionClaim, mine) ? remote : undefined;
   }
-  // A claim built from a local copy that has not yet seen a newer expired-claim
-  // recovery is still a fresh, legitimate request: the remote is active and
-  // unclaimed. Rebase it onto that newer epoch (and its provenance) instead of
-  // letting the stale epoch lose the merge.
   const next = normalizeCapture(candidate);
-  if (remote && next && !remote.promotionClaim && next.promotionClaim && remote.claimEpoch > next.claimEpoch) {
-    return mergeCaptureRecords(remote, { ...next, claimEpoch: remote.claimEpoch, expiredClaim: remote.expiredClaim });
+  if (remote && next?.promotionClaim) {
+    // A claim must not outrank an edit merely because it carries claim authority.
+    // Refuse both a stale cache and a newer local edit whose ordinary push is pending.
+    if (['id', 'text', 'important', 'urgent', 'status'].some(field => remote[field] !== next[field])) return undefined;
+    // Keep authoritative attribution/reopen/epoch/recovery provenance, including a
+    // recovered higher epoch. Only the claim and its mutation stamp are new.
+    return { ...remote, promotionClaim: next.promotionClaim,
+      schemaVersion: Math.max(remote.schemaVersion, next.schemaVersion),
+      updatedAt: Math.max(remote.updatedAt, next.updatedAt), updatedBy: next.updatedBy };
   }
   return mergeCaptureRecords(remote, candidate);
 }

@@ -934,6 +934,7 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
 
   await openTodayDetails(page);
   await expect(page.locator('#timeline-blocks')).toContainText('Scribe shift');
+  await page.locator('#timeline-blocks .tl-template-row summary').click();
   await page.locator('#timeline-blocks .template-off-btn').click();
   await expect(page.locator('#timeline-blocks')).not.toContainText('Scribe shift');
 
@@ -1372,6 +1373,7 @@ test('mobile normalizes synced recurring templates for settings and today hints'
   await page.evaluate(() => showView('today'));
   await openTodayDetails(page);
   const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await row.locator('summary').click();
   await expect(row).toBeVisible();
   await expect(row).toContainText('template hint');
 });
@@ -1648,6 +1650,7 @@ test('today template rows expose log and off actions without settings clutter', 
 
   await openTodayDetails(page);
   const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await row.locator('summary').click();
   await expect(row.getByRole('button', { name: 'Log it' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Off today' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Edit' })).toHaveCount(0);
@@ -2381,9 +2384,12 @@ test('activity guardrail canonicalizes quick saves', async ({ page }) => {
   };
   await openApp(page, { entries: [seed] });
 
-  const saved = await page.evaluate(() => {
+  const saved = await page.evaluate(async () => {
+    await _startTimer('App Building');
+    taskStartTime = Date.now() - 5 * 60 * 1000;
     blockStartTime = Date.now() - 5 * 60 * 1000;
     totalSecs = 30 * 60;
+    openQuickLog();
     _doQuickSave('app building', 'deep');
     return entries.find(e => e.quickLogged && e.activity === 'App Building')?.activity;
   });

@@ -1,0 +1,65 @@
+[
+  {
+    "width": 1920,
+    "height": 1080,
+    "label": "desktop",
+    "upNextHeight": 220.796875,
+    "visibleUpNextActions": [
+      "Start",
+      "Choose task",
+      "Focus mode"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "Life",
+      "Learning plans",
+      "Career",
+      "Settings"
+    ]
+  },
+  {
+    "width": 1366,
+    "height": 768,
+    "label": "laptop",
+    "upNextHeight": 220.796875,
+    "visibleUpNextActions": [
+      "Start",
+      "Choose task",
+      "Focus mode"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "Life",
+      "Learning plans",
+      "Career",
+      "Settings"
+    ]
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "label": "mobile",
+    "upNextHeight": 220.796875,
+    "visibleUpNextActions": [
+      "Start",
+      "Choose task",
+      "Focus mode"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "Life",
+      "Learning plans",
+      "Career",
+      "Settings"
+    ]
+  }
+]

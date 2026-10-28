@@ -1,0 +1,128 @@
+{
+  "base": "ab0c601745c0471a84feb44deeb6b38214b25383",
+  "generation": "20261027-task035-release-reliability-v1",
+  "beforeStrict": {
+    "actualPasses": 0,
+    "actualFailures": 7,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T16:02:38.008Z",
+      "duration": 39606.818,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 7,
+      "flaky": 0
+    }
+  },
+  "strictRepeated": {
+    "actualPasses": 21,
+    "actualFailures": 0,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T16:27:50.829Z",
+      "duration": 82310.55799999999,
+      "expected": 21,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "affectedBrowser": {
+    "actualPasses": 94,
+    "actualFailures": 0,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T16:21:43.733Z",
+      "duration": 186033.047,
+      "expected": 94,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "firstFullBrowser": {
+    "actualPasses": 1001,
+    "actualFailures": 13,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T16:33:12.265Z",
+      "duration": 1715669.0890000002,
+      "expected": 1001,
+      "skipped": 0,
+      "unexpected": 13,
+      "flaky": 0
+    }
+  },
+  "correctedFixturesAndVisualExpectations": {
+    "actualPasses": 16,
+    "actualFailures": 0,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T17:24:04.525Z",
+      "duration": 27252.912,
+      "expected": 16,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "fullBrowser": {
+    "actualPasses": 1014,
+    "actualFailures": 0,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "retries": 0,
+    "reportedStats": {
+      "startTime": "2026-10-27T17:24:58.246Z",
+      "duration": 1284865.428,
+      "expected": 1014,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "node": {
+    "tests": 2322,
+    "pass": 2321,
+    "fail": 0,
+    "skipped": 1,
+    "cancelled": 0,
+    "legacyHarness": {
+      "tests": 455,
+      "pass": 455,
+      "fail": 0
+    }
+  },
+  "firebaseFenceIncludingSDK": {
+    "tests": 167,
+    "pass": 167,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "worker": {
+    "tests": 32,
+    "pass": 32,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "lint": {
+    "errors": 0,
+    "existingWarnings": 48
+  },
+  "generated": "98 byte-identical runtime mirrors; shared/rules parity pass",
+  "workerBundle": "Wrangler 4.149.0 --dry-run, exit 0, no upload/deploy",
+  "coverage": "not measured",
+  "environment": "Windows, Node 24.19.0, Chromium; hosted Node-22 CI unverified"
+}

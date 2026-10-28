@@ -271,6 +271,19 @@ test('calendar authority facts — exact owner-create contract and immutable chi
 /** A well-formed capture record (what every real client writes). */
 const bd = (id, extra = {}) => ({ schemaVersion: 1, id, text: 'x', createdAt: 1, updatedAt: 1, updatedBy: 'd', status: 'untriaged', ...extra });
 
+test('TASK-031 new claim preserves source facts even when an older client bypasses the UI guard', () => {
+  const at='/rooms/uid_alice_uid/brainDump/cap1';
+  const remote=bd('cap1',{text:'Newer source',status:'triaged',important:true,urgent:false,triagedAt:2,updatedAt:2});
+  const state={rooms:{uid_alice_uid:{brainDump:{cap1:remote}}}};
+  const promotionClaim={type:'do-today',store:'legacy',targetId:'2026-10-26',planItemId:'bdp1|cap1',claimedAt:3,claimedBy:'old-client',when:''};
+  const next={...remote,schemaVersion:2,promotionClaim,updatedAt:3};
+  assert.equal(canWrite(state,A,at,next),true,'matching source claims remain supported');
+  for(const [field,value]of Object.entries({text:'Stale source',important:false,urgent:true,status:'untriaged'})) {
+    assert.equal(canWrite(state,A,at,{...next,[field]:value}),false,`claim cannot change ${field}`);
+  }
+  assert.equal(canWrite(state,A,at,{...remote,text:'Ordinary edited source',important:false,urgent:true,updatedAt:3}),true,'ordinary source edits are unchanged');
+});
+
 test('brainDump — A. the rightful room owner may read and write its own captures', () => {
   const empty = { rooms: { uid_alice_uid: {} } };
   assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'Call the vet' })), true, 'owner creates a capture');

@@ -33,6 +33,8 @@ const OWN_SCRIPT = new Map([
   ['nudge-rules-emulator.test.js', 'test:rules-emulator'],
   // The same emulator, driven by real Firebase JS SDK connections (ordering/race proof, the real cf43080 client).
   ['brain-dump-fence-sdk.test.js', 'test:fence-sdk'],
+  ['entry-reliability-sdk.test.js', 'test:fence-sdk'],
+  ['online-planner-sdk.test.js', 'test:fence-sdk'],
   // Rebuilds the rules with one named predicate disabled and attacks the real emulator.
   ['firebase-rules-mutation.test.js', 'test:rules-mutation'],
 ]);

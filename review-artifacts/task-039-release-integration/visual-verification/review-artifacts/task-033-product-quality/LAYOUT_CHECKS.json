@@ -1,0 +1,87 @@
+[
+  {
+    "label": "desktop",
+    "width": 1920,
+    "height": 1080,
+    "font": "\"Chrona Inter\", Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "card": {
+      "height": 101.5,
+      "width": 477.015625
+    },
+    "save": {
+      "height": 44,
+      "width": 132
+    },
+    "scrollOverflow": 0,
+    "pageOverflow": 0,
+    "mutedContrast": 7.047948788767158
+  },
+  {
+    "label": "laptop",
+    "width": 1366,
+    "height": 768,
+    "font": "\"Chrona Inter\", Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "card": {
+      "height": 101.5,
+      "width": 477.015625
+    },
+    "save": {
+      "height": 44,
+      "width": 132
+    },
+    "scrollOverflow": 0,
+    "pageOverflow": 0,
+    "mutedContrast": 7.047948788767158
+  },
+  {
+    "label": "tablet",
+    "width": 768,
+    "height": 1024,
+    "font": "\"Chrona Inter\", Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "card": {
+      "height": 101.5,
+      "width": 382.3125
+    },
+    "save": {
+      "height": 44,
+      "width": 132
+    },
+    "scrollOverflow": 0,
+    "pageOverflow": 0,
+    "mutedContrast": 7.047948788767158
+  },
+  {
+    "label": "phone",
+    "width": 390,
+    "height": 844,
+    "font": "\"Chrona Inter\", Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "card": {
+      "height": 101.5,
+      "width": 358
+    },
+    "save": {
+      "height": 44,
+      "width": 215.390625
+    },
+    "scrollOverflow": 0,
+    "pageOverflow": 0,
+    "mutedContrast": 7.047948788767158
+  },
+  {
+    "label": "200-percent-css-viewport",
+    "width": 683,
+    "height": 384,
+    "font": "\"Chrona Inter\", Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "card": {
+      "height": 101.5,
+      "width": 651
+    },
+    "save": {
+      "height": 44,
+      "width": 395.703125
+    },
+    "scrollOverflow": 0,
+    "pageOverflow": 0,
+    "mutedContrast": 7.047948788767158
+  }
+]

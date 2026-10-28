@@ -38,6 +38,10 @@ test('the committed firebase.rules.json is exactly the builder\'s output (no han
 
 /** predicate -> the attack it stops. Each returns true iff the SERVER ALLOWED the forbidden write. */
 const ATTACKS = {
+  async claimSourcePreserved(db) {
+    await db.seed(captureAt(),capture({text:'Newer source',status:'triaged',important:true,urgent:false}));
+    return db.write(captureAt(),capture({text:'Stale source',status:'triaged',important:true,urgent:true,promotionClaim:claim(CAL)}));
+  },
   async targetBinding(db) { await db.seed(captureAt(), capture({ promotionClaim: claim(CAL) })); return db.write(CAL.fenceAt(CAL.otherKey), fencedItem(CAL)); },
   async storeBinding(db) {
     // A calendar claim whose physical key happens to read as a legacy date: only the store check can refuse it in planFences.

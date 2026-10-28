@@ -1,0 +1,61 @@
+{
+  "stage1": "Automated gates accepted; independent source/visual review has no material must-fix; owner review pending",
+  "stage2": "FAIL — unconnected experiment permits initial creation replay to overwrite a later owner edit; no direct selection in runtime",
+  "browser": {
+    "acceptedOutcomes": 997,
+    "unexpectedFailures": 0,
+    "existingExpectedFailuresIncluded": 7,
+    "duration": "20.6m"
+  },
+  "node": {
+    "tests": 2322,
+    "pass": 2321,
+    "fail": 0,
+    "skipped": 1,
+    "legacy": "455/455",
+    "existingSkip": "CROSS_REPO_COMPAT_CONTROL_PROOF=1 lower-case-drive diagnostic not enabled"
+  },
+  "fence": {
+    "tests": 161,
+    "pass": 161,
+    "fail": 0,
+    "skipped": 0
+  },
+  "worker": {
+    "tests": 32,
+    "pass": 32,
+    "fail": 0,
+    "skipped": 0
+  },
+  "bundle": "Wrangler 4.149.0 --dry-run; no upload/deploy",
+  "focused": "32 planning/dashboard cases + 2 corrected copy regressions; final 2 visual/accessibility cases pass; all are also in the final full browser gate",
+  "lint": "0 errors, 48 existing warnings",
+  "runtimeMirror": "98 byte-identical runtime files, including local font",
+  "generated": "shared models and rules match; no production contract/rules delta",
+  "preservation": "25 domain/rules files + known presentation-only index delta; all protected worktrees/evidence match",
+  "scenarios": {
+    "desktopLaptopTabletPhone": "PASS",
+    "contrastAndKeyboard": "PASS; muted text 7.05:1, tab order/focus trap/return, inset timeline focus",
+    "unsavedDraftsAndNavigation": "PASS",
+    "repeatedSaveAndIdentity": "PASS",
+    "existingSourceConflictRefusal": "PASS",
+    "offlineAndSaveConfirmation": "PASS; local/pending/confirmed distinct",
+    "personalDayAndOvernight": "PASS",
+    "mobileKeyboardHeight": "PASS controlled 480px viewport simulation",
+    "zoom": "PASS 683x384 equivalent CSS viewport; native zoom not certified",
+    "directEditedSelection": "NOT IMPLEMENTED; failed gate preserved"
+  },
+  "prototype": {
+    "positiveFenceChecks": 170,
+    "gate": "FAIL despite positive checks",
+    "actualWriterAndEmulator": "REPLAY_WRITER_EMULATOR_RESULT.json"
+  },
+  "coverage": "Not measured",
+  "untested": [
+    "Physical iOS/Android keyboard and feel",
+    "Native browser 200% zoom",
+    "Real accounts/cloud durability",
+    "Direct-selection UI because safety gate stopped it"
+  ],
+  "release": "HOLD — no push, merge, rules deployment or production release; inherited TASK-031 rules-first hold remains"
+}

@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "base": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "authorizedRuntimeRemovals": 2,
+  "governedGeneration": "20261027-task037-save-action-repair-v2",
+  "allOtherTrackedRuntimeUnchanged": true,
+  "protectedHistoricalTrees": 7,
+  "protectedHistoricalHashes": 5512,
+  "previousCandidateTrackedClean": true,
+  "originalSevenTestFileUnchanged": true,
+  "centralSaverAndOwnershipAccountingUnchanged": true
+}

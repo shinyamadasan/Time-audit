@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
 
 const storage = readFileSync(new URL('./storage.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const index = readFileSync(new URL('./index.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -30,6 +31,7 @@ function harness() {
   const elements = new Map();
   const noop = () => {};
   const context = vm.createContext({
+    crypto: webcrypto,
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : [now])); }
       static now() { return now; }
@@ -62,7 +64,8 @@ function harness() {
     _dateKeyPlusDays: (date, days) => new Date(Date.parse(date + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10),
     activityGroupKey: text => text.toLowerCase(), canonicalizeActivityInput: text => text,
     getActivityColor: noop, getEntriesOverlappingRange: () => [],
-    taskStartTime: null, rememberCreatedUndo: noop, showUndoToast: noop, fmtDur: String,
+    taskStartTime: null, trackingStartedAt: null, _restoredTimerSync: null,
+    rememberCreatedUndo: noop, showUndoToast: noop, fmtDur: String,
     COMMON_LOG_OPTIONS: [], getViewingDateKey: () => '2026-10-24',
     learnWastePattern: noop, resetRetroBar: noop, checkBudget: noop, showToast: noop,
     breakStateOwnerRoom: () => context.roomCode, timerStateOwnerRoom: () => context.roomCode,

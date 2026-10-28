@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-10-28T00:16:40.281Z",
+  "pass": true,
+  "operation": "Read-only isolated test-emulator comparison; no record modifications",
+  "results": [
+    {
+      "tree": "task-035-device-acceptance",
+      "pass": true,
+      "count": 3,
+      "sha256": "a524a9c393e05920f7bdaa53ae521f53ec81e947f28b9667e1fd72e34449be00"
+    },
+    {
+      "tree": "task-037-online-release-repair",
+      "pass": true,
+      "count": 1,
+      "sha256": "ec0720d7dbd7ea6cde8684fef38f261b97f0f4a92ae3ce57d96e10bcadba4577"
+    }
+  ]
+}

@@ -257,6 +257,7 @@ function taskFormHtml() {
     <div class="pc-head"><h3>${item ? 'Edit planned task' : 'Add to My Day'}</h3><button type="button" class="pc-icon" data-pc-action="close-item-form" aria-label="Close add task">✕</button></div>
     ${item ? '' : `<div class="pc-entry-types" role="group" aria-label="What to add"><button type="button" class="btn sm primary" aria-pressed="true">Task</button><button type="button" class="btn sm ghost" data-pc-action="add-commitment" aria-pressed="false">Commitment</button></div>`}
     <label>What do you want to do?<input name="title" maxlength="200" value="${escape(item?.task || '')}" required autofocus></label>
+    <label>Description (optional)<textarea name="description" maxlength="1000">${escape(typeof item?.description === 'string' ? item.description : '')}</textarea></label>
     <fieldset class="pc-when"><legend>When?</legend>${pinned ? '' : `<div class="pc-quick-dates">
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.today.target?.id || '')}" data-date="${escape(quick.today.date)}">Today</button>
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.tomorrow.target?.id || '')}" data-date="${escape(quick.tomorrow.date)}">Tomorrow</button>
@@ -310,7 +311,9 @@ function submitTaskForm(form) {
   const durationMinutes = endTime ? durationBetween(time, endTime, resolved.target.store === 'calendar') : null;
   if (endTime && !durationMinutes) { refuseTaskForm('End must be later than Start or continue into the next calendar date.'); return; }
   if (durationMinutes > 720) { refuseTaskForm('End must be within 12 hours of Start.'); return; }
-  const changes = { task: title, when: time, durationMinutes, kind };
+  const description = String(data.get('description') || '').trim();
+  if (description.length > 1000) { refuseTaskForm('Keep the description within 1000 characters.'); return; }
+  const changes = { task: title, when: time, durationMinutes, kind, description };
   if (time && resolved.target.store === 'calendar') {
     const nextDate = addCalendarDays(resolved.target.dateKey, 1);
     if (date === resolved.target.dateKey) changes.whenDayOffset = 0;
@@ -321,7 +324,7 @@ function submitTaskForm(form) {
     if (state.itemForm?.itemId) {
       layer.updateItem({ sourceTarget: editing.sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes, stamp: stamp });
     } else {
-      const item = { ...context.createItem(title, time, kind), ...(durationMinutes ? { durationMinutes } : {}) };
+      const item = { ...context.createItem(title, time, kind), ...(durationMinutes ? { durationMinutes } : {}), ...(description ? { description } : {}) };
       layer.addItem({ destination: resolved.target, item });
     }
     state.itemForm = null;

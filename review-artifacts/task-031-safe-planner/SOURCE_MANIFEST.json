@@ -1,0 +1,36 @@
+{
+  "baseline": "17608cdd19900290843d0a86d29bddb5139d5c44",
+  "designReference": "07411dd",
+  "branch": "task-031-safe-planner",
+  "data": "Actual local application render; synthetic fixed-clock Asia/Manila 18:00 Personal Day; Firebase browser stub, never production",
+  "source": {
+    "brain-dump-model.js": "820670744cb27dfa75c6aa7ed5c85210838b121e910f02ce1a6542243d349080",
+    "brain-dump-sync.js": "1d13dd34c33597b95e64c0af02d183e9d56c232a6075b43eeb7247812b57f331",
+    "brain-dump-ui.js": "e45084d26d8f3440d57233d24b5424aa1c6390ecd4a4325fde75e11414828e75",
+    "plan-tomorrow-ui.js": "caad72872756ab525b3db6386f1bac0c2d641a872d6ba0cf58bea6759e1998f1",
+    "plan-tomorrow.css": "89fa4c4eacf06fec7f01bf6296f6d157590d6609d8852cfc22ca53ad51910654",
+    "index.html": "b92434c96d25687ff59098fba8efa5edb9e82ec45d927bc706a650e1c07c2e3f",
+    "scripts/firebase-rules-builder.mjs": "c5c4e269fba41b3f26248eed6c9280384abacb1a156149e4af9c53d44c90afbe",
+    "firebase.rules.json": "96e457169c6231b9a43101ff89d8bb3258a988df2f66aacba1bea873466bfcc3",
+    "functions/shared/brain-dump-model.js": "820670744cb27dfa75c6aa7ed5c85210838b121e910f02ce1a6542243d349080",
+    "brain-dump-model.test.js": "0c302b66891fd60f340ff0d85d515563ce5e4909d036916ebec3e872b7d931d0",
+    "brain-dump-sync.test.js": "d0f0840f6e71088888717f4a6121d034732f77272b5b231e60652466f58f8270",
+    "brain-dump-promotion.test.js": "8d5aa7316cecc468c25f7b8735eb70f6776b8d9e4a4497c0a82208a1f214498c",
+    "firebase-rules.test.js": "6351801d6cb6a5f1435c4eaa553acfeab8df7e0b94a4047d051c5d73f3c88667",
+    "firebase-rules-emulator.test.js": "5989a4f69e0abd66c8dfde2bc0cb9aa60e9fbdc0139e9f924e6d67f729064cc4",
+    "firebase-rules-mutation.test.js": "849acdecba22cc8a42ea05f9badab2c3c67e4aca9f9808eb848c675ed2e5ea50",
+    "tests/daily-command-center.spec.js": "9169dc0a3870920baacd5c76a74da69508d7698b675cb729b8cc775c7f12b192",
+    "tests/daily-reconciliation.spec.js": "681721d34d151dd9717c854674f532ccf4f9f7facfb30636d274a05bb1f719b5",
+    "tests/plan-time-range.spec.js": "312ad39cc66a08a35dc1fe1f548c57cc3dc0c4c9b893a9c7abd3b1d0191c4cf1",
+    "tests/plan-tomorrow-ui.spec.js": "5f1c3ed28f487b15776466bd4499e21d312eef304f7b125807262e4612f6d62a",
+    "tests/planning-continuity.spec.js": "62fc37547a92590e116562503a2eb23dbfbf891292fa58df1c49393f57eed4f5",
+    "tests/planning-continuity-fixes.spec.js": "c915f78aef3458f4f05ade1d69353ad0eaf28f517ac161637163b688fe7925fa"
+  },
+  "screenshot": {
+    "integrated-planner-desktop.png": "83cad062ac8966ef72cec15dac1a3faceed87a1e4aae9bab22357454f78bf92c",
+    "integrated-planner-laptop.png": "810b5b9b467461bdf510d842c8b9c3f8b962fcc2c6fced73434c75bd44f381b8",
+    "integrated-planner-mobile-edit.png": "543d46c6c2c532b4905aad6394243a8d16f62b077e88c25d48e81696091b9bae",
+    "integrated-planner-mobile.png": "0fe47a68aa65a838004a3720e97a10cf1631f778da76f4fb308e8cf995ea69bf"
+  },
+  "contactSheet": "f0cfc6bb22a99643bab630abe330c05e19ef6bad80e8e66ebea4e0d94e2c2358"
+}

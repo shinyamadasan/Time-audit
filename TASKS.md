@@ -1867,6 +1867,57 @@ constraints:
 verification:
   - npm test (root, functions, worker); npm run test:fence; npm run check:bundle; independent review.
 
+### TASK-039 - Final release integration (local only)
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: approved changed runtime/tests/assets/CODEMAP/handoffs/evidence from 8057e2e..bd96ccc (exact imported-path manifest in review-artifacts/task-039-release-integration/); existing generated www/shared mirrors and release-token tests; actual integration-conflict paths only; focused integration regressions and fixtures/release-integration/commitments-model-before-task032.txt; TASK_039_RELEASE_INTEGRATION.md; review-artifacts/task-039-release-integration/; CHANGELOG.md/TEST_REPORT.md (append only); TASKS.md (this entry only).
+
+context:
+  Owner instruction "ChronaSense - Final Release Integration", October 27, 2026 America/Phoenix:
+  accept bd96ccc as repository-review candidate; authorize bounded LOCAL integration with current
+  main/TASK-032, relevant/full gates, independent review and exact hosted CI/formal-review preparation.
+  Remote main inspected read-only is ce24092f4037cbacd9e2cf79a7465638bb8ef2ec, newer than local
+  main/task-032 0e04ebba9e9ac9bc52f219560cc955dfdbc499e5. Exact remote object fetched, no main update.
+  It includes TASK-036 legacy completion, TASK-038 legacy rescheduling and no-PC-autostart; preserve all.
+  Isolated branch task-039-release-integration is based on remote main. Integrate via reviewed
+  three-way patch/application and conflict resolution, not git merge. Accepted visual ab0c601,
+  reliability 9aaf021, planner/notification 6fcee74 and Save-action bd96ccc remain protected inputs.
+  No missing merge dependency is invented: base already contains TASK-032; approved candidates are
+  explicit owner-provided integration inputs. Preserve main's protected documents and append own logs.
+
+objective:
+  Produce one reviewable local release candidate combining current main and approved app work,
+  focused on planning, Eisenhower, Brain Dump and reminders, without changing production state.
+
+acceptance:
+  - Capture exact branch/base/input commits and import/conflict provenance; protected references,
+    worktrees and historical records remain intact. Preserve approved UI except required generation.
+  - Preserve TASK-032 date-only commitment compatibility and current two-account API/Worker isolation;
+    preserve latest-main legacy completion and no-PC-autostart with strict integration regression evidence.
+  - Preserve all recorded-time accounting, offline recovery, ownership, source/fence guards and the
+    exact reviewed rules source. No authored Firebase rule change or rules deployment.
+  - Focused integration tests, original seven strict scenarios and Save adapter checks pass; run full
+    required Node/browser/fence/Worker/dry-run/lint/parity gates on the final combined candidate.
+  - Independent review binds exact combined source/tests. Provide final local commit, exact actual
+    passes/skips/failures, remaining blockers, compatibility/rollback plan and single next approval.
+
+constraints:
+  - No features, redesign, new background architecture, direct Eisenhower insertion, unrelated
+    improvements, migrations, discarded time, weakened assertions or increased masking timeouts.
+  - No further phone testing and no repetition of previous work without integration evidence.
+  - No push, git merge, main update, production access/write, live rule change, deployment or
+    publication. Main merges can auto-publish Pages. Do not modify protected docs/history fields.
+  - Stop/report if integration needs product/security/architecture decisions, incompatible data
+    changes, new rules logic or scope expansion. Resolve only actual conflicts/confirmed release blockers.
+
+verification:
+  - Read current-main/TASK-032 handoffs and source diffs; exact provenance/guard/ownership checks;
+    strict combined regressions; full required local release gates; independent review and SELF_REVIEW/QA.
+  - Append permitted logs; status review only after local checks pass; no remote mutations or production.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

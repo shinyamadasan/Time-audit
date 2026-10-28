@@ -1,0 +1,47 @@
+{
+  "review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json",
+    "sha256": "7ccf430fa29854d75a0150fe6018dc4ca204b00faaa251d26f476bd8aad8d69f"
+  },
+  "review-artifacts/task-033-product-quality/after/mobile-action-metrics.json": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/mobile-action-metrics.json",
+    "sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee"
+  },
+  "review-artifacts/task-033-product-quality/after/my-day-desktop.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/my-day-desktop.png",
+    "sha256": "5d8c8d7c5f3e256c298b6bf7b08f5a79b013b4209f8668ffd18eecdd6f1f6529"
+  },
+  "review-artifacts/task-033-product-quality/after/my-day-laptop.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/my-day-laptop.png",
+    "sha256": "a7a4c3d8df73a8fda6f8394bb45aec32d5ad9e7c1537e8d1626636f1d4c42d35"
+  },
+  "review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png",
+    "sha256": "153aa786bc5789f3a43568dd65c2f1ce38632b9df4226f4a7f6b8842d8a09e4d"
+  },
+  "review-artifacts/task-033-product-quality/after/my-day-mobile.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile.png",
+    "sha256": "2e6186884637ae04643f9495aee10412734ff640ef646769343ddea765e7600d"
+  },
+  "review-artifacts/task-033-product-quality/after/planner-desktop.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/planner-desktop.png",
+    "sha256": "818c9d429a5ac754345921de83e1e89efd80dda8f789f5bbc73bc7e6fa59d121"
+  },
+  "review-artifacts/task-033-product-quality/after/planner-laptop.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/planner-laptop.png",
+    "sha256": "6659dbc38970460af51a966e589a0b999d53a3c7acab7bc0b884af0f3051dd33"
+  },
+  "review-artifacts/task-033-product-quality/after/planner-mobile.png": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/planner-mobile.png",
+    "sha256": "b0d7236c5103e2c5ae213ff13acf1631dc6fb0444927f58b9fa4ae766d58cd55"
+  },
+  "review-artifacts/task-033-visual-refinement/after/mobile-more.png": {
+    "archive": "visual-verification/review-artifacts/task-033-visual-refinement/after/mobile-more.png",
+    "sha256": "1a584a520e27ddd64d350659c8b9a51af3f8b372187e0718e23b21135c3e531f"
+  },
+  "review-artifacts/task-033-product-quality/after/MEASUREMENTS.json": {
+    "archive": "visual-verification/review-artifacts/task-033-product-quality/after/MEASUREMENTS.json",
+    "sha256": "893a28bcf709a294211e602913547a377b6e4184b9735bfc0a130fac768a08b5",
+    "untrackedMeasurement": true
+  }
+}

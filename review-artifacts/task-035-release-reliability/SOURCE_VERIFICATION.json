@@ -1,0 +1,33 @@
+{
+  "visualFilesChecked": 25,
+  "visualDrift": [],
+  "markupUnchangedExceptGeneration": true,
+  "protectedDomainFilesChecked": 22,
+  "domainDrift": [],
+  "originalSevenBodiesUnchangedExceptExpectedFailureRemoval": {
+    "F-1": true,
+    "F-2": true,
+    "F-3": true,
+    "F-4": true,
+    "F-5": true,
+    "F-6": true,
+    "F-7": true
+  },
+  "noExpectedFailureHandling": true,
+  "sourceHashes": {
+    "index.html": "e6cee26364e94e42a5bb0773704e4b7ef3185f13dcaf6939d7edd437b0b8825d",
+    "storage.js": "2afe3c819560b7234813df1b2647103a32642d5cd3ca2e3e93ddddbf7a992240",
+    "tests/daily-use-reliability.spec.js": "12b3dd89783ab5d24d2f30456c0f827c15bb7b55a7d1f1a7946878867dd66f15",
+    "entry-reliability-sdk.test.js": "3d7b7773eabc449f20a51ef8766c55da8abe9d796a32941c33d30c8ad4272fae",
+    "entry-validation.test.js": "17daadc6672575ccb2ba034715c32f031527c8a7ce144103232a3ff6f846628e",
+    "tests/capability-career-ui.spec.js": "761673f786d54e8126373eb09e5b883446fc6a22f2deb3bcabe0c1d5202c2e57",
+    "tests/learning-plan-ui.spec.js": "f8257192f3439cde2f1688b4a6d6ac84d2b566641933cd7d86ab5a261e603c97",
+    "tests/cross-domain-intelligence-ui.spec.js": "cec12243405def377b0dda45395c8f07fd415c6822afbe9ba4c158c13804a710",
+    "tests/install-interruption.spec.js": "9d2b2ad75de04a4d1e3e72adb21a3f8be72b0cdedb03734d6beb6e83f51208ab",
+    "tests/smoke.spec.js": "b172f959988e5b632bc9a5308cc1947b759d3f3f949305b68afe3d14d735b4c3",
+    "tests/personal-day-boundary.spec.js": "512b6f8a8983d454efd4518a7d0f807dcc6c6f4c4a8cbf503aef1642e72a6968",
+    "tests/calendar-native-plan-identity.spec.js": "accf7617ebe75667a8571c4786faea6f9bad3cc180fde26316b8cc958cbd9de2"
+  },
+  "independentReviewHashesMatch": true,
+  "rulesSha256": "5ab8052c89117c8067dce7bc120eac59ccc6b7fe48f78f106961770c09e181b1"
+}

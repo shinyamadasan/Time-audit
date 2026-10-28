@@ -5373,3 +5373,14 @@ changed:
     mixed/retime, Undo).
   - DECISIONS.md #42; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-038.
 not changed: firebase rules, index.html, www/, app runtime, production data, Worker/Function deployments.
+
+
+## TASK-039 — done (branch: task-039-release-integration)
+changed:
+  - Integrated 340 approved candidate paths onto current remote main ce24092; retained TASK032 commitment/owner isolation and latest legacy completion/rescheduling/desktop startup behavior. No git merge or main change.
+  - index.html: pin unchanged commitments-model in the existing import map; unified generation and required mirror/token tests. Added real warm-cache upgrade regression with self-contained historical fixture.
+  - TASK_039_RELEASE_INTEGRATION.md and own evidence/provenance/CI-review/compatibility/rollback packet; main's protected history/documents retained.
+tests: browser 1027/1027; final Node 2392 passed + one existing diagnostic skip (legacy455/455); focused UI30/30, warm3/3, strict original seven21/21; final fence177/177; Worker44/44 +dry-run; independent backend86/86 +warm1/1 and full source/history audit PASS; lint0errors/48existing warnings; parity and9091 protected hashes across11trees PASS.
+blockers: no local integration implementation blocker; hosted CI, formal exact-head/base review and separately authorized production compatibility/rollback capture/rules-first rollout remain.
+deviations: remote main advanced during gates; preserved unchanged browser pass with98-runtime/94-static-dependency proof and reran complete affected backend gates. Setup/evidence housekeeping attempts retained; no weakened assertions/timeouts or production actions.
+→ status set to `review` in TASKS.md

@@ -1,0 +1,29 @@
+{
+  "approvedCandidate": "9aaf021afdc97c6da9baf9bb346ff7dc39a97390",
+  "protectedHistoricalWorktrees": 7,
+  "protectedHistoricalHashes": 5512,
+  "protectedHistoricalUnchanged": true,
+  "referenceManifestSha256": "6b665327833005bc8a914fe67c9de2f00f77be779bb472187a131dce58f49a26",
+  "approvedReliabilityTrackedClean": true,
+  "approvedStaticMarkupUnchanged": true,
+  "unchangedContractsAndAssets": [
+    "storage.js",
+    "plan-authority.js",
+    "plan-fence-sync.js",
+    "plan-item-origin.js",
+    "brain-dump-model.js",
+    "brain-dump-sync.js",
+    "brain-dump-ui.js",
+    "firebase.rules.json",
+    "style.css",
+    "daily-command-center.js",
+    "daily-command-center.css",
+    "plan-tomorrow-ui.js",
+    "plan-tomorrow.css",
+    "planning-continuity-ui.js",
+    "planning-continuity.css",
+    "tests/daily-use-reliability.spec.js"
+  ],
+  "unrelatedTrackedDrift": [],
+  "note": "Owner test server and private state were neither stopped nor reset."
+}

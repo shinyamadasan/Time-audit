@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-10-27T23:51:28.382Z",
+  "candidate": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "baseline": [
+    {
+      "ref": "ab0c601",
+      "centralBusyGuard": false,
+      "callerPreSetsBusy": [
+        true,
+        true
+      ]
+    },
+    {
+      "ref": "9aaf021",
+      "centralBusyGuard": true,
+      "callerPreSetsBusy": [
+        true,
+        true
+      ]
+    },
+    {
+      "ref": "6fcee74",
+      "centralBusyGuard": true,
+      "callerPreSetsBusy": [
+        true,
+        true
+      ]
+    }
+  ],
+  "proposalOnlyNoProductChange": true,
+  "proposedCallerRepairChecks": [
+    {
+      "path": "quick action",
+      "reachesAccountingGuard": true
+    },
+    {
+      "path": "recent action",
+      "reachesAccountingGuard": true
+    }
+  ],
+  "testTimePreservation": {
+    "pass": true,
+    "count": 1,
+    "originalStart": 1793144577092,
+    "saved": [
+      {
+        "id": 1793145063158,
+        "tsStart": 1793144577092,
+        "ts": 1793145063158,
+        "blockIntervalMin": 8
+      }
+    ]
+  }
+}

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim, recoverExpiredClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
   TERMINAL_STATUSES, revokeExpiredClaim,
 } from './brain-dump-model.js';
@@ -542,6 +542,20 @@ test('claimPromotion persists when/durationMinutes on the claim for a Schedule p
   assert.ok(claimed.ok);
   assert.equal(claimed.record.promotionClaim.when, '14:30');
   assert.equal(claimed.record.promotionClaim.durationMinutes, 45);
+});
+
+test('TASK-031 matching-source claim preserves remote creation/reopen/recovery provenance under clock skew', () => {
+  const actionId='act1_11111111-1111-4111-8111-111111111111';
+  const base=buildCapture({id:'bdc1_11111111-1111-4111-8111-111111111111',creationActionId:actionId,text:'Same source',now:T0,updatedBy:'a'}).record;
+  const first=claimPromotion(base,{promotion:{...PROMO_A,planItemId:brainDumpPlanItemId(base.id)},now:T0+1,updatedBy:'a'}).record;
+  const revoked=revokeExpiredClaim(first,first.promotionClaim,{now:T0+2}).record;
+  const recovered=recoverExpiredClaim(revoked,revoked.promotionClaim,{now:T0+3,updatedBy:'b'}).record;
+  const remote={...recovered,reopenCount:2,updatedAt:T0+100};
+  const candidate=claimPromotion(base,{promotion:{...PROMO_A,planItemId:brainDumpPlanItemId(base.id)},now:T0+4,updatedBy:'a'}).record;
+  const claimed=arbitratePromotionClaim(JSON.parse(JSON.stringify(remote,(_k,v)=>v===null?undefined:v)),candidate);
+  assert.ok(normalizeCapture(claimed));assert.equal(claimed.creationActionId,actionId);assert.equal(claimed.createdAt,base.createdAt);
+  assert.equal(claimed.claimEpoch,1);assert.deepEqual(claimed.expiredClaim,normalizeCapture(remote).expiredClaim);assert.equal(claimed.reopenCount,2);
+  assert.equal(claimed.updatedAt,T0+100);assert.equal(claimed.promotionClaim.claimedBy,'a');
 });
 
 test('claimPromotion defaults when to "" and durationMinutes to null when omitted (Do Today is always untimed)', () => {

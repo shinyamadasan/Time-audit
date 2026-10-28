@@ -30,6 +30,7 @@ import { KEYS, NOW_MS, signedRequest } from './functions/test/support.js';
 import { localPlanDate } from './functions/shared/plan-tomorrow-model.js';
 import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, finalizePromotion,
   mergeCaptureRecords, normalizeCapture, reopenCapture, triageCapture } from './brain-dump-model.js';
+import { wireCopy } from './brain-dump-test-support.js';
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
   ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
@@ -53,6 +54,28 @@ const withActionClaim = actionId => {
 async function liveClaim(db, def, extra = {}) { await db.seed(captureAt(), capture({ promotionClaim: claim(def), ...extra })); }
 async function promoted(db, def, extra = {}) { await db.seed(captureAt(), promotedCapture(def, extra)); }
 const otherStore = def => Object.values(STORES).find(o => o.store !== def.store);
+
+for(const def of Object.values(STORES))test(`TASK-031 ${def.store}: server refuses stale-source new claims but permits current source and ordinary edits`,async()=>{
+  const db=await freshDb();
+  const remote=capture({text:'Newer source text',status:'triaged',important:true,urgent:false,triagedAt:T,updatedAt:T+2});
+  await db.seed(captureAt(),remote);
+  const next={...remote,promotionClaim:claim(def),updatedAt:T+3};
+  for(const [field,value]of Object.entries({text:'Old source text',important:false,urgent:true,status:'untriaged'})) {
+    assert.equal(await db.write(captureAt(),{...next,[field]:value}),false,`stale client cannot overwrite ${field}`);
+  }
+  const stale={...remote,text:'Old source text',urgent:true,updatedAt:T+1};
+  const staleCandidate=claimPromotion(stale,{promotion:claim(def),now:T+3,updatedBy:'old-client'}).record;
+  // The pre-fix active-source branch was exactly this unchanged merge function.
+  const oldStaleOutput=wireCopy(mergeCaptureRecords(remote,staleCandidate));
+  assert.equal(oldStaleOutput.text,'Old source text');
+  assert.equal(await db.write(captureAt(),oldStaleOutput),false,'actual pre-fix arbitration output is refused');
+  assert.deepEqual(await db.read(captureAt()),wireCopy(remote),'refusal leaves authoritative source exact');
+  const matchingCandidate=claimPromotion(remote,{promotion:claim(def),now:T+3,updatedBy:'old-client'}).record;
+  assert.equal(await db.write(captureAt(),wireCopy(mergeCaptureRecords(remote,matchingCandidate))),true,'same old-client algorithm succeeds with matching source');
+  await db.seed(captureAt(),remote);
+  assert.equal(await db.write(captureAt(),{...remote,text:'Explicit ordinary edit',updatedAt:T+4}),true);
+  assert.equal(await db.write(captureAt(),{...next,text:'Explicit ordinary edit',updatedAt:T+5}),true,'matching current source claim succeeds');
+});
 
 test('Action API capture attribution requires its scoped claim and cannot be removed or changed by an ordinary owner', async () => {
   const db = await freshDb();

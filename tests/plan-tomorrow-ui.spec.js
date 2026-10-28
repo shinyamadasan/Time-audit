@@ -132,7 +132,7 @@ test('normal plan includes live routine details, adds one-off, and persists Read
   await expect(page.locator('.pt-routine')).toContainText('Target 30 min · Minimum 10 min · Fallback: Do 5 minutes');
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Ship report');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#toast')).not.toHaveClass(/show/);
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
@@ -142,22 +142,57 @@ test('normal plan includes live routine details, adds one-off, and persists Read
   expect(stored.preparation.routineInstanceIds).toEqual(['["routine-1","2026-09-09"]']);
 });
 
+for (const kind of ['priority-only', 'routine-only', 'open-day']) test(`Save accepts its own Firebase-shaped ${kind} echo`, async ({ page }) => {
+  const wire = value => {
+    if (Array.isArray(value)) return value.length ? value.map(wire) : null;
+    if (value && typeof value === 'object') {
+      const fields = Object.entries(value).map(([key, child]) => [key, wire(child)]).filter(([, child]) => child != null);
+      return fields.length ? Object.fromEntries(fields) : null;
+    }
+    return value;
+  };
+  let remote = null;
+  await page.exposeFunction('__firebaseRead', async refPath => ({
+    value: refPath.endsWith(`/plans/${TARGET}`) ? remote : refPath.endsWith('/plans') && remote ? { [TARGET]: remote } : null,
+    version: 0
+  }));
+  await page.exposeFunction('__firebaseCas', async (refPath, version, value) => {
+    remote = wire(value);
+    return { ok: true, value: remote, version: version + 1 };
+  });
+  await openApp(page, { routines: routineState(kind === 'routine-only' ? [routine()] : []), firebaseScript: firebaseConvergenceStub });
+  if (kind === 'priority-only') {
+    await page.locator('#plan-tomorrow-add input[name="task"]').fill('Roundtrip priority');
+    await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add', exact: true }).click();
+  } else if (kind === 'open-day') {
+    await page.getByRole('button', { name: 'Quick plan', exact: true }).click();
+    await page.getByRole('button', { name: 'Open day / no commitments', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Save plan', exact: true }).click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
+  expect(preparation.routineInstanceIds).toHaveLength(kind === 'routine-only' ? 1 : 0);
+  expect(preparation.oneOffItemIds).toHaveLength(kind === 'priority-only' ? 1 : 0);
+  expect(preparation.intentionalBlank).toBe(kind === 'open-day');
+  expect(remote.preparation).toBeTruthy();
+});
+
 test('rescue uses existing content without asking new scheduling questions', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]), plans: { [TARGET]: { items: [planItem('p1', 'One priority')], updatedAt: NOW } } });
-  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.getByRole('button', { name: 'Quick plan' }).click();
   await expect(page.locator('.pt-rescue')).toContainText('1 routine · 1 priority');
   await expect(page.locator('.pt-rescue input')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const mode = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation.lastPreparedMode, TARGET);
   expect(mode).toBe('rescue');
 });
 
 test('empty rescue supports one anytime priority or an explicit intentional blank day', async ({ page }) => {
   await openApp(page, { routines: routineState([]) });
-  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.getByRole('button', { name: 'Quick plan' }).click();
   await expect(page.locator('#plan-tomorrow-rescue-add input')).toHaveCount(1);
   await page.locator('#plan-tomorrow-overlay').getByRole('button', { name: 'Open day / no commitments' }).click();
-  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
   expect(preparation.intentionalBlank).toBe(true);
   expect(preparation.oneOffItemIds).toEqual([]);
@@ -169,13 +204,14 @@ test('routine timezone mismatch warns and leaves one-off planning available', as
   await expect(page.locator('.pt-routine')).toHaveCount(0);
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Local priority');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const refs = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation.routineInstanceIds, TARGET);
   expect(refs).toEqual([]);
 });
 
 test('skip tomorrow persists one occurrence identity and unskip restores it', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
+  await page.locator('[data-pt-fold="routines"]>summary').click();
   await page.getByRole('button', { name: 'Skip tomorrow' }).click();
   let skips = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user')).skips);
   expect(Object.keys(skips)).toEqual(['["routine-1","2026-09-09"]']);
@@ -203,7 +239,7 @@ test('concurrent over-cap items are shown and must be reduced, never deleted sil
   await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items, updatedAt: NOW } } });
   await expect(page.locator('.pt-oneoff')).toHaveCount(4);
   await expect(page.locator('.pt-warning')).toContainText('Nothing was deleted');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-error')).toContainText('Reduce the plan to 3');
   expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].items.length, TARGET)).toBe(4);
 });
@@ -212,26 +248,26 @@ test('local plan write failure keeps the dialog and draft open without Ready met
   await openApp(page, { routines: routineState([routine()]), failPlanWrite: true });
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Preserved draft');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
   await expect(page.locator('.pt-oneoff')).toContainText('Preserved draft');
   await expect(page.locator('#plan-tomorrow-error')).toContainText('Plan quota exceeded');
 });
 
-test('offline confirmation persists locally and reports Ready on this device', async ({ page }) => {
+test('offline confirmation persists locally and keeps actual local-only feedback visible', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
   await page.evaluate(() => { fbRoomRef = null; });
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  await expect(page.locator('#toast')).toContainText('Ready on this device');
+  await page.getByRole('button', { name: 'Save plan' }).click();
+  await expect(page.locator('#pt-save-status')).toContainText('Saved on this device');
   expect(await page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBe(true);
 });
 
 test('cloud acknowledgement failure keeps locally prepared state', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
   await page.evaluate(() => { fbRoomRef = { child() { return this; }, transaction() { return Promise.reject(new Error('offline')); } }; _fbRoomRefRoom = roomCode; });
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
-  await expect(page.locator('#toast')).toContainText('Ready on this device');
+  await page.getByRole('button', { name: 'Save plan' }).click();
+  await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#pt-save-status')).toContainText('sync not confirmed');
   await expect.poll(() => page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBe(true);
 });
 
@@ -495,7 +531,7 @@ test('C/Z: confirming persists the chosen time through the existing Plan Tomorro
   await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app'), planItem('p2', 'Untimed errand')], updatedAt: NOW } } });
   await page.locator('.pt-oneoff', { hasText: 'Finish app' }).getByRole('button', { name: 'Set time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('09:00');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   const active = stored.items.filter(item => !item.deleted);
   expect(active).toHaveLength(2);
@@ -516,7 +552,7 @@ test('E: changing an existing time keeps the same priority identity, only the ti
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('10:30');
   await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:30 AM');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].id).toBe('p1');
@@ -528,7 +564,7 @@ test('F: removing time returns a priority to untimed without deleting it', async
   await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app', { when: '09:00' })], updatedAt: NOW } } });
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Finish app' }).click();
   await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' })).toHaveText('+ Add time');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].id).toBe('p1');
@@ -558,9 +594,9 @@ test('I: confirming twice never creates a duplicate item', async ({ page }) => {
   await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('09:00');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await page.evaluate(() => openPlanTomorrow());
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].when).toBe('09:00');
@@ -572,7 +608,7 @@ test('J: assigning a time does not by itself change planning streak/preparation 
   await page.locator('.pt-time-input').fill('09:00');
   // Adding a time alone (no confirm yet) must not write any preparation record.
   expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBeUndefined();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
   expect(preparation).toMatchObject({ lastPreparedMode: 'normal', intentionalBlank: false });
 });
@@ -597,7 +633,7 @@ test('M: a time set through Plan Tomorrow appears on Today via the existing plan
   await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('09:00');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   // Same items array Today already reads — no copy/migration step exists or is needed.
   const when = await page.evaluate(target => getPlanItems(target).find(item => item.task === 'Finish app').when, TARGET);
   expect(when).toBe('09:00');

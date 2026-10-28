@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-10-27T23:50:24.238Z",
+  "candidate": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "indexSha256": "0e80cf058fd558a91af7efc79d74573680b48eb35e0b43b7ff67c59af0a8578d",
+  "status": "FAIL",
+  "cases": [
+    {
+      "name": "quick activity",
+      "expected": "callback enters saver accounting/ownership boundary",
+      "actual": "returned before accounting because busy is already true",
+      "busyAfter": true,
+      "pass": false
+    },
+    {
+      "name": "recent activity",
+      "expected": "callback enters saver accounting/ownership boundary",
+      "actual": "returned before accounting because busy is already true",
+      "busyAfter": true,
+      "pass": false
+    }
+  ],
+  "scope": "Read-only actual-source reproduction; no app, phone or data mutation",
+  "classification": "Confirmed quick/recent action busy-guard defect; manual Save Entry is also blocked after quick action until form reopens",
+  "proposedSmallestRepair": "Remove the two caller quickLogBusy=true assignments; retain caller guards and the centralized _doQuickSave busy/account/device guards",
+  "authorization": "Additional quick-log application path outside TASK-037 scheduling-only repair; no product code changed"
+}

@@ -11,13 +11,9 @@
 //     1 ms so ids stay unique and time never runs backwards. The only real-time waits are for the
 //     app's own 1 s ticker / setTimeout(0) deliveries, never for the clock under test.
 //
-// Reproduced pre-existing failures stay explicit: each such test asserts the EXISTING contract
-// and is annotated with test.fail(), so the default run reports it as "expected to fail" and turns
-// red the moment the behavior changes. The annotation is applied only immediately before the
-// contract assertion, after every setup step and precondition has passed, so broken setup, missing
-// UI or missing entries still fail the test for real. Run `T13_STRICT=1 npx playwright test
-// tests/daily-use-reliability.spec.js` to drop the annotation and see the raw assertion failure.
-// Finding ids (F-n) refer to docs/RELIABILITY_BASELINE_V1.md.
+// TASK-035 retains the original seven contract assertions as ordinary required passes.
+// No expected-failure annotation or strict-mode exception remains. F-4 follows the owner's
+// approved pending-block-through-Save contract. Finding ids refer to the original baseline.
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs/promises';
@@ -27,7 +23,6 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
-const STRICT = process.env.T13_STRICT === '1';
 const MIN = 60 * 1000;
 const A = 'uid_account-a';
 const B = 'uid_account-b';
@@ -37,10 +32,6 @@ const T0 = Date.parse('2026-10-14T01:00:00Z');
 const PAST_RECOVERY_PROMPT_MS = 800;
 let appServer;
 let appUrl;
-
-function knownFailure(id, classification = 'CONFIRMED_FAILURE') {
-  test.fail(!STRICT, `${id} (${classification}): reproduced pre-existing behavior, see docs/RELIABILITY_BASELINE_V1.md`);
-}
 
 const firebaseStub = `
 (() => {
@@ -291,6 +282,8 @@ const state = page => page.evaluate(() => ({
   timerStartedAt,
   pingCount,
   timerOwnerDeviceId,
+  trackingStartedAt,
+  hud: getHudTrackingFields(),
   entries: entries.filter(e => !e.deleted).map(e => ({
     id: e.id, activity: e.activity, energy: e.energy, tsStart: e.tsStart, ts: e.ts,
     blockIntervalMin: e.blockIntervalMin, date: e.date, updatedAt: e.updatedAt,
@@ -437,7 +430,7 @@ test.describe('A. Timer lifecycle', () => {
     expect(sessionKept(await state(page))).toBe(true);
   });
 
-  test('F-1 KNOWN FAILURE: termination longer than one interval in an OFFLINE session -> "accidental" must not lose the session', async ({ context }) => {
+  test('F-1 termination longer than one interval in an OFFLINE session -> "accidental" must not lose the session', async ({ context }) => {
     const page0 = await openApp(context);
     await goOffline(page0); // timer started without connectivity: no remote copy exists to re-adopt
     const page = await startThenTerminate(context, page0, T0 + 45 * MIN);
@@ -450,7 +443,6 @@ test.describe('A. Timer lifecycle', () => {
     await goOnline(page);
     await page.waitForTimeout(500);
     const s = await state(page);
-    knownFailure('F-1');
     expect(sessionKept(s)).toBe(true);
   });
 
@@ -482,7 +474,7 @@ test.describe('A. Timer lifecycle', () => {
     expect((await state(page2)).recoveryVisible).toBe(false);
   });
 
-  test('F-2 KNOWN FAILURE: expired-timer recovery in an OFFLINE session must clear the heartbeat (no false recovery prompt on the next open)', async ({ context }) => {
+  test('F-2 expired-timer recovery in an OFFLINE session must clear the heartbeat (no false recovery prompt on the next open)', async ({ context }) => {
     const page0 = await openApp(context);
     await goOffline(page0);
     const page = await startThenTerminate(context, page0, T0 + 45 * MIN);
@@ -498,7 +490,6 @@ test.describe('A. Timer lifecycle', () => {
     await page2.waitForTimeout(PAST_RECOVERY_PROMPT_MS);
     const s = await state(page2);
     expect(s.entries).toHaveLength(1);
-    knownFailure('F-2');
     expect(s.heartbeat).toBeNull();
     expect(s.recoveryVisible).toBe(false);
   });
@@ -526,7 +517,7 @@ test.describe('A. Timer lifecycle', () => {
     expect(sessionKept(await state(page))).toBe(true);
   });
 
-  test('F-3 KNOWN FAILURE: in an OFFLINE session, reopening within 2 min of the last heartbeat after a missed ping must not silently drop the session', async ({ context }) => {
+  test('F-3 in an OFFLINE session, reopening within 2 min of the last heartbeat after a missed ping must not silently drop the session', async ({ context }) => {
     const page0 = await openApp(context);
     await goOffline(page0);
     const page = await missedPingThenTerminate(context, page0);
@@ -534,7 +525,6 @@ test.describe('A. Timer lifecycle', () => {
     await goOnline(page);
     await page.waitForTimeout(500);
     const s = await state(page);
-    knownFailure('F-3');
     expect(offline.recoveryVisible || sessionKept(s)).toBe(true);
   });
 
@@ -553,6 +543,201 @@ test.describe('A. Timer lifecycle', () => {
     expect(s.entries).toHaveLength(1);
     expect(s.slotEntries).toHaveLength(1);
     expect(await remoteEntries(page)).toHaveLength(1);
+  });
+});
+
+test.describe('TASK-035 bounded reliability closure', () => {
+  async function savePending(page) {
+    await page.evaluate(() => { openQuickLog(); _doQuickSave('Writing', 'deep'); });
+  }
+
+  for(const totalSecs of [null,0,-1,'invalid']) test(`malformed saved countdown ${totalSecs} never becomes a running or published timer`,async({context})=>{
+    const page=await openApp(context);
+    await page.evaluate(({totalSecs,t0})=>{
+      localStorage.setItem(`ta3-timer:${roomCode}`,JSON.stringify({running:true,timerStartedAt:t0,totalSecs}));
+      bindAccountLocalState(roomCode);
+    },{totalSecs,t0:T0});
+    const s=await state(page);
+    expect(s.running).toBe(false);
+    expect(s.taskStartTime).toBeNull();
+    expect(await page.evaluate(room=>window.__fbTest.get(`rooms/${room}/timer`),A)).toBeNull();
+  });
+
+  test('two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart', async ({context}) => {
+    let page = await openApp(context);
+    await startTimer(page, 'Writing');
+    const start = (await state(page)).taskStartTime;
+    await letPingFire(page, T0 + 31 * MIN);
+    await letPingFire(page, T0 + 62 * MIN);
+    await setNow(page, T0 + 65 * MIN);
+    await savePending(page);
+    const saved = await state(page);
+    expect(saved.entries).toHaveLength(1);
+    expect(saved.entries[0].tsStart).toBe(start);
+    expect(saved.taskStartTime).toBe(saved.entries[0].ts);
+    expect(saved.hud.startedAt).toBe(start);
+    page = await reopen(context, page, T0 + 66 * MIN);
+    expect((await state(page)).taskStartTime).toBe(saved.entries[0].ts);
+    expect((await state(page)).hud.startedAt).toBe(start);
+    await setNow(page, T0 + 75 * MIN);
+    await page.evaluate(() => stopAndLog());
+    const records = (await state(page)).entries.sort((a,b) => a.tsStart-b.tsStart);
+    expect(records).toHaveLength(2);
+    expect(records[1].tsStart).toBe(records[0].ts);
+    expect(Math.round(records.reduce((n,e)=>n+e.ts-e.tsStart,0)/MIN)).toBe(75);
+  });
+
+  for (const extend of [false,true]) test(`Quick Save Undo restores the owned pending span (${extend?'extension':'new record'})`, async ({context}) => {
+    const previous = entry('Writing','deep',T0-10*MIN,T0);
+    const page = await openApp(context,{entriesA:extend?[previous]:[]});
+    await startTimer(page,'Writing');
+    const original = await state(page);
+    await setNow(page,T0+10*MIN);
+    await savePending(page);
+    expect((await state(page)).taskStartTime).toBeGreaterThan(original.taskStartTime);
+    await page.evaluate(()=>undoLastAction());
+    const undone = await state(page);
+    expect(undone.taskStartTime).toBe(original.taskStartTime);
+    expect(undone.blockStartTime).toBe(original.blockStartTime);
+    expect(undone.entries).toHaveLength(extend?1:0);
+    if(extend) expect(undone.entries[0]).toMatchObject({id:previous.id,tsStart:previous.tsStart,ts:previous.ts});
+    await setNow(page,T0+20*MIN);
+    await page.evaluate(()=>stopAndLog());
+    expect((await state(page)).entries.find(e=>e.ts>T0).tsStart).toBe(original.taskStartTime);
+  });
+
+  test('sub-minute Save never substitutes the interval and duplicate callbacks write once', async ({context}) => {
+    const page=await openApp(context);
+    await startTimer(page,'Writing');
+    await setNow(page,T0+10*1000);
+    await page.evaluate(()=>{openQuickLog();_doQuickSave('Writing','deep');_doQuickSave('Writing','deep');});
+    const s=await state(page);
+    expect(s.entries).toHaveLength(1);
+    expect(s.entries[0].blockIntervalMin).toBe(1);
+    expect(s.entries[0].ts-s.entries[0].tsStart).toBeLessThan(11000);
+    await setNow(page,T0+20*1000);
+    await savePending(page);
+    expect((await state(page)).entries).toHaveLength(1);
+    expect((await state(page)).entries[0].blockIntervalMin).toBe(1);
+  });
+
+  test('a stale recovery cannot appear or log after switching A to B and back', async ({context}) => {
+    const first=await openApp(context);
+    await goOffline(first);
+    const page=await startThenTerminate(context,first,T0+45*MIN);
+    await expect(page.locator('#recovery-overlay')).toBeVisible();
+    await page.evaluate(()=>window.__fbTest.signInAs('account-b'));
+    await ready(page,B);
+    await page.evaluate(()=>handleRecovery(true));
+    expect((await state(page)).entries).toHaveLength(0);
+    await expect(page.locator('#recovery-overlay')).toBeHidden();
+    expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('ta3-entries:uid_account-a')||'[]'))).toEqual([]);
+    await page.evaluate(()=>window.__fbTest.signInAs('account-a'));
+    await ready(page,A);
+    expect((await state(page)).entries).toHaveLength(0);
+  });
+
+  for(const takeover of [false,true]) test(`newer remote ${takeover?'takeover':'stop'} invalidates pending recovery without logging`,async({context})=>{
+    const first=await openApp(context);
+    await goOffline(first);
+    const page=await startThenTerminate(context,first,T0+45*MIN);
+    await expect(page.locator('#recovery-overlay')).toBeVisible();
+    await goOnline(page);
+    await page.evaluate(({room,takeover,t0})=>window.__fbTest.remoteWrite(`rooms/${room}/timer`,{
+      running:takeover,stopped:!takeover,lastTask:'Phone task',startedAt:t0+44*60000,
+      taskStartTime:t0+44*60000,blockStartTime:t0+44*60000,intervalSecs:1800,
+      ownerDeviceId:'device-b',updatedBy:'device-b',ownerRoom:room,takeover:true,updatedAt:Date.now()+2000
+    }),{room:A,takeover,t0:T0});
+    await page.evaluate(()=>handleRecovery(true));
+    const s=await state(page);
+    expect(s.entries).toHaveLength(0);
+    expect(s.running).toBe(takeover);
+    await expect(page.locator('#recovery-overlay')).toBeHidden();
+    if(takeover)expect(s.currentTask).toBe('Phone task');
+  });
+
+  test('Undo after replacement timer never rewinds its accounting cursor',async({context})=>{
+    const page=await openApp(context);
+    await startTimer(page,'Writing');
+    await setNow(page,T0+10*MIN);
+    await savePending(page);
+    await page.evaluate(()=>{window.__savedUndo=lastUndoAction;resetTimer();});
+    await setNow(page,T0+11*MIN);
+    await startTimer(page,'Writing');
+    const replacement=await state(page);
+    await page.evaluate(()=>{lastUndoAction=window.__savedUndo;undoLastAction();});
+    expect((await state(page)).taskStartTime).toBe(replacement.taskStartTime);
+  });
+
+  for(const takeover of [false,true]) test(`held restore acknowledgement ${takeover?'cannot publish over remote Focus':'cannot rewind a newer Quick Save'}`,async({context})=>{
+    const page=await openApp(context);
+    await startTimer(page,'Writing');
+    await setNow(page,T0+5*MIN);
+    await page.evaluate(()=>{
+      window.__realOwnedRef=ownedRoomRef;
+      ownedRoomRef=()=>new Proxy(window.__realOwnedRef(),{get(ref,key){
+        if(key==='child')return name=>name==='timer'?{transaction(fn){
+          window.__heldTimer=fn(window.__fbTest.get(`rooms/${roomCode}/timer`));
+          return new Promise(resolve=>{window.__releaseRestore=resolve;});
+        }}:ref.child(name);
+        return typeof ref[key]==='function'?ref[key].bind(ref):ref[key];
+      }});
+      _restoredTimerSync={ownerRoom:roomCode,baseline:currentTimerSyncStamp(),
+        sessionStart:trackingStartedAt||taskStartTime,inFlight:false};
+      syncTimerState();
+    });
+    expect(await page.evaluate(()=>!!window.__heldTimer)).toBe(true);
+    await setNow(page,T0+10*MIN);
+    await savePending(page);
+    const saved=await state(page);
+    if(takeover)await page.evaluate(({room,t0})=>window.__fbTest.remoteWrite(`rooms/${room}/timer`,{
+      running:true,stopped:false,lastTask:'Remote focus',startedAt:t0+9*60000,
+      taskStartTime:t0+9*60000,blockStartTime:t0+9*60000,intervalSecs:1800,
+      mode:'focus',focusPhase:'work',ownerDeviceId:'device-b',updatedBy:'device-b',
+      ownerRoom:room,takeover:true,updatedAt:Date.now()+2000
+    }),{room:A,t0:T0});
+    else {
+      await page.evaluate(()=>applyRemoteTimerState(window.__heldTimer,roomCode));
+      expect((await state(page)).taskStartTime).toBe(saved.taskStartTime);
+    }
+    await page.evaluate(()=>{
+      ownedRoomRef=window.__realOwnedRef;
+      window.__releaseRestore({committed:true,snapshot:{val:()=>window.__heldTimer}});
+    });
+    if(takeover){
+      await expect.poll(()=>page.evaluate(()=>syncedFocusTimer?.running)).toBe(true);
+      expect(await page.evaluate(room=>window.__fbTest.get(`rooms/${room}/timer`).mode,A)).toBe('focus');
+      expect((await state(page)).timerOwnerDeviceId).toBe('device-b');
+    }else{
+      await expect.poll(()=>page.evaluate(room=>window.__fbTest.get(`rooms/${room}/timer`).taskStartTime,A)).toBe(saved.taskStartTime);
+      expect((await state(page)).taskStartTime).toBe(saved.taskStartTime);
+      await setNow(page,T0+20*MIN);
+      await page.evaluate(()=>stopAndLog());
+      const records=(await state(page)).entries.sort((a,b)=>a.tsStart-b.tsStart);
+      expect(records[1].tsStart).toBe(records[0].ts);
+    }
+  });
+
+  test('numeric identities reject zero and existing tombstones; retro identity survives edit/delete/Undo/reload',async({context})=>{
+    let page=await openApp(context);
+    const generated=await page.evaluate(()=>{
+      const random=crypto.getRandomValues.bind(crypto);
+      entries.push({id:42,ts:Date.now(),deleted:true,updatedAt:Date.now()});
+      let calls=0;
+      crypto.getRandomValues=words=>{words[0]=0;words[1]=[0,42,43][calls++];return words;};
+      try{return {id:newEntryId(),calls};}finally{crypto.getRandomValues=random;}
+    });
+    expect(generated).toEqual({id:43,calls:3});
+    await page.evaluate(()=>{document.getElementById('retro-task').value='Email';document.getElementById('retro-qstart').value='08:00';document.getElementById('retro-qend').value='08:30';quickRetroLog();});
+    const created=(await state(page)).entries[0];
+    expect(Number.isSafeInteger(created.id)).toBe(true);
+    await page.evaluate(id=>{openEditEntry(id);document.getElementById('retro-activity').value='Edited email';saveRetroEntry();},created.id);
+    expect((await state(page)).entries[0].id).toBe(created.id);
+    await page.evaluate(id=>deleteEntry(id),created.id);
+    expect((await state(page)).entries).toHaveLength(0);
+    await page.evaluate(()=>undoLastAction());
+    page=await reopen(context,page,T0+MIN);
+    expect((await state(page)).entries[0]).toMatchObject({id:created.id,activity:'Edited email',tsStart:created.tsStart,ts:created.ts});
   });
 });
 
@@ -668,16 +853,14 @@ test.describe('B. Ping and notification', () => {
     return { start, created: created[0] };
   }
 
-  test('F-4 EXPECTED FAILURE (DESIGN_DECISION_NEEDED): a notification-tap quick log after the ping describes the completed block, as the notification copy implies', async ({ context }) => {
+  test('F-4 a notification-tap quick log preserves the pending start through Save', async ({ context }) => {
     const { start, created } = await pingThenTapNotification(context);
-    knownFailure('F-4', 'DESIGN_DECISION_NEEDED');
     expect(created.tsStart).toBe(start);
   });
 
-  test('F-5 KNOWN FAILURE: a quick log must not store a duration its own instants do not support', async ({ context }) => {
+  test('F-5 a quick log must not store a duration its own instants do not support', async ({ context }) => {
     const { created } = await pingThenTapNotification(context);
     const measuredMin = (created.ts - created.tsStart) / MIN;
-    knownFailure('F-5');
     expect(Math.abs(created.blockIntervalMin - measuredMin)).toBeLessThan(1);
   });
 
@@ -884,7 +1067,7 @@ test.describe('C/D. Logging, persistence and sync', () => {
     }, { task, startHHMM, endHHMM });
   }
 
-  test('F-6 KNOWN FAILURE: two retro logs that cross the same midnight must both survive locally and remotely', async ({ context }) => {
+  test('F-6 two retro logs that cross the same midnight must both survive locally and remotely', async ({ context }) => {
     const page = await openApp(context); // 2026-10-14 09:00 Manila
     await page.evaluate(() => setViewDate('2026-10-13'));
     await retroLog(page, 'Movie', '22:30', '00:30');
@@ -903,14 +1086,13 @@ test.describe('C/D. Logging, persistence and sync', () => {
         .toEqual([[midnight - 15 * MIN, midnight], [midnight, midnight + 7 * 60 * MIN]]);
     }
     expect(remote.length).toBeGreaterThan(0);
-    knownFailure('F-6');
     // Contract: all four segments survive remotely, with distinct ids.
     expect(remote.filter(e => e.activity === 'Movie')).toHaveLength(2);
     expect(remote.filter(e => e.activity === 'Sleep')).toHaveLength(2);
     expect(new Set(s.entries.map(e => e.id)).size).toBe(s.entries.length);
   });
 
-  test('F-7 KNOWN FAILURE: two retro logs ending in the same minute must both survive locally and remotely', async ({ context }) => {
+  test('F-7 two retro logs ending in the same minute must both survive locally and remotely', async ({ context }) => {
     const page = await openApp(context, { now: Date.parse('2026-10-14T06:00:00Z') }); // 14:00 Manila
     await retroLog(page, 'Lunch', '12:00', '12:30');
     await setNow(page, Date.parse('2026-10-14T06:01:00Z'));
@@ -927,7 +1109,6 @@ test.describe('C/D. Logging, persistence and sync', () => {
       ]);
     }
     expect(remote.length).toBeGreaterThan(0);
-    knownFailure('F-7');
     expect(remote.map(e => e.activity).sort()).toEqual(['Email', 'Lunch']);
   });
 });

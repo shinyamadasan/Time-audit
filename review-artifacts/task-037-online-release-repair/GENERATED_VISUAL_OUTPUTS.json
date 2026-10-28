@@ -1,0 +1,16 @@
+{
+  "copiedIntoOwnEvidence": [
+    "review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json",
+    "review-artifacts/task-033-product-quality/after/mobile-action-metrics.json",
+    "review-artifacts/task-033-product-quality/after/my-day-desktop.png",
+    "review-artifacts/task-033-product-quality/after/my-day-laptop.png",
+    "review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png",
+    "review-artifacts/task-033-product-quality/after/my-day-mobile.png",
+    "review-artifacts/task-033-product-quality/after/planner-desktop.png",
+    "review-artifacts/task-033-product-quality/after/planner-laptop.png",
+    "review-artifacts/task-033-product-quality/after/planner-mobile.png",
+    "review-artifacts/task-033-visual-refinement/after/mobile-more.png"
+  ],
+  "originalTrackedBaselineCopiesRestoredInOwnedWorktree": true,
+  "protectedWorktreesTouched": false
+}

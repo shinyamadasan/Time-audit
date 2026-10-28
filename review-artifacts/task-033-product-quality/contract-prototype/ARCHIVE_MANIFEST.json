@@ -1,0 +1,27 @@
+{
+  "UNCONNECTED_EXPERIMENT.patch": {
+    "archive": "UNCONNECTED_EXPERIMENT.patch.gz",
+    "originalSha256": "13a20f1fd446bcbcf67fc46d2239d998b2e4cdd580259663437d76bdd12b2d43",
+    "archiveSha256": "5da34d36e4c2bd1d334f0f056d2aae6e7a1f8f9745a6584a5ecf52d5489e787b"
+  },
+  "task033-contract-proof.txt": {
+    "archive": "task033-contract-proof.txt.gz",
+    "originalSha256": "a855c10f554c956a9d36d2754d980872ff16fb704105816ecdcf573623a3ff7f",
+    "archiveSha256": "989f3b0375fb0fa81e756d839223cc09079429e21d9d7ccdfdeb4aac97fac4ca"
+  },
+  "task033-contract-proof2.txt": {
+    "archive": "task033-contract-proof2.txt.gz",
+    "originalSha256": "4f30554ab3986b387daa0b19ba93f1a8a05ffcbb348b1b95eb65bbda2501c325",
+    "archiveSha256": "3812487faf1f52293569a67a5f17eb65b60b9a82f7512d52f29db0b7e84e680c"
+  },
+  "task033-fence.txt": {
+    "archive": "task033-fence.txt.gz",
+    "originalSha256": "2ab9c5af305f4cbb4061462ba8a4b8238f771fc18d997d3c2a011c09cd438f6b",
+    "archiveSha256": "64c786c3e01be7e319ec89959ab2cc3fdc0b174f4c8cdfd8013d607367eeec77"
+  },
+  "task033-fence2.txt": {
+    "archive": "task033-fence2.txt.gz",
+    "originalSha256": "8cf080e2cc4ecbf44fbc1b88912aa379e5c10ef4e1c016398ec708cb50796ea9",
+    "archiveSha256": "dcaa2b2cba2d298ae0d84f856ab8b6640a1ece8dd2c5cb34fb909add93eaf9ad"
+  }
+}

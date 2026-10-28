@@ -1,0 +1,147 @@
+{
+  "base": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "generation": "20261027-task037-save-action-repair-v2",
+  "localRepair": "PASS",
+  "runtimeLogicDelta": "two caller busy assignments removed; central saver/guards unchanged",
+  "redUI": {
+    "actualPasses": 2,
+    "actualFailures": 4,
+    "expectedFailures": 0
+  },
+  "newAndExistingSDKUI": {
+    "actualPasses": 21,
+    "uniqueCases": 7,
+    "repetitions": 3,
+    "failures": 0
+  },
+  "independentSDKUI": {
+    "actualPasses": 7,
+    "failures": 0,
+    "skips": 0,
+    "sourceHashesMatch": true
+  },
+  "fullBrowser": {
+    "actualPasses": 1024,
+    "failures": 0,
+    "skips": 0,
+    "expectedFailures": 0
+  },
+  "browserCasesBySpec": {
+    "brain-dump-eisenhower.spec.js": 15,
+    "brain-dump-production-ux.spec.js": 10,
+    "brain-dump-plan-tray.spec.js": 28,
+    "analytics-truth.spec.js": 32,
+    "calendar-day-extended-my-day.spec.js": 8,
+    "calendar-native-plan-identity.spec.js": 31,
+    "capability-career-ui.spec.js": 14,
+    "coarse-life-evidence.spec.js": 12,
+    "commitments-sync-wiring.spec.js": 6,
+    "cross-domain-intelligence-ui.spec.js": 13,
+    "cross-store-account-isolation.spec.js": 6,
+    "daily-command-center.spec.js": 27,
+    "daily-reconciliation.spec.js": 12,
+    "daily-routines-ui.spec.js": 14,
+    "daily-use-reliability.spec.js": 44,
+    "device-local-account-isolation.spec.js": 12,
+    "entry-validation.spec.js": 1,
+    "focus-redemption-account-isolation.spec.js": 12,
+    "focus-reload-recovery.spec.js": 26,
+    "guided-measurement-loop.spec.js": 18,
+    "install-interruption.spec.js": 9,
+    "intelligence.spec.js": 11,
+    "learning-plan-ui.spec.js": 78,
+    "life-character-sheet-ui.spec.js": 10,
+    "life-feed-ui.spec.js": 9,
+    "life-ledger-background-sync-ui.spec.js": 2,
+    "my-day-timeline.spec.js": 14,
+    "normal-tracking-hud.spec.js": 14,
+    "onboarding.spec.js": 8,
+    "online-planner-sdk-ui.spec.js": 7,
+    "pair-accountability.spec.js": 4,
+    "partner-view-mobile-navigation.spec.js": 4,
+    "partner-view.spec.js": 15,
+    "personal-day-boundary.spec.js": 15,
+    "personal-day-cross-device.spec.js": 12,
+    "personal-day-legacy-recovery.spec.js": 6,
+    "plan-linkage-up-next.spec.js": 27,
+    "plan-time-range.spec.js": 29,
+    "plan-tomorrow-ui.spec.js": 32,
+    "plan.spec.js": 27,
+    "planning-continuity-fixes.spec.js": 7,
+    "planning-continuity.spec.js": 46,
+    "remaining-remote-account-isolation.spec.js": 26,
+    "review-reconciliation.spec.js": 18,
+    "review-simplification.spec.js": 36,
+    "single-plan-authority.spec.js": 5,
+    "smoke.spec.js": 76,
+    "task-completion.spec.js": 19,
+    "timer-away-account-isolation.spec.js": 23,
+    "today-persistent-sections.spec.js": 12,
+    "today-simplification.spec.js": 19,
+    "tomorrow-timeline-preview.spec.js": 15,
+    "tomorrow-view.spec.js": 16,
+    "unfinished-ux.spec.js": 17,
+    "wife-shared-accountability.spec.js": 6,
+    "personal-day-web-runtime.spec.js": 9
+  },
+  "strictOriginalSeven": {
+    "actualPasses": 21,
+    "repetitions": 3,
+    "fileUnchanged": true
+  },
+  "node": {
+    "tests": 2343,
+    "pass": 2342,
+    "fail": 0,
+    "skipped": 1,
+    "cancelled": 0,
+    "legacyHarnessPasses": 455,
+    "skip": "Existing opt-in lower-case-drive diagnostic"
+  },
+  "firebaseFenceSDKMutation": {
+    "tests": 170,
+    "pass": 170,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "worker": {
+    "tests": 32,
+    "pass": 32,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "workerBundle": "PASS; dry-run only, no upload",
+  "lint": {
+    "errors": 0,
+    "existingWarnings": 48
+  },
+  "preservation": {
+    "pass": true,
+    "base": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+    "authorizedRuntimeRemovals": 2,
+    "governedGeneration": "20261027-task037-save-action-repair-v2",
+    "allOtherTrackedRuntimeUnchanged": true,
+    "protectedHistoricalTrees": 7,
+    "protectedHistoricalHashes": 5512,
+    "previousCandidateTrackedClean": true,
+    "originalSevenTestFileUnchanged": true,
+    "centralSaverAndOwnershipAccountingUnchanged": true
+  },
+  "priorPhysicalEvidence": "Planner owner PASS and Android reminder delivery PASS at 6fcee74; unchanged relevant paths",
+  "freshPhysicalSaveStop": "Not claimed; repaired callbacks verified automatically, no new owner walkthrough",
+  "ownerPriorities": [
+    "planning",
+    "Eisenhower",
+    "Brain Dump",
+    "reminders"
+  ],
+  "production": "NO-GO; integration, hosted CI, formal exact-head/base review and explicit deployment authorization remain",
+  "noProductionActions": true,
+  "attemptNotes": [
+    "Initial new-checkout UI attempt lacked the local SDK dependency directory; setup failure, not defect evidence.",
+    "Initial green had fixture-only canonical label, awaited-start and canonical entry-key corrections; all exact span/count/guard assertions retained.",
+    "First repeated green was interrupted after fixture issues; not counted as a final gate."
+  ]
+}

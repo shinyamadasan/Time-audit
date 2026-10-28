@@ -8,6 +8,7 @@
 // Sunday 2026-09-27 11:00 — no waiting until 18:00.
 
 import { test, expect } from '@playwright/test';
+import { revealAgendaItem } from './agenda-actions.js';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -23,7 +24,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20261024-task025-entry-validation-v1';
+const TOKEN = '20261027-task039-release-integration-v1';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
@@ -397,7 +398,7 @@ test('Sunday 11:00: Plan Tomorrow prepares MONDAY\'s calendar plan (never derive
   // The static labels say "Tomorrow" again once plans follow the calendar (they read "Next personal day" before).
   await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Tomorrow');
   await page.evaluate(() => window.openPlanTomorrow());
-  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan tomorrow');
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan your next day');
   await expect(page.locator('#plan-tomorrow-date')).toContainText('Monday');
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Monday priority');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
@@ -475,6 +476,7 @@ test('Monday 02:00 while still working through Sunday\'s plan: Monday\'s Daily V
   expect(Object.keys(await calendarStore(page)).sort()).toEqual([`cal1:${SUN}`, `cal1:${MON}`]);
 
   // Complete the 01:00 carryover row.
+  await revealAgendaItem(carryover.first().locator('.tl-plan-check'));
   await carryover.first().locator('.tl-plan-check').click();
   await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.task === 'Overnight backup').done).toBe(true);
   const after = await calendarStore(page);
@@ -483,6 +485,7 @@ test('Monday 02:00 while still working through Sunday\'s plan: Monday\'s Daily V
   await expect(carryover.first()).toHaveClass(/done/);
   // Undo uses the same authority.
   await page.evaluate(() => window.__setNow(Date.now() + 1000));
+  await revealAgendaItem(carryover.first().locator('.tl-plan-check'));
   await carryover.first().locator('.tl-plan-check').click();
   await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.task === 'Overnight backup').done).toBe(false);
 });
@@ -587,7 +590,8 @@ test('primary My Day editor creates, reloads, crosses midnight, returns same-day
   expect(item.durationMinutes).toBe(120);
 
   await setClock(page, at(SUN, '11:01'));
-  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await revealAgendaItem(row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }));
+  await row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }).click();
   await form.locator('input[name="time"]').fill('23:00');
   await form.locator('input[name="endTime"]').fill('01:00');
   await form.getByRole('button', { name: 'Save', exact: true }).click();
@@ -599,14 +603,16 @@ test('primary My Day editor creates, reloads, crosses midnight, returns same-day
   await expect(row).toContainText('Ends Monday, Sep 28');
 
   await setClock(page, at(SUN, '11:02'));
-  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await revealAgendaItem(row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }));
+  await row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }).click();
   await form.locator('input[name="endTime"]').fill('03:00');
   await form.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(row).toContainText('11:00 PM–3:00 AM');
   expect((await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId).durationMinutes).toBe(240);
 
   await setClock(page, at(SUN, '11:03'));
-  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await revealAgendaItem(row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }));
+  await row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }).click();
   await form.locator('input[name="time"]').fill('20:00');
   await form.locator('input[name="endTime"]').fill('22:00');
   await form.getByRole('button', { name: 'Save', exact: true }).click();
@@ -614,7 +620,8 @@ test('primary My Day editor creates, reloads, crosses midnight, returns same-day
   await expect(row).not.toContainText('Ends Monday');
 
   await setClock(page, at(SUN, '11:04'));
-  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await revealAgendaItem(row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }));
+  await row.getByRole('button', { name: 'Edit planned task Evening build', includeHidden: true }).click();
   await form.locator('input[name="endTime"]').fill('');
   await form.getByRole('button', { name: 'Save', exact: true }).click();
   item = (await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId);
@@ -637,7 +644,8 @@ test('editor Save stays under the pointer during an end-only edit', async ({ pag
   });
   const row = page.locator('#timeline-blocks [data-plan-item-id="pointer-save"]');
   await expect(row).toContainText('11:00 PM–1:00 AM');
-  await row.getByRole('button', { name: 'Edit planned task Pointer save' }).click();
+  await revealAgendaItem(row.getByRole('button', { name: 'Edit planned task Pointer save', includeHidden: true }));
+  await row.getByRole('button', { name: 'Edit planned task Pointer save', includeHidden: true }).click();
   const form = page.locator('#pc-task-form');
   await form.locator('input[name="endTime"]').fill('03:00');
   const point = await form.getByRole('button', { name: 'Save', exact: true }).evaluate(button => {
@@ -984,11 +992,12 @@ test('Daily View ACCEPTANCE — Saturday 36h: Sat 00:00 → Sun 12:00, Ticktick,
   await expect(sad).toContainText("Sunday's plan");
   expect(await timelineOrder(page)).toEqual(['plan:ticktick', 'break:SUNDAY, SEPTEMBER 27 · NEXT DAY', 'plan:sad']);
   // Its actions name Sunday's plan, never the Saturday view date.
-  await expect(sad.getByRole('button', { name: 'Edit planned task sad' })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SUN}','sad')`);
+  await expect(sad.getByRole('button', { name: 'Edit planned task sad', includeHidden: true })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SUN}','sad')`);
   await expect(sad.locator('.tl-plan-check')).toHaveAttribute('onclick', `toggleTimelinePlanDone('cal1:${SUN}','sad')`);
 
   // Completing it from Saturday's view writes Sunday's one record; Saturday is untouched; no copy anywhere.
   const saturdayBefore = JSON.stringify((await calendarStore(page))[`cal1:${SAT}`]);
+  await revealAgendaItem(sad.locator('.tl-plan-check'));
   await sad.locator('.tl-plan-check').click();
   await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.id === 'sad').done).toBe(true);
   const store = await calendarStore(page);
@@ -1015,7 +1024,7 @@ test('Daily View ACCEPTANCE — Sunday view: ★ sad as Sunday\'s own and Saturd
   await expect(sad).not.toContainText("Sunday's plan");
   expect(await timelineOrder(page)).toEqual(['plan:ticktick', 'plan:sad']);
   // Saturday's plan is still running at Saturday 09:00, so the carry-in row edits Saturday's record.
-  await expect(ticktick.getByRole('button', { name: 'Edit planned task Ticktick list' })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SAT}','ticktick')`);
+  await expect(ticktick.getByRole('button', { name: 'Edit planned task Ticktick list', includeHidden: true })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SAT}','ticktick')`);
   const after = await page.evaluate(() => ({ store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'), writes: window.__fbTest.log.writes.length }));
   expect(after).toEqual(before);
 });
@@ -1061,6 +1070,7 @@ test('Daily View: a next-date schedule occurrence keeps its own date — "Off to
   expect(handlers[0]).toContain(`'${SAT}'`);
   expect(handlers[1]).toContain(`'${SUN}'`);
   expect(await timelineOrder(page)).toEqual(['other', 'plan:ticktick', `break:SUNDAY, SEPTEMBER 27 · NEXT DAY`, 'plan:sad', 'other']);
+  await revealAgendaItem(offButtons.nth(1));
   await offButtons.nth(1).click();
   expect(await page.evaluate(() => settings.templates[0].skipDates)).toEqual([SUN]);
   await expect(rows).toHaveCount(1);
