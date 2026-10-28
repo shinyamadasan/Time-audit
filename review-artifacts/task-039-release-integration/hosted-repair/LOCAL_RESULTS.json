@@ -1,0 +1,47 @@
+{
+  "linux_affected_files": {
+    "unique": 34,
+    "repetitions": 3,
+    "passed": 102,
+    "failed": 0,
+    "skipped": 0,
+    "expected_failed": 0,
+    "retried": 0,
+    "elapsed_minutes": 6.3,
+    "log_sha256": "07a382505d5676b081fb65c97e6dac0153721e96ecaf07048c6a0b16919c6a39",
+    "external_network_during_tests": false,
+    "node_version": "24.16.0",
+    "playwright": "1.61.0",
+    "image": "mcr.microsoft.com/playwright:v1.61.0-noble",
+    "image_digest": "sha256:57b65fdc9ceabe0ef613124c7bbe2babcf9362c4d85e382fe3b03604e84b428a"
+  },
+  "windows_tool_captured": {
+    "original_visual": {
+      "passed": 1
+    },
+    "fixed_visual": {
+      "passed": 3,
+      "failed": 0
+    },
+    "sdk_cases": {
+      "passed": 21,
+      "failed": 0
+    }
+  },
+  "node": {
+    "command": "npm test",
+    "exit_code": 0,
+    "elapsed_seconds": 268.9371521472931,
+    "raw_sha256": "12926ce3ca6c466b269f474355f59216b4c673defb3d314f5c2065b8b406dad9",
+    "totals": {
+      "tests": 2393,
+      "pass": 2392,
+      "fail": 0,
+      "skipped": 1,
+      "cancelled": 0,
+      "todo": 0
+    }
+  },
+  "full_new_hosted_run": "NOT RUN: new push requires exact-SHA owner authorization",
+  "app_runtime_changed": false
+}

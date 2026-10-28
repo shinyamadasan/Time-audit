@@ -1,0 +1,14 @@
+{
+  "command": "npm test",
+  "exit_code": 0,
+  "elapsed_seconds": 268.9371521472931,
+  "raw_sha256": "12926ce3ca6c466b269f474355f59216b4c673defb3d314f5c2065b8b406dad9",
+  "totals": {
+    "tests": 2393,
+    "pass": 2392,
+    "fail": 0,
+    "skipped": 1,
+    "cancelled": 0,
+    "todo": 0
+  }
+}

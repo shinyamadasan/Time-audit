@@ -17,6 +17,9 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Keep bundled Inter advance metrics consistent between Windows and Linux FreeType.
+test.use({launchOptions:{args:['--font-render-hinting=none']}});
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 const SERVE_ROOT = process.env.QUALITY_BASELINE_ROOT || APP_ROOT;

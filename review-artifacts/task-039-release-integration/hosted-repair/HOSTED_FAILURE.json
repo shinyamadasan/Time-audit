@@ -1,0 +1,70 @@
+{
+  "captured_at": "2026-10-28 10:47:43 UTC",
+  "pr": "https://github.com/shinyamadasan/Time-audit/pull/20",
+  "head": "ddb6c6d4456085ca30b8cc8ccae847dcb791792d",
+  "base": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+  "ci_run": 40669652533,
+  "synthetic_merge": "c42fad10655ca694c15a8bba72919685e9c9cd1c",
+  "required_checks": {
+    "test": "failure",
+    "Firebase fence / rules integration": "success"
+  },
+  "hosted": {
+    "node": {
+      "total": 2392,
+      "passed": 2386,
+      "failed": 0,
+      "skipped": 6,
+      "skip_notes": [
+        "Windows drive-path platform case",
+        "opt-in CROSS_REPO_COMPAT_CONTROL_PROOF diagnostic",
+        "four Windows dispatcher cases"
+      ]
+    },
+    "legacy": {
+      "passed": 455,
+      "failed": 0
+    },
+    "worker": {
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0,
+      "bundle": "dry-run pass, no upload"
+    },
+    "fence": {
+      "rules": 110,
+      "sdk": 29,
+      "mutation": 38,
+      "total_passed": 177,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browser": {
+      "passed": 1019,
+      "failed": 2,
+      "did_not_run": 6,
+      "retried": 0,
+      "expected_failed": 0,
+      "elapsed_minutes": 17.5
+    }
+  },
+  "failures": [
+    {
+      "test": "tests/daily-command-center.spec.js: TASK-033 actual product review captures",
+      "assertion": "expect(metrics.height).toBe(44)",
+      "expected": 44,
+      "actual": 58.375,
+      "classification": "reference font rendering differs with native Linux hinting; unchanged product min-height is44",
+      "reproduction": "same Linux failure; bundled font loaded, textWidth100 vs Windows94.81268310546875",
+      "local_repair": "file-scoped Chromium --font-render-hinting=none; no assertion/body/style change"
+    },
+    {
+      "test": "tests/online-planner-sdk-ui.spec.js: real SDK planner Save confirms, persists on another browser and still refuses a genuine source change",
+      "assertion": "assert.ok(existsSync(JAR)) in startEmulator beforeAll",
+      "classification": "CI prerequisite missing in separate browser runner",
+      "local_repair": "Java21 and existing checksum-pinned provisioner before unchanged full smoke command"
+    }
+  ],
+  "remote_repair_pushed": false,
+  "production_authorized": false
+}

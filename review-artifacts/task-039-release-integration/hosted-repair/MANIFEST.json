@@ -1,0 +1,101 @@
+{
+  "files": [
+    {
+      "file": "CI_REPAIR_REPORT.md",
+      "bytes": 6528,
+      "sha256": "bb582ec0c0db6bfe6755c2ed3234ad6abd1c817d8374b2cde807be9f874cea28",
+      "canonical_lf_sha256": "bb582ec0c0db6bfe6755c2ed3234ad6abd1c817d8374b2cde807be9f874cea28"
+    },
+    {
+      "file": "FORMAL_REVIEW_REPAIR.md",
+      "bytes": 3482,
+      "sha256": "52a5c1fe98dd7e5a52719d03ec9aa4930fa16d6c5596d1ac3143b5aa1e682e17",
+      "canonical_lf_sha256": "52a5c1fe98dd7e5a52719d03ec9aa4930fa16d6c5596d1ac3143b5aa1e682e17"
+    },
+    {
+      "file": "FORMAL_REVIEW_DDB6.md",
+      "bytes": 6298,
+      "sha256": "a9f6ae609f5c1d772b43a8fb3ad0d45d6868dd9ed664776aca4a2b75b87024ab",
+      "canonical_lf_sha256": "a9f6ae609f5c1d772b43a8fb3ad0d45d6868dd9ed664776aca4a2b75b87024ab"
+    },
+    {
+      "file": "HOSTED_FAILURE.json",
+      "bytes": 2262,
+      "sha256": "26691b90522c772f52ea65654f03893e6898e5f1ca2eb422012036a62b97f8d5",
+      "canonical_lf_sha256": "26691b90522c772f52ea65654f03893e6898e5f1ca2eb422012036a62b97f8d5"
+    },
+    {
+      "file": "LOCAL_RESULTS.json",
+      "bytes": 1251,
+      "sha256": "5118731020327e4dfa45733aa0be77889df51e083b606dfb0a6fbd379d887dc9",
+      "canonical_lf_sha256": "2f3c8962a6bb65d58794bacaf48ebbd5ddcb8d07ec459f3cacf83d12f7e2a794"
+    },
+    {
+      "file": "NODE_RESULT.json",
+      "bytes": 307,
+      "sha256": "e9878254cf485914dbd7bd47f327ae86d4db2aeac20f3071bf334c7d037ffe49",
+      "canonical_lf_sha256": "28ec3dc3aa32248e3fa70db280093e50c816dfcafbd4138dd7c0fc745d6d3546"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 678,
+      "sha256": "1055df1ba985dbc788f19b2f161655d66712b4a14ec9cfbb07acd09eb28ee85e",
+      "canonical_lf_sha256": "4059957f08f9b1f199274a4cb00d9d604df8683bf0b8682ea71c1575a7fe2747"
+    },
+    {
+      "file": "PR_AND_REVIEW_PREFLIGHT.json",
+      "bytes": 1382,
+      "sha256": "db1af7946be2df903781442d0521768255fe2bb31af1f4846bc6dc2917128b07",
+      "canonical_lf_sha256": "db1af7946be2df903781442d0521768255fe2bb31af1f4846bc6dc2917128b07"
+    },
+    {
+      "file": "hosted-test-failed.log.gz",
+      "bytes": 275670,
+      "sha256": "cb32a984e2258a5c6004ec1e9e5b522c7f04e4c40b79f734c091cebcf48e12fd",
+      "decompressed_sha256": "c3870dcd0bb25929cebf307a30c69d13f38cc5fb5bf63bee9694bc5c9aac458e"
+    },
+    {
+      "file": "hosted-firebase.log.gz",
+      "bytes": 21063,
+      "sha256": "dab11e5a23eb32c84c79d73e6cef9582c483e2cf4977b77256301d1b47306a44",
+      "decompressed_sha256": "bbfa942915a2b0a7e65ad11a669a36c95d969d7b07a1d107ce34199a1c0d32f4"
+    },
+    {
+      "file": "linux-focused-fixed.log.gz",
+      "bytes": 2218,
+      "sha256": "89ee8554c36cbbc6613e20b3ea1725833564d96fdb708bd19c90e1eda2041a44",
+      "decompressed_sha256": "07a382505d5676b081fb65c97e6dac0153721e96ecaf07048c6a0b16919c6a39"
+    },
+    {
+      "file": "node-full.log.gz",
+      "bytes": 94412,
+      "sha256": "c44a0c39eeaaa9385aedd1d4edb146e2cc9765e2f69c9f3e65843adbbd84505a",
+      "decompressed_sha256": "12926ce3ca6c466b269f474355f59216b4c673defb3d314f5c2065b8b406dad9"
+    },
+    {
+      "file": "font-native-linux.json",
+      "bytes": 202,
+      "sha256": "9eb727ae58a63c8ad4574824a6203ae08ce61d40f9748bf6ed2a63bab5fc002a",
+      "canonical_lf_sha256": "9eb727ae58a63c8ad4574824a6203ae08ce61d40f9748bf6ed2a63bab5fc002a"
+    },
+    {
+      "file": "font-native-windows.json",
+      "bytes": 212,
+      "sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee",
+      "canonical_lf_sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee"
+    },
+    {
+      "file": "font-reference-linux.json",
+      "bytes": 212,
+      "sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee",
+      "canonical_lf_sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee"
+    },
+    {
+      "file": "font-reference-windows.json",
+      "bytes": 212,
+      "sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee",
+      "canonical_lf_sha256": "dbe757695089c3efe019b1f17e0291b7e63ca47bbe14e291e8040f0b49b714ee"
+    }
+  ],
+  "text_hash_policy": "sha256 identifies the collected artifact; canonical_lf_sha256 permits normal Git checkout line-ending conversion; gzip and decompressed raw logs stay byte exact"
+}

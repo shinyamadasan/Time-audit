@@ -5384,3 +5384,14 @@ tests: browser 1027/1027; final Node 2392 passed + one existing diagnostic skip 
 blockers: no local integration implementation blocker; hosted CI, formal exact-head/base review and separately authorized production compatibility/rollback capture/rules-first rollout remain.
 deviations: remote main advanced during gates; preserved unchanged browser pass with98-runtime/94-static-dependency proof and reran complete affected backend gates. Setup/evidence housekeeping attempts retained; no weakened assertions/timeouts or production actions.
 → status set to `review` in TASKS.md
+
+
+## TASK-039 — hosted CI blocker repair (branch: task-039-hosted-ci-repair)
+changed:
+  - .github/workflows/ci.yml: Java21 plus existing checksum-pinned RTDB provisioner before full smoke; separate runner prerequisites stay strict.
+  - tests/daily-command-center.spec.js: three file-scoped reference-font fixture lines; all existing bodies/assertions/timeouts unchanged. No product/runtime/style/rules change.
+  - Own hosted-repair evidence and report; exact pushed ddb6c6d preserved on draft PR20.
+tests: Linux affected files102/102 (34cases x3), Windows visual3/3 and SDK21/21; full npmtest2392passed/1existing diagnostic skip, legacy455/455; runtime98/shared/rules parity pass. Hosted original testFAIL1019passed/2failed/6notrun; hosted fence177/177, Worker44/44 dry-run pass.
+blockers: push exact local repair requires separate owner approval; new hosted green run and formal head/base binding remain; Claude Guardian Gauntlet NOT RUN/NOT PASSED (quota). Production NO-GO.
+deviations: isolated local follow-up because hosted Linux exposed font-reference and missing-emulator setup issues; no assertion weakening, timeout increase, app fix, production action or additional phone testing. Failed setup attempts are not passes.
+→ status remains review in TASKS.md; no merge/push of repair authorized.
