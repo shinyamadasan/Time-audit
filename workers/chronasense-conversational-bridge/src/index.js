@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { allowedSubjects, handleMcpRequest, ISSUER, KNOWN_SCOPES, PLAN_WRITE_SCOPE, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
+import { allowedSubjects, handleMcpRequest, ISSUER, KNOWN_SCOPES, OFFLINE_ACCESS_SCOPE, PLAN_WRITE_SCOPE, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
 
 const ACCESS_ASSERTION_HEADER = 'Cf-Access-Jwt-Assertion';
 const ACCESS_ALGORITHM = 'RS256';
@@ -213,7 +213,7 @@ function authorizedScopes(authRequest) {
 }
 
 function invalidAuthorizationRequest(authRequest) {
-  const error = new Error('Only the ChronaSense read, Brain Dump write and plan write scopes and resource are supported.');
+  const error = new Error('Only the ChronaSense read, Brain Dump write, plan write, offline access scopes and resource are supported.');
   error.name = 'AuthorizationError';
   if (authRequest.redirectUri) {
     const redirectTo = new URL(authRequest.redirectUri);
@@ -260,6 +260,7 @@ function consentPage(details, handle, accessSubject, accessLabel, scopes) {
     '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (writes ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
     + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : '')
     + (scopes.includes(PLAN_WRITE_SCOPE) ? ' It also grants <code>' + PLAN_WRITE_SCOPE + '</code>: per action, add one new task to an exact calendar-day plan, or complete/uncomplete, edit, move or remove one existing task named by its id and the revision last read. It cannot touch Brain Dump, settings, timers or time entries.' : '')
+    + (scopes.includes(OFFLINE_ACCESS_SCOPE) ? ' It also grants <code>offline_access</code>: the client can renew access using a refresh token without requiring a new sign-in each time the short-lived access token expires.' : '')
     + (writes ? '' : ' It cannot change your data.') + '</p>' +
     '<form method="post"><input type="hidden" name="handle" value="' + escapeHtml(handle) + '">' +
     '<button name="decision" value="approve">' + approve + '</button> ' +
