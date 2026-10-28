@@ -21,7 +21,12 @@ export function planDomain(seed = {}, hooks = {}) {
   const versions = new Map();
   const writes = [];
   let collectionVersion = 1;
-  const bump = key => { versions.set(key, (versions.get(key) ?? 1) + 1); if (key.startsWith('rec:')) collectionVersion++; };
+  let legacyCollectionVersion = 1;
+  const bump = key => {
+    versions.set(key, (versions.get(key) ?? 1) + 1);
+    if (key.startsWith('rec:')) collectionVersion++;
+    if (key.startsWith('lrec:')) legacyCollectionVersion++;
+  };
   const etag = (key, exists) => (exists ? `v${versions.get(key) ?? 1}` : 'null_etag');
   const own = identity => assert.equal(identity.roomId, `uid_${OWNER.ownerFirebaseUid}`, 'every domain call is the bound owner room');
   const store = value => {
@@ -140,6 +145,29 @@ export function planDomain(seed = {}, hooks = {}) {
       bump(`lrec:${dateKey}`);
       writes.push({ planId: dateKey, where: 'legacy-record' });
       if (hooks.afterLegacyRecordPut) await hooks.afterLegacyRecordPut(dateKey);
+      return 'written';
+    },
+    // ── TASK-038: the legacy collection compare-and-set a legacy cross-day move uses.
+    async readLegacyPlansWithEtag(identity) {
+      own(identity);
+      if (hooks.beforeLegacyPlansRead) await hooks.beforeLegacyPlansRead();
+      return { value: structuredClone(room.plans && Object.keys(room.plans).length ? room.plans : null), etag: `l${legacyCollectionVersion}` };
+    },
+    async putLegacyPlansIfMatch(identity, plans, tag) {
+      own(identity);
+      if (hooks.beforeLegacyPlansPut) await hooks.beforeLegacyPlansPut(plans);
+      if (Object.keys(room.calendarPlanAuthority ?? {}).length) throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
+      if (tag !== `l${legacyCollectionVersion}`) return 'changed';
+      for (const dateKey of Object.keys(room.plans ?? {})) assert.ok(Object.hasOwn(plans, dateKey), 'a collection write never drops a plan');
+      for (const record of Object.values(plans)) {
+        for (const item of Object.values(record.items || {})) assert.ok(!item?.creationActionId && !String(item?.id).startsWith('api1_') && !item?.brainDumpOrigin, 'no fenced item in an array');
+      }
+      const changed = Object.keys(plans).filter(dateKey => JSON.stringify(store(plans[dateKey])) !== JSON.stringify(room.plans?.[dateKey]));
+      room.plans ??= {};
+      for (const dateKey of changed) { room.plans[dateKey] = store(plans[dateKey]); versions.set(`lrec:${dateKey}`, (versions.get(`lrec:${dateKey}`) ?? 1) + 1); }
+      legacyCollectionVersion++;
+      writes.push({ planIds: changed.sort(), where: 'legacy-collection' });
+      if (hooks.afterLegacyPlansPut) await hooks.afterLegacyPlansPut();
       return 'written';
     },
     async readLegacyPlanFenceItemWithEtag(identity, dateKey, itemId) {

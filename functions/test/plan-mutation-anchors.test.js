@@ -17,6 +17,7 @@ import * as shipped from '../src/plan-mutation-action.js';
 import { revision } from '../src/plan-read.js';
 import { createReceiptStore } from '../src/receipts.js';
 import { addCalendarDays, localPlanDate } from '../shared/plan-tomorrow-model.js';
+import { legacyBoundaryRevision, proposeBoundaryRevision } from '../shared/personal-day-boundary-model.js';
 import { planDomain, ZONE } from './plan-domain-support.js';
 import { NOW_MS, OWNER, fakeInfra } from './support.js';
 
@@ -57,6 +58,13 @@ const apiDomain = (extraFences = {}, hooks = {}) => planDomain({ calendarPlans: 
 const moveApi = (impl, domain, { destination = OTHER, itemId = API_ITEM, item } = {}) => run(impl, { domain, infra: fakeInfra(),
   cmd: { ...command('plan_move', { destination: { store: 'calendar', id: destination } }, revOf(item ?? domain.room.calendarPlanFences[PLAN][itemId])),
     parameters: { target: { store: 'calendar', id: PLAN }, itemId, destination: { store: 'calendar', id: destination } } } });
+// TASK-038 legacy move fixtures (an account that never cut over).
+const NEXT = addCalendarDays(TODAY, 1);
+const legacyGym = (extra = {}) => ({ id: 'pgym1', task: 'Gym', when: '18:00', done: false, kind: 'task', updatedAt: T0, updatedBy: 'phone', ...extra });
+const legacyRoom = (extra = {}) => ({ calendarPlanAuthority: {}, plans: { [TODAY]: { updatedAt: T0, updatedBy: 'phone', items: [legacyGym()] } }, ...extra });
+const moveLegacy = (impl, domain, destination = NEXT) => run(impl, { domain, infra: fakeInfra(),
+  cmd: { ...command('plan_move', {}, revision({ v: 1, store: 'legacy', targetKey: TODAY, item: domain.room.plans[TODAY].items[0] })),
+    parameters: { target: { store: 'legacy', id: TODAY }, itemId: 'pgym1', destination: { store: 'legacy', id: destination } } } });
 
 /** One normalized command, exactly as parseCreateEnvelope produces it. */
 function command(kind, parameters, expectedRevision, actionId = `act1_${randomUUID()}`) {
@@ -169,6 +177,29 @@ const scenarios = {
     const result = await moveApi(impl, domain, { itemId: bdItem.id, item: bdItem });
     return result.code === 'DOMAIN_LIMIT' && !domain.room.calendarPlanFences[OTHER];
   },
+  // ── TASK-038 legacy -> legacy moves
+  /** The legacy move CAS is conditional on its read: a concurrent app delete of the source is never undone. */
+  async legacyMoveNeverUndoesConcurrentDelete(impl) {
+    let once = true;
+    let reads = 0;
+    const ownerDelete = () => { if (once) { once = false; domain.ownerLegacyRecord(TODAY, { updatedAt: T0 + 2, updatedBy: 'phone', items: [legacyGym({ deleted: true, updatedAt: T0 + 2 })] }); } };
+    const domain = planDomain(legacyRoom(), { async beforeLegacyPlansRead() { if (++reads === 2) ownerDelete(); }, async beforeLegacyPlansPut() { ownerDelete(); } });
+    const result = await moveLegacy(impl, domain);
+    return result.code === 'STALE_REVISION' && domain.room.plans[NEXT] === undefined && domain.room.plans[TODAY].items[0].deleted === true;
+  },
+  /** A destination date a Personal Day boundary owns is not its old legacy record: NOT_FOUND, nothing written. */
+  async legacyDestinationMustBeLegacyDay(impl) {
+    const history = proposeBoundaryRevision([legacyBoundaryRevision(ZONE)], { id: 'b0400', boundaryTime: '04:00', timezone: ZONE }, NOW_MS + 3_600_000).revisions;
+    const domain = planDomain(legacyRoom({ dayBoundaryRevisions: Object.fromEntries(history.map(revision => [revision.id, revision])) }));
+    const result = await moveLegacy(impl, domain, addCalendarDays(TODAY, 2));
+    return result.code === 'NOT_FOUND' && domain.writes.length === 0;
+  },
+  /** After the cutover both legacy days are history: refused before any write (the rules would refuse it anyway). */
+  async legacyDestinationEndedAtCutover(impl) {
+    const domain = planDomain(legacyRoom({ calendarPlanAuthority: { f: { schemaVersion: 1, id: 'f', activatedAtMs: NOW_MS - 60_000, timezone: ZONE, activationDate: TODAY, deviceId: 'phone' } } }));
+    const result = await moveLegacy(impl, domain);
+    return result.code === 'PAST_TARGET_IMMUTABLE' && domain.writes.length === 0;
+  },
 };
 
 test('baseline: the shipped module passes every anchor scenario', async () => {
@@ -203,6 +234,13 @@ const ANCHORS = [
     [['    if (fenceMove && physical.destination.item !== null) {', '    if (false) {']]],
   ['bdp1| refusal removed -> a fenced Brain Dump item is relocated away from its promotion', 'brainDumpNeverMoves',
     [['  if (isFencedItem(pre) && !isActionPlanItem(pre)) throw', '  if (false) throw']]],
+  ['legacy move write not conditional on the read -> a concurrent app delete is silently undone', 'legacyMoveNeverUndoesConcurrentDelete',
+    [['        outcome = await domain.putLegacyPlansIfMatch(identity, plans, physical.etag);',
+      '        outcome = await domain.putLegacyPlansIfMatch(identity, plans, (await domain.readLegacyPlansWithEtag(identity)).etag);']]],
+  ['legacy destination not routed through Plan Authority -> a boundary-owned date is written through its old record', 'legacyDestinationMustBeLegacyDay',
+    [["        if (store === 'legacy') destination = asLegacyDay(destination);", '']]],
+  ['cutover not applied to a legacy source -> a move out of a superseded legacy day is attempted', 'legacyDestinationEndedAtCutover',
+    [["ended: source.target.endMs <= nowMs || (store === 'legacy' && reader.calendarActivated),", 'ended: source.target.endMs <= nowMs,']]],
 ];
 
 for (const [title, scenario, edits] of ANCHORS) {

@@ -5350,3 +5350,26 @@ not changed: firebase rules, index.html, www/, app runtime, production data.
 - functions/src/envelope.js: completion with any non-calendar, non-legacy store names both supported stores (N2).
 - tests: M1 and S2 regressions (both red without the fix); firebase-rules.test.js targaryen proof of the legacy
   write shapes (S1). REVIEW.md entry; TASKS.md TASK-036 -> `approved` (held, red zone).
+
+## TASK-038 — conversational rescheduling on legacy plan targets (branch: task-038, 2026-10-27)
+base: origin/main `0d9ab8f`. Not committed, merged or deployed. Owner-direct; red zone (plan mutation) -> held at `approved`.
+root cause: plan_move accepted calendar targets only, so an account that never cut over (the second user) could not
+  move any task through ChatGPT.
+changed:
+  - functions/src/envelope.js: `moveTargets` — plan_move takes calendar->calendar (unchanged) or legacy->legacy; a mixed
+    pair, `time`/`durationMinutes` on a legacy move -> DOMAIN_LIMIT before any receipt.
+  - functions/src/plan-mutation-action.js: legacy move = same id live at the destination with the next
+    relocationRevision + source tombstone (movedToDayId), both in ONE if-match PUT of `plans`, each record changed in
+    place (`inPlaceDestination`: replace an earlier same-id copy, else append; absent record created as the app does).
+    Source and destination must be Plan Authority legacy days (`legacyDay`) and not ended; cutover ends the source.
+    Legacy items are not re-judged on move. A rules refusal of the legacy collection write -> CONFLICT
+    `legacy-history-unwritable` (nothing written). Result/receipt destination carries the real store.
+  - functions/src/user-scoped-rtdb.js: `readLegacyPlansWithEtag`, `putLegacyPlansIfMatch` pinned to
+    `rooms/uid_<bound uid>/plans`, legacy date keys only, owner token, existing ETag only.
+  - workers/chronasense-conversational-bridge/src/mcp.js: plan_move target/destination accept the exact legacy shape;
+    result store calendar|legacy; description gives the approve-then-move-one-by-one-then-verify workflow and Undo.
+  - tests: functions/test/plan-legacy-move.test.js (17); 3 mutation anchors; adapter pinning test; legacy collection in
+    plan-domain-support.js; 4 real-RTDB-emulator tests; Worker forged cases + legacy end-to-end (move 2, verify, refuse
+    mixed/retime, Undo).
+  - DECISIONS.md #42; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-038.
+not changed: firebase rules, index.html, www/, app runtime, production data, Worker/Function deployments.

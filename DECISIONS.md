@@ -985,3 +985,37 @@ own review; do not route legacy writes through `mergeDatePlans`; do not add a le
 treat a legacy target as writable after activation.
 
 ---
+
+## 42. TASK-038 conversational move on legacy plan targets: legacy -> legacy only, one collection compare-and-set, each record changed in place
+
+**Decision:** `plan_move` also accepts a legacy pair (`target` and `destination` both `{ store: 'legacy', id:
+'YYYY-MM-DD' }`) for an account that never cut over (#29), so "move my unfinished tasks to tomorrow" works for it. It is
+the server twin of the app's own legacy `updateItem` cross-day move: the SAME item id goes live at the destination with
+the next `relocationRevision` and the source copy becomes a tombstone naming `movedToDayId`. Both records commit in ONE
+ordinary-owner `if-match` PUT of `rooms/<uid>/plans` (as #38's calendar collection CAS); within it each record is changed
+in place (#41: never rebuilt with `mergeDatePlans`), the destination's earlier copy of the same id (an Undo) is replaced
+rather than duplicated, and an absent destination is created as the app creates one (`{ items, updatedAt, updatedBy }`).
+Both days must be ones Plan Authority still routes to the legacy record (`legacyDay`) and not ended; once any activation
+fact exists the source is ended and the rules refuse the write anyway. Same receipts, revisions, intent and recovery as
+#38. A legacy move keeps the item's own time and length: `time`/`durationMinutes` and a mixed calendar/legacy pair are
+`DOMAIN_LIMIT` before any receipt. The item is not re-judged (no field changes and a legacy wall time/duration do not
+depend on the date): an emulator run showed the stored "duration without a start time" shape would otherwise be refused.
+Fenced Brain Dump items (a `planFences` child bound by its origin) and recovered carry items are refused exactly as on calendar; a
+pre-fence `bdp1|` array item (no origin) moves, as the app's own updateItem moves it. The Top 3 cap applies.
+Several tasks move as one call per explicitly approved task (each atomic and idempotent; a refusal leaves that task where
+it is); Undo is a move back. No rules change, no migration, no client change.
+
+**Why:** the second account reads legacy targets, so every move was refused. Two separate record writes were already
+rejected in #38 (a concurrent delete could be undone by the landed destination copy). A batch command was not needed:
+per-task atomic moves already give no-duplicate/no-loss semantics and a per-task report.
+
+**Known limit:** a whole-collection PUT makes the rules re-validate EVERY stored legacy item (emulator-verified), so a
+historical item the rules would no longer accept (e.g. a pre-fence `bdp1|` array item whose capture is gone) makes every
+legacy move refused (reported as CONFLICT `legacy-history-unwritable`, not as an access failure). That refusal writes
+nothing; the task stays where it is and can be moved in the app. Before enabling it for the second account, a read-only,
+owner-approved check of her stored legacy history against that rule would tell whether she is affected.
+
+**Do not:** move legacy <-> calendar; retime on a legacy move; write a legacy move as two record writes or through
+`mergeDatePlans`; move a fenced Brain Dump item; treat a legacy day as writable after activation.
+
+---

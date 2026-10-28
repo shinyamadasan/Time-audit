@@ -1780,7 +1780,7 @@ closure (2026-10-27):
 status-note: closed. The private backup of the 2 deleted records stays outside the repo.
 
 ### TASK-036 - Conversational task completion on legacy plan targets
-status: approved
+status: done
 owner: claude (owner asked for autonomous investigate/implement/test/review)
 source: owner-direct
 priority: P2
@@ -1821,6 +1821,51 @@ constraints:
 
 verification:
   - npm test in functions and workers/chronasense-conversational-bridge; npm run check:bundle; independent review.
+
+closure (2026-10-27, owner-directed documentation reconciliation in TASK-038's PR):
+  - Merged cc016c6 (main). Backend chronasenseactionapi-00011-vup (G2) and Worker 4fbc58b6 (G4) deployed; owner
+    calendar canary PASS (G3). Evidence in TEST_REPORT.md G2-G4, carried over unchanged from the task-036 branch.
+  - Legacy acceptance: the owner stated (2026-10-27, TASK-038 goal) that legacy task completion and Undo were verified
+    through ChatGPT. Owner-reported; which tasks and timestamps were not supplied and are not inferred here.
+status-note: closed. The task-036 branch holds no other unmerged work and can be retired after this PR merges.
+
+### TASK-038 - Conversational rescheduling on legacy plan targets
+status: approved
+owner: claude (owner asked for autonomous assess/implement/test/review)
+source: owner-direct
+priority: P2
+depends-on: TASK-036 (merged cc016c6, on main)
+files: functions/src/{envelope.js, plan-mutation-action.js, user-scoped-rtdb.js}, functions/test/{plan-legacy-move.test.js,
+  plan-domain-support.js, plan-legacy-completion.test.js, plan-mutation-anchors.test.js, user-scoped-rtdb.test.js},
+  firebase-rules-emulator.test.js, workers/chronasense-conversational-bridge/{src/mcp.js, test/plan-mutation.test.js},
+  docs/CHRONASENSE_ACTION_API_V1.md, DECISIONS.md #42, TASKS.md, CHANGELOG.md, TEST_REPORT.md, REVIEW.md
+
+context:
+  Owner instruction, 2026-10-27 ("GOAL — ChronaSense Legacy Task Rescheduling"): both users must be able to move
+  tasks through ChatGPT; primary use "Move my unfinished tasks from today to tomorrow". Calendar plan_move exists
+  (TASK-012); every legacy move was refused (DECISIONS #41 kept plan_move calendar-only).
+
+objective:
+  plan_move moves one existing legacy array item legacy -> legacy with the same receipt, revision, idempotency and
+  recovery guarantees as the calendar path; several explicitly selected tasks move as one call each.
+
+acceptance:
+  - Same id live at the destination, source tombstone naming it, both records in one CAS; task text, time, duration,
+    kind, done state and every other field kept; unrelated items, records, preparation byte-identical.
+  - Replay idempotent; crash/lost response proven APPLIED, never moved twice; Undo = move back, no duplicate.
+  - Stale/ambiguous, ended, cut-over, boundary-owned, mixed-store, retime, Brain Dump and recovered items refused with
+    nothing written; Top 3 cap kept.
+  - User isolation: every read/write pinned to rooms/uid_<bound uid>/plans; another account cannot read or move.
+  - The app converges (mergeDatePlans + relocation projection show each id on one day).
+  - Real RTDB emulator tests for cross-date writes, rules, races, cutover and isolation; functions + worker suites green;
+    independent review.
+
+constraints:
+  - No migration, no rules change, no client change, no production data access, no merge, no deploy.
+  - Red zone (plan sync / mutation): approved gate, held for the human.
+
+verification:
+  - npm test (root, functions, worker); npm run test:fence; npm run check:bundle; independent review.
 
 <!-- Paste new tasks above this line. -->
 

@@ -130,6 +130,21 @@ function completionTarget(target) {
   return { store: 'legacy', id: target.id };
 }
 
+/** TASK-038 (DECISIONS #42): plan_move's two ends — both calendar plans, or both legacy plans of an account that never
+ *  cut over. A legacy move keeps the item's own time and length (no retime), exactly as the app's legacy move does. */
+function moveTargets(parameters) {
+  if (parameters.target?.store !== 'legacy') return { target: calendarTarget(parameters.target), destination: calendarTarget(parameters.destination, 'destination plan') };
+  const target = completionTarget(parameters.target);
+  if (parameters.destination?.store !== 'legacy') {
+    throw new ApiError('DOMAIN_LIMIT', 'A task on a legacy plan moves only to another legacy plan day.', { reason: 'plan-move-cross-store' });
+  }
+  const destination = completionTarget(parameters.destination);
+  if (Object.hasOwn(parameters, 'time') || Object.hasOwn(parameters, 'durationMinutes')) {
+    throw new ApiError('DOMAIN_LIMIT', 'Moving a legacy plan task keeps its time; change the time in the app.', { reason: 'legacy-move-retime-unsupported' });
+  }
+  return { target, destination };
+}
+
 /** An explicit wall time: { when: HH:MM, whenTz: canonical IANA, whenDayOffset?: 0|1 } -> normalized (offset explicit). */
 function wallTime(time) {
   if (!time || typeof time !== 'object' || Array.isArray(time) || Object.keys(time).some(key => !['when', 'whenDayOffset', 'whenTz'].includes(key))) {
@@ -150,7 +165,8 @@ function wallTime(time) {
 function planMutationParameters(kind, parameters) {
   if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)
     || Object.keys(parameters).some(key => !MUTATION_KEYS[kind].includes(key))) throw invalid('Unsupported plan action parameters.', 'plan-parameters');
-  const target = kind === 'plan_set_completion' ? completionTarget(parameters.target) : calendarTarget(parameters.target);
+  const ends = kind === 'plan_move' ? moveTargets(parameters) : null;
+  const target = ends ? ends.target : kind === 'plan_set_completion' ? completionTarget(parameters.target) : calendarTarget(parameters.target);
   if (typeof parameters.itemId !== 'string' || !PLAN_ITEM_ID.test(parameters.itemId)) throw invalid('A stable plan item ID is required.', 'plan-item-id');
   const normalized = { target, itemId: parameters.itemId };
   if (kind === 'plan_set_completion') {
@@ -160,7 +176,7 @@ function planMutationParameters(kind, parameters) {
   if (kind === 'plan_delete') return normalized;
   let date = parseCalendarPlanId(target.id);
   if (kind === 'plan_move') {
-    normalized.destination = calendarTarget(parameters.destination, 'destination plan');
+    normalized.destination = ends.destination;
     if (normalized.destination.id === target.id) throw invalid('A move needs a different destination plan; use plan_edit to change the time on the same day.', 'plan-move-same-target');
     date = parseCalendarPlanId(normalized.destination.id);
   }

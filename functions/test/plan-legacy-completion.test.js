@@ -1,7 +1,8 @@
 // TASK-036 (DECISIONS #41): plan_set_completion on a LEGACY plan target — the `plans/<YYYY-MM-DD>` record (and its
 // `planFences/<YYYY-MM-DD>/<bdp1|id>` children) of an account that never ran the calendar cutover. Same receipts,
 // revisions, idempotency and recovery as the calendar path; the write replaces exactly one item in the stored record.
-// Every other mutation still refuses a legacy target, and the calendar path is unchanged (plan-mutation-action.test.js).
+// Edit and delete still refuse a legacy target (TASK-038 adds legacy -> legacy moves: plan-legacy-move.test.js), and the
+// calendar path is unchanged (plan-mutation-action.test.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -192,7 +193,7 @@ test('an ended legacy day and a legacy day superseded by the cutover are history
   assert.equal(cutover.store.writes.length, 0);
 });
 
-test('scope: only completion takes a legacy target; edit/move/delete and every operational target stay DOMAIN_LIMIT; malformed ids are invalid', async () => {
+test('scope: edit/delete, a legacy -> calendar move (TASK-038 moves legacy -> legacy only) and every operational target stay DOMAIN_LIMIT; malformed ids are invalid', async () => {
   const { store, h } = setup(legacyAccount({ [TODAY]: legacyRecord([products()]) }));
   const rev = await revisionOf(h, 'p1');
   const refusals = [

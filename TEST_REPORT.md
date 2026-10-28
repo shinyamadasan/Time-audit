@@ -2654,3 +2654,77 @@ not run: Playwright, RTDB emulator, production.
   - Finding while writing the isolation test: an item revision is a content hash (store, date, item) without the
     room, so identical content in two accounts has identical revisions. Not an isolation defect: every command is
     bound to the verified subject's own room (TASK-029) and writes only there; the calendar path is the same.
+
+## TASK-036 G2 — backend deploy (owner-approved) · 2026-10-27
+deploy: chronasenseActionApi, gcloud source-only from a verified archive of main cc016c6 functions/ (63 files, every
+  blob equal to the commit, LF, no node_modules). Pre-check: live revision was chronasenseactionapi-00010-vud.
+result: chronasenseactionapi-00011-vup ACTIVE, 100% traffic.
+evidence:
+  - Config before/after (values compared by hash, never printed): only `revision` changed. Service account, ingress,
+    memory, CPU, concurrency 1, max instances 1, min instances absent, timeout 120, VPC none, env names and values
+    hash, all four identity-mapping values, HMAC secret binding (same secret, version 1), IAM bindings hash and URL
+    all unchanged.
+  - Unauthenticated POST /v1/query and /v1/command -> 401 AUTH_REQUIRED. New revision logs: 0 errors; the only 2
+    warnings are those 401 probes.
+  - Rollback ready: 00010-vud still present and Ready (traffic shift back to it is the documented rollback).
+  - Not touched: Worker, Cloudflare Access, OAuth grants, Firebase user data, rules.
+next: G3 owner canary (owner-run calendar completion + Undo through ChatGPT).
+
+## TASK-036 G3 — owner canary: PASS (owner-run, live ChatGPT) · 2026-10-28
+  - Backend 00011-vup, Worker d1dc8053 (calendar-only schema). get_today: calendar target cal1:2026-10-28.
+  - Completed "Other — Grocery shopping": changed=true; Undo: changed=true; final get_today shows it not done.
+  - The other 5 tasks kept their completion state. All calls user-scoped. Reported by the owner; not machine-captured here.
+
+## TASK-036 G4 — Worker release prepared (NOT deployed) · 2026-10-28
+  - Candidate: workers/chronasense-conversational-bridge at main cc016c6 (tree identical; source unchanged since the
+    reviewed ac09d4b; only src/mcp.js differs from pre-task main). npm test 43/43. Local bundle compile OK,
+    .wrangler-dist/index.js sha256 prefix ffea8471b90c64ba, contains the legacy target schema.
+  - Backend still chronasenseactionapi-00011-vup ACTIVE.
+  - Live Worker: d1dc8053-1b90-4066-8c5a-0588799a1d57 at 100% (rollback target). Its 8 bindings: 6 plaintext
+    (ACCESS_TEAM_DOMAIN, ACCESS_POLICY_AUD, CHRONASENSE_OWNER_SUBJECT, CHRONASENSE_SECOND_SUBJECT,
+    CHRONASENSE_ACTION_API_URL, CHRONASENSE_WORKER_HMAC_KEY_ID), secret CHRONASENSE_WORKER_HMAC_KEY_HEX (present in
+    `wrangler secret list`), OAUTH_KV. The 6 plaintext values were recovered into the gitignored .deploy-vars.json
+    (never printed); both subjects equal the backend mappings; the API URL is the backend's Cloud Run URI + /v1/query.
+  - Not run by Claude: scripts/deploy.mjs plan/--dry-run/--confirm (blocked by the session permission guard as a
+    production deploy; left for the owner, as in TASK-012).
+
+## TASK-036 G4 — Worker deploy (owner-run) and post-deploy verification: PASS · 2026-10-28
+  - Owner deployed via scripts/deploy.mjs --confirm: new version 4fbc58b6-1d09-4d25-a836-39829bb34122, 100% traffic.
+  - Bindings: 8, names identical to d1dc8053. All 6 plaintext values identical to d1dc8053 by hash; secret
+    CHRONASENSE_WORKER_HMAC_KEY_HEX present; OAUTH_KV same namespace. Owner and second-user subjects equal the
+    backend mappings.
+  - /authorize -> 302 to the Cloudflare Access team domain; unauthenticated POST /mcp -> 401 with the OAuth
+    WWW-Authenticate challenge; protected-resource metadata -> 200.
+  - Live tail during the probes (45 s window only, not historical): 3 events, all `ok`, 0 exceptions, 0 error logs.
+  - OAuth grants (key listing, ids compared by equality, never printed): exactly 2 — 1 owner, 1 second user, 0 other.
+  - Backend chronasenseactionapi-00011-vup still ACTIVE.
+  - Temporary .deploy-vars.json deleted. Rollback: wrangler rollback d1dc8053-1b90-4066-8c5a-0588799a1d57.
+
+## TASK-038 — legacy-target rescheduling (branch task-038, 8e937b0) · 2026-10-27
+  - functions `npm test`: 284/284 pass (263 before; +17 legacy move, +3 anchors, +1 adapter pinning).
+  - worker `npm test`: 44/44 pass (43 before; 1 updated, +1 e2e). `npm run check:bundle`: dry-run OK (not deployed).
+  - `npm run test:fence` (real RTDB emulator 4.11.2, real firebase.rules.json): exit 0 — 164/164, 0 skipped (160 before;
+    +4 TASK-038: two moves + replay + Undo with unrelated days/other account byte-identical; collection CAS stale ETag ->
+    changed, app writes after the read kept/stale refused; other account cannot read/write/move, post-cutover write
+    FORBIDDEN by rules and PAST_TARGET_IMMUTABLE from the Function; invalid stored history fails closed, nothing written).
+  - root `npm test`: exit 0 — 2357 pass, 0 fail, 1 skipped (pre-existing env-gated control proof in
+    scripts/cross-repo-compat-check.test.js; skipped is NOT passed).
+  - eslint functions/src + worker src: clean; `npm run lint`: 0 errors (48 pre-existing warnings); `git diff --check` clean.
+    firebase-rules-emulator.test.js has the same pre-existing eslint parse error on main (outside the lint list).
+  - Emulator finding fixed during the run: a stored "duration without a start time" item was refused by a legacy range
+    check; legacy items are now moved as stored (regression test added).
+  - Independent review: APPROVE-WITH-NOTES, no blockers (REVIEW.md); should-fix items addressed.
+not run: Playwright (no app/browser code changed); any production read, write or deploy; ChatGPT live acceptance.
+
+## TASK-038 — second-account legacy write compatibility diagnostic (owner-approved, read-only) · 2026-10-27
+question: would current firebase.rules.json accept TASK-038's whole-collection rewrite of the second account's
+  legacy plans exactly as stored (DECISIONS #42 known limit)?
+method: counts-only checker mirroring the plans.$dateKey.items.$i validate rule, proven against the real emulator +
+  rules (15 categories, and whole-collection PUT accepted iff PASS). Project passed explicitly; the account mapping and
+  a short-lived credential held in memory only; 3 GET requests (plans, brainDump, calendarPlanAuthority); no write; no
+  record, identifier or token printed or retained.
+result: PASS — 11 legacy records, 31 items, 0 Brain Dump array items, 0 items the rules would refuse, no failing
+  category, not calendar-activated.
+meaning: the known limit does not affect this account's current data; a future incompatible item would still fail
+  closed (CONFLICT legacy-history-unwritable, nothing written).
+CI on 1782848 before this entry: test pass, Firebase fence / rules integration pass.

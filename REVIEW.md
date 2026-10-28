@@ -6,6 +6,22 @@
 
 ---
 
+## Review TASK-038 - PASS WITH NOTES, HOLD AT APPROVED (conversational rescheduling on legacy plan targets)
+
+Independent read-only reviewer (fresh context) on the uncommitted task-038 diff; reran functions 282/282, worker 44/44,
+emulator subset 7/7, plus its own probe. Verdict: APPROVE-WITH-NOTES, no blockers.
+- No path to two live copies or a lost task found (CAS, intent/takeover, Undo, A->B->C->A chains vs validateRelocations).
+- In-place construction, day/cutover/boundary routing, isolation and envelope refusals: sound.
+Should-fix (addressed):
+1. A rules refusal of the whole-collection PUT surfaced as "access refused" -> now CONFLICT `legacy-history-unwritable`
+   saying nothing moved (tests: unit + emulator). Still open: whether the second user's real history triggers the known
+   limit needs a read-only, owner-approved production check (not run).
+2. Docs/tool text said Brain Dump tasks never move; pre-fence `bdp1|` array items do (as in the app) -> wording fixed,
+   behaviour pinned by a test.
+Notes: overstated emulator "race" title corrected (mid-call interleaving is proven against the fake and the anchor); a
+legacy target with a missing/malformed destination answers DOMAIN_LIMIT where INVALID_INPUT would fit (left as is).
+Gate: `approved` (red zone: plan mutation / RTDB sync). Not merged, not deployed; the human merges.
+
 ## Review TASK-036 - PASS WITH NOTES, HOLD AT APPROVED (conversational completion on legacy plan targets)
 
 Reviewer: independent general-purpose reviewer (fresh context), two rounds. Branch `task-036`, base `0e04ebb`.

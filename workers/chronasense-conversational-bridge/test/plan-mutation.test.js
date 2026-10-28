@@ -111,7 +111,11 @@ test('forged or untyped mutation arguments never reach the backend', async () =>
     ['plan_set_completion', { ...BASE, completed: true, target: { store: 'legacy', id: TOMORROW, roomId: 'uid_victim' } }],
     ['plan_set_completion', { ...BASE, completed: true, target: { store: 'operational', id: `odv1:rev:${ZONE}:${TOMORROW}` } }],
     ['plan_edit', { ...BASE, title: 'x', target: { store: 'legacy', id: TOMORROW } }],
-    ['plan_move', { ...TOOLS.plan_move, target: { store: 'legacy', id: TOMORROW } }],
+    // TASK-038: plan_move takes exact legacy ends too (a mixed pair is the backend's typed refusal), never malformed ones.
+    ['plan_move', { ...TOOLS.plan_move, target: { store: 'legacy', id: 'today' } }],
+    ['plan_move', { ...BASE, target: { store: 'legacy', id: TOMORROW }, destination: { store: 'legacy', id: 'tomorrow' } }],
+    ['plan_move', { ...BASE, target: { store: 'legacy', id: TOMORROW }, destination: { store: 'legacy', id: TOMORROW, roomId: 'uid_victim' } }],
+    ['plan_move', { ...BASE, destination: { store: 'operational', id: `odv1:rev:${ZONE}:${TOMORROW}` } }],
     ['plan_delete', { ...BASE, target: { store: 'legacy', id: TOMORROW } }],
     ['plan_set_completion', { ...BASE, completed: true, target: { store: 'calendar', id: PLAN, roomId: 'uid_victim' } }],
     ['plan_set_completion', { ...BASE, completed: true, itemId: '' }],
@@ -226,4 +230,64 @@ test('TASK-036 end to end: a legacy account completes two of its three tasks; th
   assert.deepEqual(stored.items[2], third, 'the remaining task is byte-identical');
   assert.deepEqual(stored.preparation, preparation, 'the plan preparation is kept as stored');
   assert.equal(stored.items[1].durationMinutes, 60);
+});
+
+test('TASK-038 end to end: a legacy account moves two of its three unfinished tasks to tomorrow, verifies, and undoes one', async () => {
+  const TODAY = localPlanDate(NOW_MS, ZONE);
+  const task = (id, title, extra = {}) => ({ id, task: title, when: '', done: false, kind: 'task', updatedAt: 1, updatedBy: 'phone', ...extra });
+  const room = { settings: { timezone: ZONE },
+    plans: { [TODAY]: { updatedAt: 1, updatedBy: 'phone', preparation: { targetDate: TODAY, firstPreparedAt: 1, timezone: ZONE },
+      items: [task('p1', 'Post remaining products'), task('p2', 'Make price menu', { when: '14:00', durationMinutes: 60 }), task('p3', 'Pay apartment kuryente')] } } };
+  const third = structuredClone(room.plans[TODAY].items[2]);
+  let writes = 0;
+  const h = harness({ domain: {
+    async readRoomCollection(_identity, collection) { return structuredClone(room[collection] ?? null); },
+    async readLegacyPlanWithEtag(_identity, dateKey) { const value = room.plans[dateKey] ?? null; return { value: structuredClone(value), etag: JSON.stringify(value) }; },
+    async readLegacyPlansWithEtag() { return { value: structuredClone(room.plans), etag: JSON.stringify(room.plans) }; },
+    async putLegacyPlansIfMatch(_identity, plans, etag) {
+      if (etag !== JSON.stringify(room.plans)) return 'changed';
+      room.plans = JSON.parse(JSON.stringify(plans));
+      writes++;
+      return 'written';
+    },
+  } });
+  const deps = { nowSeconds, cryptoImpl: webcrypto, now: () => NOW_MS, fetchImpl: async (url, init) => {
+    const result = await h.handle({ method: init.method, path: new URL(url).pathname, rawHeaders: Object.entries(init.headers).flat(), rawBody: new TextEncoder().encode(init.body) });
+    return new Response(result.payload, { status: result.status });
+  } };
+  const tool = async (name, args, scope = [READ_SCOPE, PLAN_WRITE_SCOPE]) => (await message(await handleMcpRequest(call(name, args), env, deps, ctx(scope)))).result;
+  const planOn = async date => (await tool('get_plan', { target: { store: 'legacy', id: date } }, [READ_SCOPE])).structuredContent.result.plan;
+  const today = (await tool('get_today', {}, [READ_SCOPE])).structuredContent.result;
+  const unfinished = today.plan.items.filter(item => !item.done);
+  assert.deepEqual(unfinished.map(item => item.itemId), ['p1', 'p2', 'p3']);
+  const TOMORROW_DAY = addCalendarDays(TODAY, 1);
+  const moveArgs = (item, n, from, to) => ({ actionId: ACTION.replace('0b8f1c2e', `0b8f1c2${n}`), capturedAt: CAPTURED, expectedRevision: item.revision,
+    target: { store: 'legacy', id: from }, itemId: item.itemId, destination: { store: 'legacy', id: to } });
+  // The user approved exactly p1 and p2.
+  for (const [n, itemId] of [[1, 'p1'], [2, 'p2']]) {
+    const moved = await tool('plan_move', moveArgs(unfinished.find(item => item.itemId === itemId), n, TODAY, TOMORROW_DAY));
+    assert.equal(moved.isError, undefined, JSON.stringify(moved));
+    assert.deepEqual(moved.structuredContent.result.destination, { store: 'legacy', id: TOMORROW_DAY, date: TOMORROW_DAY });
+  }
+  assert.equal(writes, 2);
+  assert.deepEqual((await planOn(TODAY)).items.map(item => item.itemId), ['p3'], 'verified: only the unselected task remains today');
+  const tomorrow = await planOn(TOMORROW_DAY);
+  assert.deepEqual(tomorrow.items.map(item => [item.itemId, item.task, item.when, item.durationMinutes]),
+    [['p1', 'Post remaining products', null, null], ['p2', 'Make price menu', '14:00', 60]], 'verified: same tasks, metadata kept, no duplicates');
+  assert.deepEqual(room.plans[TODAY].items[2], third, 'the unselected task is byte-identical');
+  // A mixed pair and a legacy retime are definite refusals, not unknown outcomes; nothing is written.
+  const p3 = (await planOn(TODAY)).items[0];
+  for (const extra of [{ destination: { store: 'calendar', id: `cal1:${TOMORROW_DAY}` } }, { time: { when: '09:00', whenTz: ZONE } }]) {
+    const refused = await tool('plan_move', { ...moveArgs(p3, 3, TODAY, TOMORROW_DAY), ...extra });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent, undefined, 'never a typed unknown');
+    assert.match(refused.content[0].text, /^DOMAIN_LIMIT/);
+  }
+  assert.equal(writes, 2);
+  // Undo one: move p2 back.
+  const p2 = tomorrow.items.find(item => item.itemId === 'p2');
+  const undone = await tool('plan_move', moveArgs(p2, 4, TOMORROW_DAY, TODAY));
+  assert.equal(undone.isError, undefined, JSON.stringify(undone));
+  assert.deepEqual((await planOn(TODAY)).items.map(item => item.itemId), ['p2', 'p3']);
+  assert.deepEqual((await planOn(TOMORROW_DAY)).items.map(item => item.itemId), ['p1']);
 });
