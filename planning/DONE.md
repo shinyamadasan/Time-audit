@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-29 — TASK-038 — Conversational rescheduling on legacy plan targets — closed
+
+- ChatGPT `plan_move` now also moves a legacy plan task legacy -> legacy (DECISIONS #42), alongside calendar moves.
+- Merged PR #17 as ce24092; backend chronasenseactionapi-00012-rug and Worker f8630fd7 deployed 2026-10-28.
+- G4 acceptance PASS on both accounts (calendar 10-28 -> 10-29, legacy 10-29 -> 10-30): one copy at the destination, a
+  tombstone at the source, nothing else written. Undo optional by owner decision. Evidence: TEST_REPORT.md.
+- Separate, not part of this task: issue #18 (clock-window Focus routine tests).
+
 ## 2026-10-22 — TASK-016 — Brain Dump promotion/synchronization reliability — scoped closure
 
 - **ACCEPT — SCOPED**, by the owner's conversation confirmation: S1–S9 smoke PASS, owner-reported;

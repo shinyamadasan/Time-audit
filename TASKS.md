@@ -1830,7 +1830,7 @@ closure (2026-10-27, owner-directed documentation reconciliation in TASK-038's P
 status-note: closed. The task-036 branch holds no other unmerged work and can be retired after this PR merges.
 
 ### TASK-038 - Conversational rescheduling on legacy plan targets
-status: approved
+status: done
 owner: claude (owner asked for autonomous assess/implement/test/review)
 source: owner-direct
 priority: P2
@@ -1869,8 +1869,17 @@ verification:
 
 release (owner-approved gates):
   - Merged PR #17 -> main ce24092 (2026-10-28). Backend chronasenseactionapi-00012-rug (G2) and Worker f8630fd7 (G3)
-    deployed 2026-10-28; evidence in TEST_REPORT.md. Pending: G4 live two-account acceptance. Status stays `approved`
-    until then.
+    deployed 2026-10-28; evidence in TEST_REPORT.md.
+closure (2026-10-29, owner-approved):
+  - Owner revised acceptance (2026-10-28): move unfinished tasks today -> tomorrow with no duplicate, missing task or
+    sync problem; Undo is optional (kept, not expanded, not exercised for closure).
+  - G4 calendar PASS: one ChatGPT task moved cal1:2026-10-28 -> cal1:2026-10-29; one copy in Firebase. The second row the
+    app showed was the owner's 48 h Daily View projecting 10-29 into the 10-28 view (owner-confirmed; no defect, no fix).
+  - G4 legacy PASS: one new second-account task moved 2026-10-29 -> 2026-10-30; one tombstone, one live copy, content
+    and schedule preserved, nothing else written (read-only Firebase check). Carried-over tasks stay non-movable.
+  - Production after G4: backend 00012-rug and Worker f8630fd7 unchanged; 2 OAuth grants (owner's re-issued by its
+    connector reconnect).
+status-note: closed. The task-038 branch holds no other unmerged work and can be retired.
 
 <!-- Paste new tasks above this line. -->
 

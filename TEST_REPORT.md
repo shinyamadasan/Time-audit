@@ -2789,3 +2789,27 @@ evidence (read-only, structure only):
   - Later move-back attempts never reached the backend (no other /v1/command): nothing pending or half-applied.
 result: PASS (owner-confirmed). No duplicate, data issue or app defect; no fix.
 pending: legacy-account move acceptance.
+
+## TASK-038 G4 — legacy-account acceptance: PASS · 2026-10-29
+move: owner-approved plan_move of one new second-account legacy task, legacy 2026-10-29 -> legacy 2026-10-30 (one
+  /v1/command at 16:14:41Z, 200, 8.0 s). Owner-reported ChatGPT result: moved, removed from source, present once at the
+  destination, schedule kept (12:30 AM, 32 min), completion unchanged (false), no other task modified.
+evidence (read-only GET of the second account's plans + calendarPlanAuthority; structure and counts only, no task text,
+  no other ids, nothing retained):
+  - Not calendar-activated; 13 legacy records.
+  - Source 2026-10-29: exactly 1 copy, deleted, movedToDayId 2026-10-30. Destination 2026-10-30: exactly 1 live copy,
+    relocationRevision 2026-10-29 -> 2026-10-30 sequence 1 written by the Action API, identical on both ends.
+  - Task content preserved: every field except deleted/movedToDayId/relocationRevision/updatedAt/updatedBy is equal at
+    source and destination (when 00:30, durationMinutes 32, done false).
+  - 0 copies on any other day; 0 other items or records written by the move action (the two Oct 27 carried-over tasks
+    and every other record untouched). Neither day holds any other task.
+  - App rendering of a server legacy move: covered by the real-app harness (once on the new day, gone from the old day,
+    no write-back). Owner app-side confirmation: see TASKS.md closure.
+production state after G4:
+  - Backend chronasenseactionapi-00012-rug: 32-field config fingerprint identical to post-G2; 0 errors since G2; since
+    15:00Z exactly one /v1/command (this move) and 14 /v1/query, all 200.
+  - Worker f8630fd7 at 100%: bindings, secret list and subject/URL checks identical to post-G3.
+  - OAuth grants: still exactly 2 (1 owner, 1 second user, 0 other). The second user's grant is unchanged (created
+    2026-10-27). The owner's grant was re-issued at 2026-10-28T14:45:10Z, when the owner reconnected the connector
+    to clear ChatGPT's cached tool list (the library replaces a user's existing grant); not an agent action.
+result: PASS. Undo optional (owner decision), not exercised for closure.

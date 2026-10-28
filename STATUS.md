@@ -5,6 +5,14 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-10-29 — TASK-038 closed: legacy and calendar rescheduling through ChatGPT live
+
+**TASK-038** is done: merged ce24092 (PR #17), backend chronasenseactionapi-00012-rug and Worker f8630fd7 deployed
+2026-10-28. G4 acceptance PASS on both accounts: a ChatGPT "move to tomorrow" lands once on the new day and leaves only a
+tombstone on the old day (calendar and legacy). Undo is optional by owner decision. No open blockers. Reliability issue
+#18 (clock-window Focus routine tests) stays separate. Rollback targets: backend 00011-vup, Worker 4fbc58b6.
+
+
 ## 2026-10-27 — TASK-036 closed; TASK-038 legacy rescheduling in PR (held, not merged)
 
 **TASK-036** (legacy completion through ChatGPT) is done: merged cc016c6, backend 00011-vup and Worker 4fbc58b6

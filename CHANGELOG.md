@@ -5382,3 +5382,7 @@ deployed:
     (was 4fbc58b6); 8 bindings identical by hash; OAuth grants unchanged.
 not changed: Firebase rules, Cloudflare Access, OAuth grants, user data, app (Pages already on ce24092).
 pending: G4 live two-account acceptance. Evidence: TEST_REPORT.md.
+
+## TASK-038 — closure (2026-10-29)
+  - G4 acceptance PASS on both accounts (calendar and legacy move to the next day); Undo optional by owner decision.
+  - TASKS.md TASK-038 -> `done`; STATUS.md and planning/DONE.md updated. No code, rules, data or deployment change.
