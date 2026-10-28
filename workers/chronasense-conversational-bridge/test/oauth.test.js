@@ -5,7 +5,7 @@ import { createLocalJWKSet, exportJWK, SignJWT } from 'jose';
 
 import { createOAuthWorker, handleDefaultRequest, OAUTH_PROVIDER_CONFIG,
   rejectInvalidTokenResource, requireAccessSubject } from '../src/index.js';
-import { ISSUER, PLAN_WRITE_SCOPE, READ_SCOPE, WRITE_SCOPE, RESOURCE } from '../src/mcp.js';
+import { ISSUER, OFFLINE_ACCESS_SCOPE, PLAN_WRITE_SCOPE, READ_SCOPE, WRITE_SCOPE, RESOURCE } from '../src/mcp.js';
 
 const NOW = 1_800_000_000;
 const ACCESS_ISSUER = 'https://fixture.cloudflareaccess.com';
@@ -33,7 +33,9 @@ test('OAuth configuration is CIMD-enabled, DCR-disabled, read by default with di
   assert.equal(options.apiRoute, '/mcp');
   assert.equal(options.authorizeEndpoint, '/authorize');
   assert.equal(options.tokenEndpoint, '/oauth/token');
-  assert.deepEqual(options.scopesSupported, [READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE]);
+  assert.deepEqual(options.scopesSupported, [READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE, OFFLINE_ACCESS_SCOPE]);
+  assert.equal(options.accessTokenTTL, 15 * 60);
+  assert.equal(options.refreshTokenTTL, 14 * 24 * 60 * 60);
   assert.deepEqual(options.requiredScopes, [READ_SCOPE]);
   assert.equal(options.resourceMetadata.resource, RESOURCE);
   assert.equal(options.allowTokenExchangeGrant, false);
@@ -70,6 +72,34 @@ test('Access gates /authorize and read consent; resource and scope are exact', a
   const wrongScope = await handleDefaultRequest(valid, { ...env, OAUTH_PROVIDER: {
     ...consent, parseAuthRequest: async () => ({ scope: ['chronasense:plan.write'], resource: RESOURCE }) } }, deps);
   assert.equal(wrongScope.status, 400);
+});
+
+test('offline access is consented for refresh while unknown scopes remain rejected', async () => {
+  const scopes = [READ_SCOPE, OFFLINE_ACCESS_SCOPE];
+  let completed;
+  const oauth = {
+    parseAuthRequest: async () => ({ scope: scopes, resource: RESOURCE }),
+    describeConsent: async () => ({ clientName: 'Fixture client', redirectHost: 'chatgpt.com' }),
+    beginConsent: async () => ({ handle: 'opaque', headers: new Headers() }),
+    approveConsent: async () => ({ request: { scope: scopes, resource: RESOURCE }, headers: new Headers() }),
+    completeAuthorization: async value => { completed = value; return { redirectTo: 'https://client.test/callback' }; },
+  };
+  const headers = { 'Cf-Access-Jwt-Assertion': await assertion() };
+  const request = new Request(`${ISSUER}/authorize?resource=${encodeURIComponent(RESOURCE)}`, { headers });
+  const consent = await handleDefaultRequest(request, { ...env, OAUTH_PROVIDER: oauth }, deps);
+  assert.equal(consent.status, 200);
+  const html = await consent.text();
+  assert.match(html, /offline_access/);
+  assert.match(html, /refresh token/);
+  const approved = await handleDefaultRequest(new Request(`${ISSUER}/authorize`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'handle=opaque&decision=approve' }), { ...env, OAUTH_PROVIDER: oauth }, deps);
+  assert.equal(approved.status, 302);
+  assert.deepEqual(completed.scope, [READ_SCOPE, OFFLINE_ACCESS_SCOPE]);
+  assert.equal(completed.userId, OWNER_SUB);
+  const unknown = await handleDefaultRequest(request, { ...env, OAUTH_PROVIDER: {
+    ...oauth, parseAuthRequest: async () => ({ scope: [READ_SCOPE, 'unknown:scope'], resource: RESOURCE }) } }, deps);
+  assert.equal(unknown.status, 400);
 });
 
 test('Brain Dump write authorization requires explicit step-up consent and grants only requested scopes', async () => {

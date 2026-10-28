@@ -8,8 +8,9 @@ export const RESOURCE = `${ISSUER}/mcp`;
 export const READ_SCOPE = 'chronasense:read';
 export const WRITE_SCOPE = 'chronasense:brain-dump.write';
 export const PLAN_WRITE_SCOPE = 'chronasense:plan.write';
+export const OFFLINE_ACCESS_SCOPE = 'offline_access';
 /** Every scope this resource knows. A write tool requires read plus exactly its own write scope. */
-export const KNOWN_SCOPES = Object.freeze([READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE]);
+export const KNOWN_SCOPES = Object.freeze([READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE, OFFLINE_ACCESS_SCOPE]);
 const RESOURCE_METADATA = `${ISSUER}/.well-known/oauth-protected-resource/mcp`;
 const SCHEMES = [{ type: 'oauth2', scopes: [READ_SCOPE] }];
 const writeSchemes = scope => [{ type: 'oauth2', scopes: [READ_SCOPE, scope] }];
