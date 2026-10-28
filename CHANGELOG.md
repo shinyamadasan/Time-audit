@@ -5373,3 +5373,12 @@ changed:
     mixed/retime, Undo).
   - DECISIONS.md #42; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-038.
 not changed: firebase rules, index.html, www/, app runtime, production data, Worker/Function deployments.
+
+## TASK-038 — production release G2/G3 (owner-approved, 2026-10-28)
+deployed:
+  - Function chronasenseActionApi: gcloud source-only from main ce24092 functions/ -> chronasenseactionapi-00012-rug
+    (was 00011-vup); only the revision changed.
+  - Worker chronasense-conversational-bridge: scripts/deploy.mjs from main ce24092 -> f8630fd7-7cac-4c9b-9b03-6ac0cce59ef6
+    (was 4fbc58b6); 8 bindings identical by hash; OAuth grants unchanged.
+not changed: Firebase rules, Cloudflare Access, OAuth grants, user data, app (Pages already on ce24092).
+pending: G4 live two-account acceptance. Evidence: TEST_REPORT.md.

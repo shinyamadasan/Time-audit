@@ -2728,3 +2728,42 @@ result: PASS — 11 legacy records, 31 items, 0 Brain Dump array items, 0 items 
 meaning: the known limit does not affect this account's current data; a future incompatible item would still fail
   closed (CONFLICT legacy-history-unwritable, nothing written).
 CI on 1782848 before this entry: test pass, Firebase fence / rules integration pass.
+
+## TASK-038 G2 — backend deploy (owner-approved) · 2026-10-28
+deploy: chronasenseActionApi, gcloud source-only from a verified archive of main ce24092 functions/ (64 files, every
+  blob equal to the commit, LF, no node_modules; `node scripts/functions-shared.mjs` left git status clean).
+  Pre-check: live revision was chronasenseactionapi-00011-vup at 100%.
+result: chronasenseactionapi-00012-rug ACTIVE, 100% traffic.
+evidence:
+  - Config before/after, 32 fields compared by hash (values never printed): only the revision name and traffic changed.
+    Service account, ingress, memory 256Mi, CPU, concurrency 1, max instances 1, min instances absent, timeout 120, VPC,
+    scaling annotations, runtime/entry point, build env, labels, URL, IAM bindings, all 11 env names and the values hash
+    (both account mappings included), HMAC secret binding (same secret, version 1) all unchanged.
+  - Unauthenticated POST /v1/query and /v1/command -> 401 AUTH_REQUIRED. New revision logs: 0 errors; the only 2
+    warnings are those 401 probes.
+  - Rollback ready: 00011-vup still present and Ready. Global gcloud default project unchanged.
+  - Not touched: Worker, Cloudflare Access, OAuth grants, Firebase user data, rules.
+
+## TASK-038 G3 — Worker deploy and post-deploy verification: PASS · 2026-10-28
+preflight:
+  - Source: workers/ at main ce24092 identical to the reviewed 8a91a61; vs the live version's source (cc016c6) only
+    src/mcp.js and test/plan-mutation.test.js differ. Worker npm test 44/44; check:bundle dry-run OK.
+  - Backend chronasenseactionapi-00012-rug ACTIVE at 100%. Live Worker 4fbc58b6-1d09-4d25-a836-39829bb34122 at 100%.
+  - 8 bindings on 4fbc58b6: 6 plaintext, secret CHRONASENSE_WORKER_HMAC_KEY_HEX, OAUTH_KV. The 6 plaintext values
+    recovered into the gitignored .deploy-vars.json (never printed); bindingProblems() empty; both subjects equal the
+    backend mappings and differ; API URL = backend Cloud Run URI + /v1/query. OAuth grants: 2 (1 owner, 1 second, 0 other).
+deploy: scripts/deploy.mjs plan -> --dry-run -> --confirm (agent-run under the owner's approval; the permission guard
+  did not block it). New version f8630fd7-7cac-4c9b-9b03-6ac0cce59ef6.
+verification:
+  - Traffic: f8630fd7 at 100%.
+  - Bindings: 8, same names/types; all 6 plaintext values, the KV namespace id and the secret list identical to
+    4fbc58b6 by hash; subject/URL equality checks unchanged. Grant key listing hash identical (2 grants, 1 + 1, 0 other).
+  - /authorize -> 302 to the Access team domain; unauthenticated POST /mcp -> 401 with `WWW-Authenticate: Bearer
+    resource_metadata`; /.well-known/oauth-protected-resource/mcp -> 200 (resource = this Worker's /mcp);
+    /.well-known/oauth-authorization-server -> 200. (The bare /.well-known/oauth-protected-resource path -> 404; it
+    is not the advertised metadata URL.)
+  - Live tail during the probes (60 s window only, not historical): 5 events, all `ok`, 0 exceptions, 0 error logs.
+  - Backend fingerprint unchanged since G2 (32 fields); 00012-rug 0 errors.
+  - Temporary .deploy-vars.json and private captures deleted after verification.
+  - Rollback: wrangler rollback 4fbc58b6-1d09-4d25-a836-39829bb34122 (Worker); traffic to 00011-vup (backend).
+not run: G4 live ChatGPT acceptance (no task moved).

@@ -1867,6 +1867,11 @@ constraints:
 verification:
   - npm test (root, functions, worker); npm run test:fence; npm run check:bundle; independent review.
 
+release (owner-approved gates):
+  - Merged PR #17 -> main ce24092 (2026-10-28). Backend chronasenseactionapi-00012-rug (G2) and Worker f8630fd7 (G3)
+    deployed 2026-10-28; evidence in TEST_REPORT.md. Pending: G4 live two-account acceptance. Status stays `approved`
+    until then.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
