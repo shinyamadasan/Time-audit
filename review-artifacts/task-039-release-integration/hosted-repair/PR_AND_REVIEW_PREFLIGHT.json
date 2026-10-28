@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-10-28 10:26:54 UTC",
+  "pr_url": "https://github.com/shinyamadasan/Time-audit/pull/20",
+  "pr_number": 20,
+  "head": "ddb6c6d4456085ca30b8cc8ccae847dcb791792d",
+  "base": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+  "draft": true,
+  "merged": false,
+  "auto_merge": null,
+  "prepared_body_byte_text_match": true,
+  "tracked_tree_clean": true,
+  "required_contexts": [
+    "test",
+    "Firebase fence / rules integration"
+  ],
+  "required_contexts_app_id": 15368,
+  "protection_snapshot": {
+    "strict": false,
+    "required_pull_request_reviews": null,
+    "allow_force_pushes": false,
+    "allow_deletions": false
+  },
+  "production_authorized": false,
+  "review_execution": {
+    "claude": {
+      "status": "blocked-before-review",
+      "reason": "API usage limit",
+      "quota_reset_utc": "2026-11-01T00:00:00Z",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "guardians_spawned": 0
+    },
+    "codex_cli": {
+      "status": "blocked-before-review",
+      "reason": "Configured gpt-6.1-sol rejected by account/model endpoint; no alternate credentials or limits changed."
+    },
+    "fallback_agent": {
+      "name": "/root/task039_formal_fallback",
+      "status": "running",
+      "role": "D-048 independent read-only reviewer",
+      "same_provider_as_builder": true,
+      "claude_guardian_gauntlet": "NOT RUN / NOT PASSED"
+    }
+  }
+}

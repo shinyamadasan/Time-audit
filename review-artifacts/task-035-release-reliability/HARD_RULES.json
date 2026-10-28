@@ -1,0 +1,6 @@
+{
+  "clipOverlapsForDisplay": true,
+  "mergeConsecutiveForDisplay": true,
+  "computeGaps": true,
+  "doPing": true
+}

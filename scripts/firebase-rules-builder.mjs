@@ -34,7 +34,7 @@ const group = expression => `(${expression})`;
 export const PREDICATES = Object.freeze([
   'targetBinding', 'storeBinding', 'originImmutability', 'itemIdBinding', 'revokeMonotonic', 'epochMonotonic', 'tombstoneMonotonic',
   'stableKeyFormat', 'parentOverwriteClosed', 'epochBinding', 'claimIdentity', 'recoveryAbsence', 'finalizePresence', 'claimDeletionClosed',
-  'relocationRefused',
+  'relocationRefused', 'claimSourcePreserved',
   // Action API plan items (TASK-011, DECISIONS #37): a calendar fence child created by the action-scoped token.
   'actionKindBinding', 'actionTargetBinding', 'actionMarkerBinding', 'actionIdMarkerConsistency', 'actionCreateOnly',
   'actionAuthorityRequired', 'actionTombstoneMonotonic', 'actionRelocationRefused', 'actionCaptureKind', 'arrayActionRefused',
@@ -111,7 +111,8 @@ export function buildRules({ without = [] } = {}) {
     group(AND([`${NC}.exists()`, sameClaim])),
     group(AND([`!${NC}.exists()`, on('claimDeletionClosed') ? OR([group(finalize), group(recover)]) : 'true'])),
   ]);
-  const newClaim = AND([active(d), active(n), claimShape, on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null]);
+  const newClaim = AND([active(d), active(n), claimShape, on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null,
+    on('claimSourcePreserved') ? sameFields(n, d, ['text', 'important', 'urgent', 'status']) : null]);
   const claimTransition = OR([
     group(AND([`!${DC}.exists()`, OR([`!${NC}.exists()`, group(newClaim)]), on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null])),
     group(AND([`${DC}.exists()`, withClaim])),

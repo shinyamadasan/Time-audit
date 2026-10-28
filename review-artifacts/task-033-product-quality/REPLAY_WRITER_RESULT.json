@@ -1,0 +1,41 @@
+{
+  "integrationGate": "FAIL — prototype is unsafe for exact edited creation replay",
+  "method": "Actual pushFencedItems + calendar merge; prototype rules interpreted by targaryen; synthetic only",
+  "before": {
+    "id": "bdp1|bfence1",
+    "task": "Owner edit from device B",
+    "when": "",
+    "done": false,
+    "updatedAt": 1790816400020,
+    "updatedBy": "device-b",
+    "kind": "priority",
+    "brainDumpOrigin": {
+      "v": 2,
+      "claimEpoch": 0,
+      "type": "do-today",
+      "store": "calendar",
+      "targetKey": "cal1:2026-10-03"
+    },
+    "description": "Owner notes"
+  },
+  "after": {
+    "id": "bdp1|bfence1",
+    "task": "Edited in planning draft",
+    "when": "",
+    "done": false,
+    "updatedAt": 1790816400030,
+    "updatedBy": "device-a",
+    "kind": "priority",
+    "brainDumpOrigin": {
+      "v": 2,
+      "claimEpoch": 0,
+      "type": "do-today",
+      "store": "calendar",
+      "targetKey": "cal1:2026-10-03"
+    },
+    "description": "Draft notes",
+    "whenDayOffset": 0
+  },
+  "ownerEditOverwritten": true,
+  "ruleAllowed": true
+}

@@ -1,3 +1,4 @@
+/* global trackingStartedAt, invalidateTimerRecovery, crypto */
 // ══════════════════════════════════════════════════════
 // storage.js — persistence, Firebase sync, and data queries
 //
@@ -82,6 +83,7 @@ let _settingsDefaults = null; // pristine settings, captured at first load() —
 let _fbRoomRefRoom = '';      // the room fbRoomRef points at
 let _syncGeneration = 0;      // bumped on every bind/startSync; older listeners and callbacks go inert
 let _timerStateOwner = null;  // account whose ordinary/Focus timer is currently attached to the runtime
+let _restoredTimerSync = null; // first ordinary restore publication must not replace a newer server decision
 let _awayStateOwner = null;   // account whose Away state is currently attached to the runtime
 let _breakStateOwner = null;  // account whose Break is attached; it must always match the Timer owner
 let _breakStartedBy = null;   // device allowed to auto-complete/log the attached Break
@@ -225,6 +227,8 @@ globalThis.getTaskCompletionAppContext = () => {
  *  Firebase room remain authoritative, so returning to that account restores/reconciles the same state. */
 function detachTimerAwayRuntime(previousOwner) {
   if (!previousOwner) return;
+  if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
+  _restoredTimerSync = null;
   if (typeof detachFocusSessionForAccountSwitch === 'function') detachFocusSessionForAccountSwitch(previousOwner);
   clearInterval(ticker); ticker = null;
   clearInterval(awayElapsedTicker); awayElapsedTicker = null;
@@ -234,6 +238,7 @@ function detachTimerAwayRuntime(previousOwner) {
   running = false;
   timerStartedAt = null;
   taskStartTime = null;
+  trackingStartedAt = null;
   blockStartTime = null;
   timerOwnerDeviceId = null;
   syncedFocusTimer = null;
@@ -273,36 +278,39 @@ function restoreTimerAwayState(room) {
   let restored = false;
   try {
     const saved = JSON.parse(localStorage.getItem(accountLocalKey(TIMER_STORAGE_KEY, room)) || 'null');
-    if (saved && saved.running && saved.timerStartedAt) {
+    if (saved && saved.running && Number.isFinite(saved.timerStartedAt) && saved.timerStartedAt > 0
+      && Number.isFinite(saved.totalSecs) && saved.totalSecs > 0) {
       const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
-      if (elapsed < saved.totalSecs) {
-        _timerStateOwner = room;
-        timerStartedAt = saved.timerStartedAt;
-        totalSecs = saved.totalSecs;
-        remaining = Math.max(0, totalSecs - elapsed);
-        running = true;
-        lastTaskForRepeat = saved.lastTask || '';
-        currentTask = saved.currentTask || saved.lastTask || '';
-        taskStartTime = saved.taskStartTime || saved.timerStartedAt;
-        blockStartTime = saved.blockStartTime || saved.timerStartedAt;
-        if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
-        timerOwnerDeviceId = saved.ownerDeviceId || null;
-        currentTaskPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
-        const mainBtn = document.getElementById('main-btn');
-        if (mainBtn) mainBtn.textContent = 'Break';
-        const status = document.getElementById('timer-status');
-        if (status) status.textContent = `Pinging every ${settings.intervalMin} min (restored)`;
-        const taskName = document.getElementById('hero-task-name');
-        if (taskName) taskName.textContent = currentTask;
-        if (typeof showHeroState === 'function') showHeroState('active');
-        if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
-        ticker = setInterval(() => {
-          if (!timerStateOwnedByCurrentAccount()) return;
-          remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-          remaining <= 0 ? doPing() : updateRing();
-        }, 1000);
-        restored = true;
-      }
+      _timerStateOwner = room;
+      timerStartedAt = saved.timerStartedAt;
+      totalSecs = saved.totalSecs;
+      remaining = Math.max(0, totalSecs - elapsed);
+      running = true;
+      lastTaskForRepeat = saved.lastTask || '';
+      currentTask = saved.currentTask || saved.lastTask || '';
+      taskStartTime = saved.taskStartTime || saved.timerStartedAt;
+      trackingStartedAt = saved.trackingStartedAt || null;
+      blockStartTime = saved.blockStartTime || saved.timerStartedAt;
+      if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
+      _restoredTimerSync = { ownerRoom: room, baseline: saved.timerUpdatedAt || saved.timerStartedAt,
+        sessionStart: trackingStartedAt || taskStartTime, inFlight: false };
+      timerOwnerDeviceId = saved.ownerDeviceId || null;
+      currentTaskPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
+      const mainBtn = document.getElementById('main-btn');
+      if (mainBtn) mainBtn.textContent = 'Break';
+      const status = document.getElementById('timer-status');
+      if (status) status.textContent = `Pinging every ${settings.intervalMin} min (restored)`;
+      const taskName = document.getElementById('hero-task-name');
+      if (taskName) taskName.textContent = currentTask;
+      if (typeof showHeroState === 'function') showHeroState('active');
+      if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
+      clearInterval(ticker);
+      ticker = setInterval(() => {
+        if (!timerStateOwnedByCurrentAccount() || window._timerRecoveryState) return;
+        remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+        remaining <= 0 ? doPing() : updateRing();
+      }, 1000);
+      restored = true;
     }
   } catch {}
   try {
@@ -351,6 +359,7 @@ function restoreTimerAwayState(room) {
     }
   } catch {}
   if (typeof restoreHeartbeatRecoveryForAccount === 'function') restoreHeartbeatRecoveryForAccount();
+  if (running && !window._timerRecoveryState && typeof _startHeartbeat === 'function') _startHeartbeat();
   const restoreBoundFocus = () => {
     if (room === roomCode && room === _localStateOwner && typeof restoreFocusSession === 'function') {
       restoreFocusSession();
@@ -365,6 +374,7 @@ function restoreTimerAwayState(room) {
  *  empty/default, nothing persisted) and drops every in-memory cache that belongs to the
  *  previous owner. */
 function bindAccountLocalState(room) {
+  if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
   const previousOwner = _localStateOwner;
   if (previousOwner && previousOwner !== (room || null)) detachTimerAwayRuntime(previousOwner);
   _localStateOwner = room || null;
@@ -748,7 +758,8 @@ function remoteTimerSyncStamp(data) {
 
 function isStaleRemoteTimerState(data) {
   const remoteStamp = remoteTimerSyncStamp(data);
-  const localStamp = currentTimerSyncStamp();
+  const localStamp = _restoredTimerSync && !isLocalFocusTimerActive()
+    ? _restoredTimerSync.baseline : currentTimerSyncStamp();
   return !!(remoteStamp && localStamp && remoteStamp < localStamp);
 }
 
@@ -1072,8 +1083,9 @@ function persist() {
       lastTask: lastTaskForRepeat,
       currentTask,
       taskStartTime,
+      trackingStartedAt,
       blockStartTime,
-      timerUpdatedAt: currentTimerSyncStamp(),
+      timerUpdatedAt: _restoredTimerSync?.baseline || currentTimerSyncStamp(),
       ownerDeviceId: timerOwnerDeviceId || null,
       planItemId: currentTaskPlanItemId || null
     }));
@@ -1753,9 +1765,12 @@ function isLocalFocusTimerActive() {
 function syncLocalActiveTimerState() {
   if (!ownedRoomRef() || !timerStateOwnedByCurrentAccount()) return false;
   if (isLocalFocusTimerActive() && typeof syncFocusTimerState === 'function') {
+    _restoredTimerSync = null;
+    if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
     syncFocusTimerState();
     return true;
   }
+  if (window._timerRecoveryState) return false;
   if (running && timerOwnerDeviceId === syncedDeviceId) {
     syncTimerState();
     return true;
@@ -1921,10 +1936,23 @@ function applyRemoteTimerState(data, sourceRoom = _localStateOwner) {
     updateTimerSyncDetail(data, 'ignored stale timer');
     return false;
   }
+  const submittedRestore = _restoredTimerSync?.submitted;
+  if (_restoredTimerSync?.inFlight && submittedRestore
+    && Object.keys(submittedRestore).every(key => (data[key] ?? null) === (submittedRestore[key] ?? null))) return false;
   if (reconciledRemoteWins && typeof clearPersistedFocusSession === 'function') {
     // The remote takeover wins: drop A's persisted local claim so a later
     // reload can't resurrect it (device A restoring the same stale record).
     clearPersistedFocusSession();
+  }
+  if (window._timerRecoveryState && (!data.running
+    || (data.taskStartTime || data.blockStartTime || data.startedAt) !== taskStartTime
+    || (data.ownerDeviceId || data.updatedBy || null) !== timerOwnerDeviceId)) {
+    if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
+  }
+  if (_restoredTimerSync && (data.mode === 'focus'
+    || (data.running && ((data.ownerDeviceId || data.updatedBy || null) !== timerOwnerDeviceId
+      || (data.trackingStartedAt || data.taskStartTime || data.startedAt) !== _restoredTimerSync.sessionStart)))) {
+    _restoredTimerSync = null;
   }
   if ('ownerDeviceId' in data) timerOwnerDeviceId = data.ownerDeviceId || null;
   if (data.intervalSecs) {
@@ -1944,6 +1972,7 @@ function applyRemoteTimerState(data, sourceRoom = _localStateOwner) {
     currentTask = remoteTask;
     lastTaskForRepeat = remoteTask;
     taskStartTime = remoteTaskStart;
+    trackingStartedAt = data.trackingStartedAt || null;
     blockStartTime = data.blockStartTime || remoteTaskStart;
     if (awayActive) {
       clearInterval(awayElapsedTicker);
@@ -2078,6 +2107,7 @@ function applyRemoteAwayState(data, sourceRoom = _localStateOwner) {
       if (typeof cancelNativePing === 'function') cancelNativePing();
       timerStartedAt = null;
       taskStartTime = null;
+      trackingStartedAt = null;
       blockStartTime = null;
       timerOwnerDeviceId = null;
       currentTask = '';
@@ -2140,7 +2170,6 @@ function syncTimerState(extra = {}) {
   const ref = ownedRoomRef();
   if (!ref || !ownerRoom || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
   const now = Date.now();
-  rememberTimerSyncStamp(now);
   const isStopped = !!extra.stopped;
   const hasExplicitRunning = Object.prototype.hasOwnProperty.call(extra, 'running');
   const isRunning = isStopped ? false : (hasExplicitRunning ? !!extra.running : running);
@@ -2160,6 +2189,7 @@ function syncTimerState(extra = {}) {
     intervalSecs,
     startedAt: isRunning ? startedAt : null,
     taskStartTime: isRunning ? taskAnchor : null,
+    trackingStartedAt: isRunning ? trackingStartedAt : null,
     blockStartTime: isRunning ? blockAnchor : null,
     pausedRemaining: isRunning || isStopped ? null : remaining,
     ownerDeviceId: isStopped ? null : (extra.ownerDeviceId || timerOwnerDeviceId || null),
@@ -2171,6 +2201,46 @@ function syncTimerState(extra = {}) {
     deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
   };
   timer.ownerRoom = ownerRoom;
+  const restored = _restoredTimerSync;
+  if (restored && !timer.mode && !timer.takeover && !isLocalFocusTimerActive()) {
+    if (restored.inFlight) return false;
+    restored.inFlight = true;
+    restored.submitted = timer;
+    const generation = _syncGeneration;
+    const current = () => _restoredTimerSync === restored && generation === _syncGeneration
+      && ownerRoom === roomCode && ownerRoom === _localStateOwner && _timerStateOwner === ownerRoom
+      && timerOwnerDeviceId === timer.ownerDeviceId && !isLocalFocusTimerActive()
+      && !(syncedFocusTimer && syncedFocusTimer.running)
+      && (trackingStartedAt || taskStartTime) === restored.sessionStart;
+    ref.child('timer').transaction(remote => {
+      if (!current() || remoteTimerSyncStamp(remote) > restored.baseline) return;
+      return timer;
+    }, undefined, false).then(result => {
+      restored.inFlight = false;
+      if (!current()) return;
+      if (result.committed) {
+        rememberTimerSyncStamp(timer.updatedAt);
+        if (taskStartTime !== timer.taskStartTime || running !== timer.running) {
+          restored.baseline = timer.updatedAt;
+          persist();
+          syncTimerState();
+        } else {
+          _restoredTimerSync = null;
+          persist();
+        }
+      } else if (result.snapshot.val()) {
+        applyRemoteTimerState(result.snapshot.val(), ownerRoom);
+        if (_restoredTimerSync === restored) _restoredTimerSync = null;
+      } else {
+        _restoredTimerSync = null;
+      }
+    }).catch(error => {
+      restored.inFlight = false;
+      if (current()) notifySyncWriteFailed(error);
+    });
+    return true;
+  }
+  rememberTimerSyncStamp(now);
   ref.update({
     timer
   });
@@ -2888,6 +2958,17 @@ function tryAutoConnect() {
 // ── Entry schema validation ──────────────────────────────────────────────────
 const VALID_ENERGY = new Set(['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste','admin','distraction','break','away']);
 const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
+
+// Ordinary entry IDs remain positive safe integers; chronology stays in tsStart/ts.
+function newEntryId() {
+  let id;
+  do {
+    const words = crypto.getRandomValues(new Uint32Array(2));
+    // 21 high bits + 32 low bits give an exactly representable 53-bit identity.
+    id = (words[0] & 0x1fffff) * 0x100000000 + words[1];
+  } while (!id || entries.some(entry => entry.id === id));
+  return id;
+}
 
 // Warns on creation, account load and remote changes without altering stored records.
 // Never throws — validation is defensive only; a malformed entry is better than a crash.

@@ -1,0 +1,56 @@
+[
+  {
+    "width": 1920,
+    "height": 1080,
+    "label": "desktop",
+    "upNextHeight": 169,
+    "visibleUpNextActions": [
+      "Start"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "Life",
+      "Learning plans",
+      "Career",
+      "Settings"
+    ]
+  },
+  {
+    "width": 1366,
+    "height": 768,
+    "label": "laptop",
+    "upNextHeight": 169,
+    "visibleUpNextActions": [
+      "Start"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "Life",
+      "Learning plans",
+      "Career",
+      "Settings"
+    ]
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "label": "mobile",
+    "upNextHeight": 169,
+    "visibleUpNextActions": [
+      "Start"
+    ],
+    "navDestinations": [
+      "My Day",
+      "Brain Dump",
+      "Week",
+      "Trends",
+      "More"
+    ]
+  }
+]

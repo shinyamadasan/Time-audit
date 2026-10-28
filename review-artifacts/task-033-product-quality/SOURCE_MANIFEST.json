@@ -1,0 +1,33 @@
+{
+  "baseline": "d7e01d0054eed45f59dbf350c273342be125a6b6",
+  "branch": "task-033-product-quality",
+  "sourceHashes": {
+    "index.html": "b18f5ad502bc48b2071fe964dca6c5d942f60119c45d1b9809ff66d78fa62e4b",
+    "daily-command-center.css": "7348040abf5952aeaefc050c1e430a599f622cc6edcf6294712ededaf0b0aa3c",
+    "daily-command-center.js": "d4417e202c0e45735c7cb34493d30ad568747a9a8fb13f9192aa02b74538cfb8",
+    "plan-tomorrow.css": "980a2b5bf2da6a0dc1efb6a1ac0eb98aa918db7ab57f26ac40d5004e81f53bdd",
+    "plan-tomorrow-ui.js": "7df5d49dcd21a8fd14ea0ad1167f0cbc50da401141a8d4b960c7125f7550d5a9",
+    "scripts/runtime-mirror.mjs": "e7e7d5ec9c5c6956a5beff505c2e6dadca964089bff8db7d46ac0f6f6be68b2e",
+    "tests/daily-command-center.spec.js": "46e7082afcd08e4c53dacb106c9098728e06dc28ea0d416264c4d2a26d9b0eef",
+    "assets/fonts/InterVariable.woff2": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3",
+    "assets/fonts/OFL.txt": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+  },
+  "screenshots": {
+    "before/my-day-desktop.png": "7ad9f5dec43841bf3c7aa8ada92948987a5098acda83775d2825322885fe54f5",
+    "before/my-day-laptop.png": "7cc743e956daef966c76fb3745cc9d905c951dc64119d30c12b91efff58bd333",
+    "before/my-day-mobile-detail.png": "258b9ea32b3c2af8fb2508428b77641b36b7a3273eae79922f39bcd5631825e8",
+    "before/my-day-mobile.png": "8073f79b8c2ea0cac4fded533f18b3f1dbf6ed72ffa16dbb27361986333da306",
+    "before/planner-desktop.png": "b9c464d82158cd49a4e1bb0c42ac61ec807bc9b0e1c8d753d2de5e095986af44",
+    "before/planner-laptop.png": "52ce71c065078b61611c3fa447f9b3c8d6ea6051a15fe36af486e3c4f04985f6",
+    "before/planner-mobile.png": "0fe47a68aa65a838004a3720e97a10cf1631f778da76f4fb308e8cf995ea69bf",
+    "after/my-day-desktop.png": "6ee7a072ea213e7e46c16dc7e7c94e4f9cceb7958d5030c79cbadd7eadabc7f4",
+    "after/my-day-laptop.png": "0e7e7663bd318997c2a9782d7c89a3a2bcaf5a414156e325ec289b0b1942c730",
+    "after/my-day-mobile-detail.png": "7f2d4886741da2f5e3f7f959f369e1ee365ed6d131ea33a12bb35c9b4a6a46a6",
+    "after/my-day-mobile.png": "0ad69dfe90e0e3ee48aecf693034a36ddd49e2a297ebf17b1d54ba65ef23d862",
+    "after/planner-desktop.png": "5c9c6fd22d991700818adef1aa91ff3f03f4b55a94f79c425c9a202adb46fb51",
+    "after/planner-laptop.png": "067301685f06967e8a3cc7bd412554076803612c3d30316cea15a90728886d2f",
+    "after/planner-mobile.png": "64956d885dcccd2316ec06cecace85072622a599d67ab4a7d9a6008ad3e5d22b"
+  },
+  "method": "Actual locally served application; fixed synthetic clock/data, Asia/Manila 18:00 Personal Day, Firebase stub, Chromium. Before serves protected d7e01d0; after serves final isolated visual candidate. No generated mockups.",
+  "limits": "Desktop/laptop/phone/tablet/keyboard-height and 200%-equivalent CSS viewport simulation. Physical mobile keyboards, native 200% browser zoom and real-device feel require owner checks."
+}

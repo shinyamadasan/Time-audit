@@ -167,9 +167,13 @@ export function computeClosure({ rootDir = ROOT_DIR } = {}) {
     const rel = queue.shift();
     const abs = path.join(rootDir, rel);
     if (!existsSync(abs)) { missing.push(rel); continue; }
-    if (!isJsLike(rel)) continue; // css / other assets: leaf (no @import graph in this codebase)
-
-    const deps = parseModuleDeps(readFileSync(abs, 'utf8'));
+    const css = rel.endsWith('.css');
+    if (!isJsLike(rel) && !css) continue;
+    const source = readFileSync(abs, 'utf8');
+    // Local fonts/images referenced by CSS must ship offline in the Android mirror too.
+    const deps = css
+      ? [...source.matchAll(/url\(\s*['"]?([^'"\s)]+)['"]?\s*\)/g)].map(match => match[1]).filter(spec => !isExternal(spec) && !spec.startsWith('#'))
+      : parseModuleDeps(source);
     const dir = path.dirname(rel);
     for (const spec of deps) {
       const resolved = toPosix(path.normalize(path.join(dir, normalizeSpec(spec))));

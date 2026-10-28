@@ -185,7 +185,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   // A boundary account is preparing the next personal day, not "tomorrow" —
   // the modal title and confirm action say so, and it states when that
   // personal day actually starts.
-  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan your next day');
   await expect(page.locator('#plan-tomorrow-starts')).toContainText('Starts today at 18:00');
 
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Night shift block');
@@ -195,7 +195,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   // A post-midnight time a calendar-day plan could not represent is ordinary here.
   await page.locator('[data-pt-action="edit-schedule"]').last().click();
   await page.locator('.pt-time-input').fill('01:00');
-  await page.getByRole('button', { name: 'Next personal day is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
   // It went into the operational store, keyed by an operationalDayId (never a bare date),
@@ -365,9 +365,9 @@ test('a legacy account keeps "Plan tomorrow" wording everywhere', async ({ page 
   await page.evaluate(() => toggleHdrMenu());
   await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Browse future My Days');
   await page.evaluate(() => openPlanTomorrow());
-  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan tomorrow');
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan your next day');
   await expect(page.locator('#plan-tomorrow-starts')).toBeEmpty();
-  await expect(page.getByRole('button', { name: 'Tomorrow is ready' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save plan' })).toBeVisible();
 });
 
 test('a custom-boundary account sees "Plan next personal day" wording in the hamburger menu and the modal', async ({ page }) => {
@@ -382,8 +382,8 @@ test('a custom-boundary account sees "Plan next personal day" wording in the ham
   await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Browse future My Days');
 
   await page.evaluate(() => openPlanTomorrow());
-  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
-  await expect(page.getByRole('button', { name: 'Next personal day is ready' })).toBeVisible();
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan your next day');
+  await expect(page.getByRole('button', { name: 'Save plan' })).toBeVisible();
 });
 
 // ── "Starts today/tomorrow at HH:MM" (Personal Day UX V1.1) ────────────────
@@ -399,7 +399,7 @@ test('at 06:00 with an 18:00 boundary, the action already reads Plan next person
   // The revision exists but has not taken effect yet (18:00 has not happened
   // today) — the action still reads "next personal day" immediately, never
   // gated on the currently governing revision being custom.
-  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan your next day');
   await expect(page.locator('#plan-tomorrow-starts')).toHaveText('Starts today at 18:00');
   await page.locator('[data-pt-action="close"]').first().click();
 
@@ -437,9 +437,9 @@ test('after 18:00, the next personal day is reported as starting tomorrow', asyn
 
 async function markTomorrowOpenDay(page) {
   await page.evaluate(() => openPlanTomorrow());
-  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.getByRole('button', { name: 'Quick plan' }).click();
   await page.locator('#plan-tomorrow-overlay').getByRole('button', { name: 'Open day / no commitments' }).click();
-  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 }
 
@@ -482,10 +482,10 @@ test('a custom-boundary account reads "next personal day" on the tab, the Today 
   // Prepared (non-open-day) footer also reads "Edit next personal day".
   await page.locator('[data-tmr-action="open"]').click();
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
-  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.getByRole('button', { name: 'Quick plan' }).click();
   await page.locator('#plan-tomorrow-rescue-add input[name="task"]').fill('Night shift priority');
   await page.locator('#plan-tomorrow-rescue-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   await page.locator('#tmr-tab-tomorrow').click();
   await expect(page.locator('[data-tmr-action="open"]')).toHaveText('Edit next personal day');

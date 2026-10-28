@@ -1,0 +1,33 @@
+{
+  "branch": "task-035-release-reliability",
+  "base": "ab0c601745c0471a84feb44deeb6b38214b25383",
+  "changedTrackedFiles": [
+    "CHANGELOG.md",
+    "CODEMAP.md",
+    "TASKS.md",
+    "TEST_REPORT.md",
+    "entry-validation.test.js",
+    "index.html",
+    "npm-test-wiring.test.js",
+    "package.json",
+    "personal-day-boundary-web-runtime.test.js",
+    "storage.js",
+    "tests/calendar-native-plan-identity.spec.js",
+    "tests/capability-career-ui.spec.js",
+    "tests/cross-domain-intelligence-ui.spec.js",
+    "tests/daily-use-reliability.spec.js",
+    "tests/install-interruption.spec.js",
+    "tests/learning-plan-ui.spec.js",
+    "tests/personal-day-boundary.spec.js",
+    "tests/smoke.spec.js",
+    "www/index.html",
+    "www/storage.js"
+  ],
+  "onlyAuthorizedScope": true,
+  "linksExist": true,
+  "taskStatus": "review",
+  "gitDiffCheck": 0,
+  "approvedDesignGeneration": "20261027-task033-visual-refinement-v1",
+  "candidateGeneration": "20261027-task035-release-reliability-v1",
+  "releasePermission": "none; no push, merge, deploy or production access"
+}

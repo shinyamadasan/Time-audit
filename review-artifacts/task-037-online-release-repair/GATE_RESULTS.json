@@ -1,0 +1,93 @@
+{
+  "base": "9aaf021afdc97c6da9baf9bb346ff7dc39a97390",
+  "generation": "20261027-task037-online-release-repair-v1",
+  "localRepair": "PASS",
+  "productionRelease": "NO-GO",
+  "redPlanner": {
+    "pass": 44,
+    "fail": 6
+  },
+  "redScheduler": {
+    "pass": 4,
+    "fail": 5,
+    "unhandledRejectionObserved": true
+  },
+  "focusedPlannerModelAndSDK": {
+    "pass": 50,
+    "fail": 0
+  },
+  "focusedScheduler": {
+    "pass": 17,
+    "fail": 0
+  },
+  "plannerWireEchoUI": {
+    "pass": 3,
+    "fail": 0
+  },
+  "affectedBrowser": {
+    "pass": 76,
+    "fail": 0
+  },
+  "fullBrowser": {
+    "actualPasses": 1017,
+    "fail": 0,
+    "skipped": 0,
+    "expectedFailures": 0,
+    "retries": 0
+  },
+  "additionalActualSDKBrowser": {
+    "pass": 3,
+    "repeatEach": 3,
+    "uniqueCases": 1,
+    "staleSaveAttemptedAndRefused": true
+  },
+  "uniqueBrowserCasesAcrossCommands": 1018,
+  "strictOriginalSeven": {
+    "pass": 21,
+    "repeatEach": 3,
+    "bodiesUnchanged": true
+  },
+  "node": {
+    "tests": 2343,
+    "pass": 2342,
+    "fail": 0,
+    "skipped": 1,
+    "cancelled": 0,
+    "legacyHarness": {
+      "pass": 455,
+      "fail": 0
+    },
+    "skip": "Existing opt-in lower-case-drive control; CROSS_REPO_COMPAT_CONTROL_PROOF=1"
+  },
+  "firebaseFenceSDKMutation": {
+    "tests": 170,
+    "pass": 170,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "worker": {
+    "pass": 32,
+    "fail": 0,
+    "bundleDryRun": "PASS; no upload"
+  },
+  "lint": {
+    "errors": 0,
+    "existingWarnings": 48
+  },
+  "generated": {
+    "runtimeClosure": 98,
+    "shared": "PASS",
+    "rules": "PASS"
+  },
+  "independentReview": "PASS; exact hashes validated",
+  "physicalRetest": "pending",
+  "hostedCI": "pending; no push authorized",
+  "integration": "pending; current-main/TASK-032 preservation required; no merge authorized",
+  "attempts": [
+    "First full Node stopped at obsolete negative calendar counterfactual; independently reviewed exact positive correction.",
+    "Second full Node hit unchanged Windows lock rename EPERM; focused case passed unchanged; subsequent full gate passed.",
+    "New actual-SDK UI fixture startup and transaction-cache errors were corrected; no product source/timeout change for them."
+  ],
+  "noProductionActions": true
+}

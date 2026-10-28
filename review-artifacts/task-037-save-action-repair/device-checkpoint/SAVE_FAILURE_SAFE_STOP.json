@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-10-27T23:51:02.695Z",
+  "candidate": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "operation": "Automated normal Stop UI action on isolated test timer; no guard bypass",
+  "before": {
+    "running": true,
+    "taskStartTime": 1793144577092,
+    "blockStartTime": 1793145031799,
+    "currentTask": "Test",
+    "entries": []
+  },
+  "after": {
+    "running": false,
+    "taskStartTime": null,
+    "blockStartTime": null,
+    "entries": [
+      {
+        "id": 1793145063158,
+        "activity": "Test",
+        "tsStart": 1793144577092,
+        "ts": 1793145063158,
+        "blockIntervalMin": 8
+      }
+    ]
+  },
+  "ownerStopAcceptance": "Not claimed; automated preservation after failed Save"
+}

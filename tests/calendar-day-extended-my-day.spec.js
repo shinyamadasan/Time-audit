@@ -204,19 +204,20 @@ test('once Monday\'s own day is current, Monday\'s view still surfaces Sunday\'s
 test('FIX FIRST §10/§11: a carryover row is completable through the normal action, writes to Sunday\'s OWN dayId + itemId, and never clones under Monday', async ({ page }) => {
   await openApp(page, { now: at('2026-09-28', '19:00'), plans: operationalPlanStore() });
   const carryoverCheck = page.locator('.tl-carryover-section [data-plan-item-id="sun-overnight-1"] .tl-plan-check');
+  await page.locator('.tl-carryover-section [data-plan-item-id="sun-overnight-1"] summary').click();
   await expect(carryoverCheck).toBeVisible();
   // Sunday's own operational day has fully ended by Monday 19:00 (its window was Sun
   // 18:00 -> Mon 18:00) — a live/current carryover row is completable anyway, unlike
   // any OTHER (non-carryover) reference to a past day, which stays correctly read-only.
   await expect(carryoverCheck).toBeEnabled();
-  await expect(carryoverCheck).toHaveText(''); // stored done:false, rendered unchecked — no divergence
+  await expect(carryoverCheck).toHaveText('Mark done'); // stored done:false; the detail offers completion
 
   const onclick = await carryoverCheck.getAttribute('onclick');
   expect(onclick).toContain('toggleCarryoverItemDone');
   expect(onclick).toContain(sundayDayId); // routes back to Sunday's own target id, never a copy
 
   await carryoverCheck.click();
-  await expect(carryoverCheck).toHaveText('✓');
+  await expect(carryoverCheck).toHaveText('Mark not done');
 
   const sunRecord = await page.evaluate(dayId => JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_cdemd-user')).plans[dayId], sundayDayId);
   const item = sunRecord.items.find(i => i.id === 'sun-overnight-1');

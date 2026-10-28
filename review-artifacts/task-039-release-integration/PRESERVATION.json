@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "base": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+  "approvedCandidate": "bd96cccfec9bb893a44bc6573d0e04356cd80333",
+  "protectedTrees": 11,
+  "protectedTrackedHashes": 9091,
+  "localMainUnchanged": true,
+  "approvedRulesExact": true,
+  "mainBackendWorkerAndCommitmentFixExact": true,
+  "indexDeltaFromApproved": "retain main desktop PC-autostart removal; add commitment-model map entry; unified generation",
+  "approvedRuntimeAndOriginalStrictTestsRetained": true
+}

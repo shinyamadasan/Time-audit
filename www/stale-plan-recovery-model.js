@@ -260,6 +260,7 @@ export function buildMovedItem({ carryId, sourceItem, sourceDayId, stamp }) {
     doneAt: null,
     carriedFromId: sourceItem.id,
     [CARRIED_FROM_DAY_FIELD]: sourceDayId,
+    ...(typeof sourceItem.description === 'string' ? { description: sourceItem.description } : {}),
   };
   // Carry the kind across verbatim. Absent means priority, so a legacy item with
   // no kind stays a priority exactly as it always was.

@@ -73,6 +73,16 @@ function baseFiles() {
   };
 }
 
+test('local CSS fonts ship byte-identically; external/data URLs remain external', () => {
+  const dir=makeFixture({...baseFiles(),'style.css':'@font-face{src:url("./fonts/inter.woff2?v=1")} a{background:url(data:image/png;base64,AA)} b{background:url(https://example.test/a.png)}','fonts/inter.woff2':'synthetic-font'});
+  try {
+    assert.ok(computeClosure({rootDir:dir}).files.includes('fonts/inter.woff2'));
+    mirror({rootDir:dir});
+    assert.equal(readFileSync(path.join(dir,'www/fonts/inter.woff2'),'utf8'),'synthetic-font');
+    assert.equal(checkParity({rootDir:dir}).ok,true);
+  } finally { cleanup(dir); }
+});
+
 function mirrorIntoWww(dir, closureFiles) {
   for (const rel of closureFiles) {
     const dest = path.join(dir, 'www', rel);

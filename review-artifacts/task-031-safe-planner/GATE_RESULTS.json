@@ -1,0 +1,39 @@
+{
+  "baseline": "17608cdd19900290843d0a86d29bddb5139d5c44",
+  "branch": "task-031-safe-planner",
+  "status": "review; formal/owner release held",
+  "browser": {
+    "passed": 995,
+    "failed": 0,
+    "skipped": 0,
+    "retries": 0,
+    "duration": "22.6m",
+    "workers": 2
+  },
+  "node": {
+    "tests": 2321,
+    "pass": 2320,
+    "fail": 0,
+    "skipped": 1
+  },
+  "legacy": {
+    "passed": 455,
+    "failed": 0
+  },
+  "firebaseFence": {
+    "passed": 161,
+    "failed": 0,
+    "skipped": 0
+  },
+  "worker": {
+    "passed": 32,
+    "failed": 0,
+    "bundle": "dry-run pass; no upload"
+  },
+  "lint": {
+    "errors": 0,
+    "existingWarnings": 48
+  },
+  "independentReview": "No remaining must-fix; source review only",
+  "publication": "No push, merge or deployment"
+}

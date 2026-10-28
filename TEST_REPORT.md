@@ -2728,3 +2728,20 @@ result: PASS — 11 legacy records, 31 items, 0 Brain Dump array items, 0 items 
 meaning: the known limit does not affect this account's current data; a future incompatible item would still fail
   closed (CONFLICT legacy-history-unwritable, nothing written).
 CI on 1782848 before this entry: test pass, Firebase fence / rules integration pass.
+
+
+## TASK-039 · 2026-10-27 America/Phoenix
+suite: final combined candidate on ce24092; complete Playwright; final npm test/fence/Worker/dry-run; focused/warm/strict repeats; lint/parity/source and preservation; independent review.
+result: full browser1027 passed, 0failed/skipped/expected failures (17.1m); final Node2392 passed /1existing opt-in diagnostic skip /0failed, 2393total, legacy455/455; fence177/177; Worker44/44/dry-run only; focused browser30/30; final portable warm3/3, actual strict red1failure; original strict seven21/21 unchanged; independent86backend +1warm pass; lint0errors/48existing warnings; runtime98/shared/rules parity pass; protected11trees9091hashes unchanged. Coverage not instrumented.
+evidence: review-artifacts/task-039-release-integration/GATE_RESULTS.json and SHA-indexed logs, component/import provenance, browser dependency invariance, independent exact-source/history audit and archive hashes.
+untested: hosted CI/formal repository review/live inventory/old-new client production canaries/deployment remain pending; no production data accessed or modified; no phone retest. Source-known reminder process-termination limitation and legacy fail-closed whole-history fallback retained.
+attempts: warm fixture precision corrected before real red; initial browser run stopped to remove historical Git-object requirement, final self-contained fixture unchanged behavior; remote0d9→ce refresh changed only backend/history so final full backend gates repeated; evidence newline-only/visual output copies restored after archival; Windows long-path verification uses blob IDs with identical assertions.
+
+
+## TASK-039 · hosted CI and local CI repair · 2026-10-28 America/Phoenix
+suite: PR20 hosted run40669652533 at head ddb6c6d/base ce24092; bounded local workflow/reference-render repair.
+result hosted: required testFAIL; browser1019passed/2failed/6notrun (17.5m), no expected failures/retries; Node2386passed/6existing platform-or-opt-in skips/0failed,2392total; legacy455/455; Worker44/44 and dry-run pass; required Firebase fence177/177,no skips.
+result local: Linux34affected cases x3=102/102 actual passes,zero failed/skipped/expected/retried (6.3m); Windows capture3/3,SDK21/21; full npmtest2392passed/1existing opt-in diagnostic skip/0failed,2393total, legacy455/455; parity runtime98/shared/rules and diff checks pass; discovery1027tests/58files.
+evidence: review-artifacts/task-039-release-integration/hosted-repair/CI_REPAIR_REPORT.md, HOSTED_FAILURE.json, LOCAL_RESULTS.json, SOURCE_PROOF.json, compressed actual logs, font metrics and independent D-048 review.
+untested: new hosted run awaits exact-SHA push approval. Claude quota prevented Guardian Gauntlet (NOT RUN/NOT PASSED); no GitHub human approval claimed. No new full1027 browser pass is claimed for this follow-up; app/runtime unchanged, affected files reverified. No production operation or phone retest.
+attempts: original Linux red58.375 vs44 and missing jar retained; hinting-only probe restored reference metrics. Unsupported describe-level launch option corrected to file scope; sandbox child-process/junction setup failures retained separately, never counted as passing.

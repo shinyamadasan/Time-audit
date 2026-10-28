@@ -236,15 +236,19 @@ test('B3: Prepare Tomorrow offers Make task / Make priority on the draft and enf
     await modal.locator('#plan-tomorrow-add input[name="task"]').fill(task);
     await modal.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
   }
+  await modal.locator('[data-pt-fold="other"]>summary').click();
   await modal.locator('#plan-tomorrow-add-task input[name="task"]').fill('Delta');
   await modal.locator('#plan-tomorrow-add-task').getByRole('button', { name: 'Add' }).click();
 
-  await modal.locator('.pt-secondary', { hasText: 'Delta' }).getByRole('button', { name: 'Make priority' }).click();
+  await modal.locator('.pt-secondary', { hasText: 'Delta' }).locator('.pt-edit summary').click();
+  await modal.locator('.pt-secondary', { hasText: 'Delta' }).getByRole('button', { name: 'Move to Top 3' }).click();
   await expect(modal).toContainText('already full');
 
-  await modal.locator('.pt-oneoff:not(.pt-secondary)', { hasText: 'Charlie' }).getByRole('button', { name: 'Make task' }).click();
-  await modal.locator('.pt-secondary', { hasText: 'Delta' }).getByRole('button', { name: 'Make priority' }).click();
-  await page.getByRole('button', { name: /is ready|Confirm/ }).first().click();
+  await modal.locator('.pt-oneoff:not(.pt-secondary)', { hasText: 'Charlie' }).locator('.pt-edit summary').click();
+  await modal.locator('.pt-oneoff:not(.pt-secondary)', { hasText: 'Charlie' }).getByRole('button', { name: 'Move to other tasks' }).click();
+  await modal.locator('.pt-secondary', { hasText: 'Delta' }).locator('.pt-edit summary').click();
+  await modal.locator('.pt-secondary', { hasText: 'Delta' }).getByRole('button', { name: 'Move to Top 3' }).click();
+  await page.getByRole('button', { name: /Save plan|Confirm/ }).first().click();
   await expect(modal).not.toHaveClass(/open/);
 
   const stored = await page.evaluate(() => {

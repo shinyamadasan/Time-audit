@@ -5373,3 +5373,25 @@ changed:
     mixed/retime, Undo).
   - DECISIONS.md #42; docs/CHRONASENSE_ACTION_API_V1.md; TASKS.md TASK-038.
 not changed: firebase rules, index.html, www/, app runtime, production data, Worker/Function deployments.
+
+
+## TASK-039 — done (branch: task-039-release-integration)
+changed:
+  - Integrated 340 approved candidate paths onto current remote main ce24092; retained TASK032 commitment/owner isolation and latest legacy completion/rescheduling/desktop startup behavior. No git merge or main change.
+  - index.html: pin unchanged commitments-model in the existing import map; unified generation and required mirror/token tests. Added real warm-cache upgrade regression with self-contained historical fixture.
+  - TASK_039_RELEASE_INTEGRATION.md and own evidence/provenance/CI-review/compatibility/rollback packet; main's protected history/documents retained.
+tests: browser 1027/1027; final Node 2392 passed + one existing diagnostic skip (legacy455/455); focused UI30/30, warm3/3, strict original seven21/21; final fence177/177; Worker44/44 +dry-run; independent backend86/86 +warm1/1 and full source/history audit PASS; lint0errors/48existing warnings; parity and9091 protected hashes across11trees PASS.
+blockers: no local integration implementation blocker; hosted CI, formal exact-head/base review and separately authorized production compatibility/rollback capture/rules-first rollout remain.
+deviations: remote main advanced during gates; preserved unchanged browser pass with98-runtime/94-static-dependency proof and reran complete affected backend gates. Setup/evidence housekeeping attempts retained; no weakened assertions/timeouts or production actions.
+→ status set to `review` in TASKS.md
+
+
+## TASK-039 — hosted CI blocker repair (branch: task-039-hosted-ci-repair)
+changed:
+  - .github/workflows/ci.yml: Java21 plus existing checksum-pinned RTDB provisioner before full smoke; separate runner prerequisites stay strict.
+  - tests/daily-command-center.spec.js: three file-scoped reference-font fixture lines; all existing bodies/assertions/timeouts unchanged. No product/runtime/style/rules change.
+  - Own hosted-repair evidence and report; exact pushed ddb6c6d preserved on draft PR20.
+tests: Linux affected files102/102 (34cases x3), Windows visual3/3 and SDK21/21; full npmtest2392passed/1existing diagnostic skip, legacy455/455; runtime98/shared/rules parity pass. Hosted original testFAIL1019passed/2failed/6notrun; hosted fence177/177, Worker44/44 dry-run pass.
+blockers: push exact local repair requires separate owner approval; new hosted green run and formal head/base binding remain; Claude Guardian Gauntlet NOT RUN/NOT PASSED (quota). Production NO-GO.
+deviations: isolated local follow-up because hosted Linux exposed font-reference and missing-emulator setup issues; no assertion weakening, timeout increase, app fix, production action or additional phone testing. Failed setup attempts are not passes.
+→ status remains review in TASKS.md; no merge/push of repair authorized.

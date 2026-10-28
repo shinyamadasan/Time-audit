@@ -12,6 +12,7 @@
 // network. Local persistence is the page's own localStorage.
 
 import { test, expect } from '@playwright/test';
+import { revealAgendaItem } from './agenda-actions.js';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -222,7 +223,8 @@ test('timing edits move the same task between Anytime and the clock timeline', a
   await openApp(page);
   await addPriority(page, 'Move me through time');
   const originalId = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id);
-  await page.getByRole('button', { name: 'Edit planned task Move me through time' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Move me through time', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Move me through time', includeHidden: true }).click();
   let form = page.locator('#pc-task-form');
   await form.locator('input[name="time"]').fill('10:00');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -230,7 +232,8 @@ test('timing edits move the same task between Anytime and the clock timeline', a
   await expect(page.locator('#timeline-anytime')).not.toContainText('Move me through time');
   expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id)).toBe(originalId);
 
-  await page.getByRole('button', { name: 'Edit planned task Move me through time' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Move me through time', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Move me through time', includeHidden: true }).click();
   form = page.locator('#pc-task-form');
   await form.locator('input[name="time"]').fill('');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -290,18 +293,21 @@ test('a truncated 18:00 to 20:00 My Day supports add, edit, valid time, refusal,
   await form.locator('input[name="title"]').fill('Truncated task');
   await form.getByRole('button', { name: 'Add', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Edit planned task Truncated task' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Truncated task', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Truncated task', includeHidden: true }).click();
   form = page.locator('#pc-task-form');
   await form.locator('input[name="title"]').fill('Truncated renamed');
   await form.locator('select[name="kind"]').selectOption('task');
   await form.getByRole('button', { name: 'Save' }).click();
 
-  await page.getByRole('button', { name: 'Edit planned task Truncated renamed' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Truncated renamed', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Truncated renamed', includeHidden: true }).click();
   form = page.locator('#pc-task-form');
   await form.locator('input[name="time"]').fill('19:00');
   await form.getByRole('button', { name: 'Save' }).click();
 
-  await page.getByRole('button', { name: 'Edit planned task Truncated renamed' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Truncated renamed', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Truncated renamed', includeHidden: true }).click();
   form = page.locator('#pc-task-form');
   await form.locator('input[name="time"]').fill('09:00');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -318,7 +324,8 @@ test('editing the civil date explicitly relocates the same untimed task id', asy
   await openApp(page);
   await addSecondaryTask(page, 'Explicit reschedule');
   const original = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
-  await page.getByRole('button', { name: 'Edit planned task Explicit reschedule' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Explicit reschedule', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Explicit reschedule', includeHidden: true }).click();
   const form = page.locator('#pc-task-form');
   await form.locator('input[name="date"]').fill('2026-09-25');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -399,7 +406,8 @@ test('a refused explicit future-date Edit resets to the source anchor before ret
   await seedThreePriorities(page, '2026-09-25');
   await addSecondaryTask(page, 'Edit refusal source');
   const originalId = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current()).find(item => item.task === 'Edit refusal source').id);
-  await page.getByRole('button', { name: 'Edit planned task Edit refusal source' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Edit refusal source', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Edit refusal source', includeHidden: true }).click();
   let form = page.locator('#pc-task-form');
   await form.locator('input[name="date"]').fill('2026-09-25');
   await form.locator('select[name="kind"]').selectOption('priority');
@@ -459,7 +467,8 @@ test('editing a current task backward is refused and leaves the source unchanged
   await openApp(page);
   await addPriority(page, 'Stay current');
   const before = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
-  await page.getByRole('button', { name: 'Edit planned task Stay current' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Stay current', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Stay current', includeHidden: true }).click();
   const form = page.locator('#pc-task-form');
   await form.locator('input[name="date"]').fill('2026-09-18');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -498,7 +507,8 @@ for (const store of ['legacy', 'operational']) {
       refreshAuthoritativePlanSurfaces();
       return item.id;
     });
-    await page.getByRole('button', { name: 'Edit planned task Clear ranged time' }).click();
+    await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Clear ranged time', includeHidden: true }));
+    await page.getByRole('button', { name: 'Edit planned task Clear ranged time', includeHidden: true }).click();
     const form = page.locator('#pc-task-form');
     await form.locator('input[name="time"]').fill('');
     await form.getByRole('button', { name: 'Save' }).click();
@@ -516,7 +526,8 @@ test('task checkbox and promotion preserve identity without fabricating evidence
   await openApp(page);
   await addSecondaryTask(page, 'Identity stays put');
   const original = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id);
-  await page.getByRole('button', { name: 'Mark done: Identity stays put' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Mark done: Identity stays put', includeHidden: true }));
+  await page.getByRole('button', { name: 'Mark done: Identity stays put', includeHidden: true }).click();
   const checked = await page.evaluate(() => ({
     item: window.PlanAuthority.items(window.PlanAuthority.current())[0],
     entries: JSON.parse(localStorage.getItem('ta3-entries:uid_pc-user')),
@@ -525,7 +536,8 @@ test('task checkbox and promotion preserve identity without fabricating evidence
   expect(checked.item.done).toBe(true);
   expect(checked.entries).toEqual([]);
 
-  await page.getByRole('button', { name: 'Edit planned task Identity stays put' }).click();
+  await revealAgendaItem(page.getByRole('button', { name: 'Edit planned task Identity stays put', includeHidden: true }));
+  await page.getByRole('button', { name: 'Edit planned task Identity stays put', includeHidden: true }).click();
   const form = page.locator('#pc-task-form');
   await form.locator('select[name="kind"]').selectOption('priority');
   await form.getByRole('button', { name: 'Save' }).click();
@@ -576,17 +588,18 @@ test('Prepare Tomorrow shows Top priorities and Other planned tasks as separate 
   await openApp(page);
   await page.evaluate(() => openPlanTomorrow());
   const modal = page.locator('#plan-tomorrow-overlay');
-  await expect(modal).toContainText('Top priorities');
+  await expect(modal).toContainText('Top 3 priorities');
   await expect(modal).toContainText('Other planned tasks');
 
   await modal.locator('#plan-tomorrow-add input[name="task"]').fill('A priority');
   await modal.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await modal.locator('[data-pt-fold="other"]>summary').click();
   await modal.locator('#plan-tomorrow-add-task input[name="task"]').fill('A secondary task');
   await modal.locator('#plan-tomorrow-add-task').getByRole('button', { name: 'Add' }).click();
   await expect(modal).toContainText('1/3');
   await expect(modal).toContainText('A secondary task');
 
-  await page.getByRole('button', { name: /is ready|Confirm/ }).first().click();
+  await page.getByRole('button', { name: /Save plan|Confirm/ }).first().click();
   await expect(modal).not.toHaveClass(/open/);
 
   // The confirmed preparation carries the PRIORITY only.
@@ -756,7 +769,7 @@ test('the browser lists personal days by their real interval and prepares an arb
 
   await modal.locator('#plan-tomorrow-add input[name="task"]').fill('Five days out');
   await modal.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: /is ready|Confirm/ }).first().click();
+  await page.getByRole('button', { name: /Save plan|Confirm/ }).first().click();
   await expect(modal).not.toHaveClass(/open/);
 
   const stored = await page.evaluate(id => {
@@ -852,8 +865,10 @@ test('long task titles keep usable controls at mobile width', async ({ page }) =
   const box = await row.boundingBox();
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(360);
-  await expect(row.getByRole('button', { name: /Mark done/ })).toBeVisible();
-  await expect(row.getByRole('button', { name: /Edit planned task/ })).toBeVisible();
+  await revealAgendaItem(row.getByRole('button', { name: /Mark done/, includeHidden: true }));
+  await expect(row.getByRole('button', { name: /Mark done/, includeHidden: true })).toBeVisible();
+  await revealAgendaItem(row.getByRole('button', { name: /Edit planned task/, includeHidden: true }));
+  await expect(row.getByRole('button', { name: /Edit planned task/, includeHidden: true })).toBeVisible();
 });
 
 test('an unfinished task from 3 days ago is discoverable and moves to today exactly once', async ({ page }) => {

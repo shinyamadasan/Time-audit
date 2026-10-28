@@ -191,7 +191,7 @@ const GROUP = Object.keys(importMap).map(k => k.replace('./', '')).filter(file =
 const BRAIN_DUMP_GROUP = Object.keys(importMap).map(k => k.replace('./', '')).filter(isBrainDump);
 const moduleEntries = [...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)(?:\?v=([^"]+))?"/g)]
   .map(m => ({ file: m[1].replace(/^\.\//, ''), version: m[2] || '' }));
-const governedModule = /^(?:personal-day-boundary-|operational-plan-|task-completion-|plan-authority\.js$|plan-item-origin\.js$|plan-fence-sync\.js$|planning-continuity-ui\.js$|stale-plan-recovery-model\.js$|calendar-plan-(?:model|repository|sync|live)\.js$|commitments-(?:repository|sync)\.js$|coarse-life-evidence-(?:repository|sync|ui)\.js$|learning-plan-repository\.js$|capability-career-repository\.js$|daily-routines-repository\.js$)/;
+const governedModule = /^(?:personal-day-boundary-|operational-plan-|task-completion-|plan-authority\.js$|plan-item-origin\.js$|plan-fence-sync\.js$|planning-continuity-ui\.js$|stale-plan-recovery-model\.js$|calendar-plan-(?:model|repository|sync|live)\.js$|commitments-(?:model|repository|sync)\.js$|coarse-life-evidence-(?:repository|sync|ui)\.js$|learning-plan-repository\.js$|capability-career-repository\.js$|daily-routines-repository\.js$)/;
 
 test('the import map precedes every module script, and pins EVERY group module to the one release token', () => {
   assert.ok(html.indexOf('<script type="importmap">') > -1);
@@ -201,7 +201,7 @@ test('the import map precedes every module script, and pins EVERY group module t
     assert.ok(existsSync(path.join(HERE, key)), `${key} must exist`);
   }
   for (const required of ['personal-day-boundary-model', 'personal-day-boundary-wire', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority',
-    'commitments-repository', 'commitments-sync', 'coarse-life-evidence-repository', 'coarse-life-evidence-sync', 'coarse-life-evidence-ui',
+    'commitments-model', 'commitments-repository', 'commitments-sync', 'coarse-life-evidence-repository', 'coarse-life-evidence-sync', 'coarse-life-evidence-ui',
     'learning-plan-repository', 'capability-career-repository', 'daily-routines-repository',
     'task-completion-model', 'task-completion-repository', 'task-completion-sync', 'stale-plan-recovery-model', 'calendar-plan-model', 'calendar-plan-repository', 'calendar-plan-sync', 'calendar-plan-live', 'plan-item-origin', 'plan-fence-sync']) {
     assert.ok(GROUP.includes(`${required}.js`), `${required}.js must be in the pinned group`);
@@ -275,8 +275,8 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // TASK-018 adds acknowledged resolution modules; retire TASK-017's full governed graph.
 // TASK-022 repairs incoming-nudge replay in storage.js; advance the governed graph together.
 // TASK-023 keeps editor navigation still during native pointer submission.
-const CURRENT_RELEASE = '20261024-task025-entry-validation-v1';
-const BRAIN_DUMP_RELEASE = '20261021-task016-promotion-reliability-v1';
+const CURRENT_RELEASE = '20261027-task039-release-integration-v1';
+const BRAIN_DUMP_RELEASE = '20261026-task031-source-guard-v1';
 // Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
 // (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
 // token, so it is checked as "not the Brain Dump token" instead of "absent from index.html".)
@@ -319,7 +319,7 @@ test('no Brain Dump module pins its own ?v= import, and no governed module impor
 });
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20261023-task023-qa-unblock-v1', '20261023-task022-nudge-replay-v1', '20261015-task018-completion-v1', '20261015-task017-unfinished-ux-v1', '20261014-task014-normal-tracking-hud-v1', '20261012-task011-plan-action-items-v1', '20261010-task009-boundary-wire-v1', '20261007-intelligence-v1', '20261005-location-bound-fence-v1', '20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2', '20260928-calendar-native-activation-safety-fix3', '20260930-timer-away-account-isolation-v1', '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1', '20261002-brain-dump-eisenhower-v1-fix1', '20261003-brain-dump-promotion-fence-v1'];
+const PREVIOUS_RELEASES = ['20261027-task033-visual-refinement-v1', '20261023-task023-qa-unblock-v1', '20261023-task022-nudge-replay-v1', '20261015-task018-completion-v1', '20261015-task017-unfinished-ux-v1', '20261014-task014-normal-tracking-hud-v1', '20261012-task011-plan-action-items-v1', '20261010-task009-boundary-wire-v1', '20261007-intelligence-v1', '20261005-location-bound-fence-v1', '20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2', '20260928-calendar-native-activation-safety-fix3', '20260930-timer-away-account-isolation-v1', '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1', '20261002-brain-dump-eisenhower-v1-fix1', '20261003-brain-dump-promotion-fence-v1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);

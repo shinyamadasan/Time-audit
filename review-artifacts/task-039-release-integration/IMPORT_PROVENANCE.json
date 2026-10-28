@@ -1,0 +1,1436 @@
+{
+  "base": "8057e2ed3f73729c0c777067a7bb0c55adfb4312",
+  "currentRemoteMain": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+  "localMain": "0e04ebba9e9ac9bc52f219560cc955dfdbc499e5",
+  "approvedCandidate": "bd96cccfec9bb893a44bc6573d0e04356cd80333",
+  "importedPaths": {
+    "CODEMAP.md": {
+      "approvedBlob": "f840c6080a1fa216f32dc5abfc8a355f47749d98",
+      "overlapsCurrentMain": false
+    },
+    "TASK_028_HANDOFF.md": {
+      "approvedBlob": "fdc55b8b0c26dd5cccb58022968595a0b4aa1a92",
+      "overlapsCurrentMain": false
+    },
+    "TASK_031_RELEASE_HANDOFF.md": {
+      "approvedBlob": "0da072231c78f02f6e506425851ebb405ef53ebc",
+      "overlapsCurrentMain": false
+    },
+    "TASK_033_PROMOTION_CONTRACT.md": {
+      "approvedBlob": "30a5dd882d0bef19a2373c030a2d398ad184c61c",
+      "overlapsCurrentMain": false
+    },
+    "TASK_033_REVIEW.md": {
+      "approvedBlob": "a4b30bffe61b8811789abee77fe748b05b8436b0",
+      "overlapsCurrentMain": false
+    },
+    "TASK_033_VISUAL_REVIEW.md": {
+      "approvedBlob": "79135ed16f1764746b39055da7f871e4da94c486",
+      "overlapsCurrentMain": false
+    },
+    "TASK_035_RELIABILITY_CLOSURE.md": {
+      "approvedBlob": "f4e501f251181708f51757bcbe99ba0b3b11b14a",
+      "overlapsCurrentMain": false
+    },
+    "TASK_037_ONLINE_REPAIR.md": {
+      "approvedBlob": "ea423b4a8639aa989f1c67c52ce68bebda5de7b4",
+      "overlapsCurrentMain": false
+    },
+    "TASK_037_SAVE_REPAIR.md": {
+      "approvedBlob": "30ba8426e96c9196b8488d85d2f47b9192eddb49",
+      "overlapsCurrentMain": false
+    },
+    "assets/fonts/InterVariable.woff2": {
+      "approvedBlob": "5a8d3e72ad7ffb62af3b146e1b1f54ab5813a212",
+      "overlapsCurrentMain": false
+    },
+    "assets/fonts/OFL.txt": {
+      "approvedBlob": "9b2ca37b3ffc77391d8b2ebef4a974ef32bf46ea",
+      "overlapsCurrentMain": false
+    },
+    "assets/fonts/README.md": {
+      "approvedBlob": "1364c5d3b0b06cc553e5f8489e5267a5678dbd09",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-model.js": {
+      "approvedBlob": "34819405f747652a4fa6aa5aae30ac4ee9b9d53c",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-model.test.js": {
+      "approvedBlob": "50044011ddb45e05abc3624773332a6f75a3b2c4",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-promotion.test.js": {
+      "approvedBlob": "f0309fa00b532837d989f8562ae180ebafeebe84",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-sync.js": {
+      "approvedBlob": "d09073e1511b50f9cf672be7083321406ea97c2d",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-sync.test.js": {
+      "approvedBlob": "03acc138e045ad2ea2854947f0d1099187cf9c5e",
+      "overlapsCurrentMain": false
+    },
+    "brain-dump-ui.js": {
+      "approvedBlob": "e2d1b5d28afc16ba64c2dc6216cc49fa9976a277",
+      "overlapsCurrentMain": false
+    },
+    "calendar-plan-model.test.js": {
+      "approvedBlob": "8559d75ca3c27297e8909eb488b88348b0095823",
+      "overlapsCurrentMain": false
+    },
+    "daily-command-center.css": {
+      "approvedBlob": "f22d7829679f941bed5c121e9107b68b69529cb0",
+      "overlapsCurrentMain": false
+    },
+    "daily-command-center.js": {
+      "approvedBlob": "a384337b9b18279570f2b5fef3a016365a901300",
+      "overlapsCurrentMain": false
+    },
+    "daily-command-center.test.js": {
+      "approvedBlob": "4c0b626beb251c23ba30e9f8d570bda6f59a2c78",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/.gitignore": {
+      "approvedBlob": "be0a7c9ea72a1722e8f2f63f56f48c21a8d5e955",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/Start-OnlineRetest.ps1": {
+      "approvedBlob": "f0d43d3ed9d73f71534940a2067d03886f7012b8",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/Stop-OnlineRetest.ps1": {
+      "approvedBlob": "c9a56bbe44e513f70f506e44362a03f809c89237",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/bootstrap.js": {
+      "approvedBlob": "e0841fe850cd45d2f5a8f7604a7abe2be4a4723d",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/portal.html": {
+      "approvedBlob": "8a97fc19c08d8306892fc2238c3370b88351454f",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/server.mjs": {
+      "approvedBlob": "30560114120e8dd4b7fccbbc850d4a4252058f56",
+      "overlapsCurrentMain": false
+    },
+    "device-acceptance/transport.js": {
+      "approvedBlob": "5ed607ccb18c0c08501d49a65b6690e22e5fc371",
+      "overlapsCurrentMain": false
+    },
+    "entry-reliability-sdk.test.js": {
+      "approvedBlob": "b8d83afd13a264f9f372d52c5bc8dbae0c1ff608",
+      "overlapsCurrentMain": false
+    },
+    "entry-validation.test.js": {
+      "approvedBlob": "047310ca1a4b0b9e6b53cdbbadf05a0337bf3464",
+      "overlapsCurrentMain": false
+    },
+    "eslint.config.js": {
+      "approvedBlob": "89a9144e1de46a8fd4db4843b18550c7b289f2b8",
+      "overlapsCurrentMain": false
+    },
+    "firebase-rules-emulator.test.js": {
+      "approvedBlob": "9f7c978dded4e2c06ced9f6316f20c09651eb396",
+      "overlapsCurrentMain": true
+    },
+    "firebase-rules-mutation.test.js": {
+      "approvedBlob": "7d07465067c0292d94c4553c32cf0e5d57576a65",
+      "overlapsCurrentMain": false
+    },
+    "firebase-rules.test.js": {
+      "approvedBlob": "50bb24af5523522f3ec4631083806ccba180231a",
+      "overlapsCurrentMain": true
+    },
+    "firebase.rules.json": {
+      "approvedBlob": "0ae31673d393e902c69e6316ab270d042359bdff",
+      "overlapsCurrentMain": false
+    },
+    "functions/shared/brain-dump-model.js": {
+      "approvedBlob": "34819405f747652a4fa6aa5aae30ac4ee9b9d53c",
+      "overlapsCurrentMain": false
+    },
+    "functions/shared/plan-tomorrow-model.js": {
+      "approvedBlob": "bebbab27fb72ad1e269ed9264ac3871805cfc2de",
+      "overlapsCurrentMain": false
+    },
+    "functions/shared/stale-plan-recovery-model.js": {
+      "approvedBlob": "314fbe94fb9dad5ed4a71f8cf93d543d3812fa44",
+      "overlapsCurrentMain": false
+    },
+    "index.html": {
+      "approvedBlob": "2b4233f287531d9e492220cfe07ce81ed4bc78d7",
+      "overlapsCurrentMain": true
+    },
+    "notification-reliability.test.js": {
+      "approvedBlob": "572656675e79df416856a5e142ab08f69b30fafb",
+      "overlapsCurrentMain": false
+    },
+    "npm-test-wiring.test.js": {
+      "approvedBlob": "c29064ae7642baef66cd39bfccbb618ba0bd51e4",
+      "overlapsCurrentMain": false
+    },
+    "online-planner-sdk.test.js": {
+      "approvedBlob": "0dcfd5cf2c7a3872be50011bf6427b9847a1ee78",
+      "overlapsCurrentMain": false
+    },
+    "package.json": {
+      "approvedBlob": "a8c30e409f29ad5e622360844c77d5585cd4e2cf",
+      "overlapsCurrentMain": false
+    },
+    "personal-day-boundary-web-runtime.test.js": {
+      "approvedBlob": "8d35c4f5f4acf3c67e07a09f7b106721fce32e1a",
+      "overlapsCurrentMain": false
+    },
+    "plan-tomorrow-model.js": {
+      "approvedBlob": "bebbab27fb72ad1e269ed9264ac3871805cfc2de",
+      "overlapsCurrentMain": false
+    },
+    "plan-tomorrow-ui.js": {
+      "approvedBlob": "8724926c0a8f594c2033046c8df6e0e9528a84df",
+      "overlapsCurrentMain": false
+    },
+    "plan-tomorrow.css": {
+      "approvedBlob": "c8006c19b8927a32b501499338301439f16454bf",
+      "overlapsCurrentMain": false
+    },
+    "plan-tomorrow.test.js": {
+      "approvedBlob": "4dbce92d1009ad2b22fd01af37c5dd5a4695a4c9",
+      "overlapsCurrentMain": false
+    },
+    "planning-continuity-ui.js": {
+      "approvedBlob": "8d3c541b3fcd18fc9acddb763c373801e5030d90",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/.gitignore": {
+      "approvedBlob": "5b520ae080339a5a27ab002d851ed085ae560a54",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/GATE_RESULTS.json": {
+      "approvedBlob": "bd7e25a58c92f8b62edd809eba429244accbad14",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/INDEPENDENT_REVIEW.md": {
+      "approvedBlob": "84f047710ba8c2839e7f077a70b55e356fb0bc68",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/INVARIANTS.json": {
+      "approvedBlob": "bde4a5fcff7f7d4467090868ca47e11600bee6b6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/PROTECTED_BASELINES.json": {
+      "approvedBlob": "5d14010ef614edc1cfa2740c17f0ccbe4e215001",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/SOURCE_MANIFEST.json": {
+      "approvedBlob": "372d35704363ac3ebe1ba6cb526fbd0eafcdb253",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/compose.py": {
+      "approvedBlob": "66a5e88cdba1389ee2b07dd9c680e1d7317ec4e4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/failures/order-conflict-context.md": {
+      "approvedBlob": "f67328e5437c0195864c5f516f4dc8821911b24b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/integrated-review.png": {
+      "approvedBlob": "fa07a16d5394a51746c2299c208e0610897a8ce7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/manifest.mjs": {
+      "approvedBlob": "1e9c4e08a7e7f62d7845a5fcfda6e7853ff621c4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/preservation.mjs": {
+      "approvedBlob": "55821b9c3cd1596059e8c2ecb45ce6f5e77376cb",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/screenshots/integrated-planner-desktop.png": {
+      "approvedBlob": "5020f0a5dcb70d936dd4cc48c448b8eaf9c213b2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/screenshots/integrated-planner-laptop.png": {
+      "approvedBlob": "ecc7f3b09ed4aad67b8511598866bbf790612ff7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/screenshots/integrated-planner-mobile-edit.png": {
+      "approvedBlob": "3aeaae7e3de987f06250257e08214c9db926e91f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/screenshots/integrated-planner-mobile.png": {
+      "approvedBlob": "537d802fff076e70ee51399adc08e0f5c32bf15f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-031-safe-planner/verify-core.mjs": {
+      "approvedBlob": "ae95afb4b559498b5a1e924b3fd2865f46472429",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/GATE_RESULTS.json": {
+      "approvedBlob": "a08a4e7849762e54090813fb75f059afe401dfc6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/INDEPENDENT_REVIEW.md": {
+      "approvedBlob": "062a1cbc944af9b24cf1519c00d60ee28fa6c271",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/INVARIANTS.json": {
+      "approvedBlob": "a6b21149c95ca80514bb712045170477aa7d8fa5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json": {
+      "approvedBlob": "ce7771b8ac8844f31993822cafa44be58fe1b601",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/REPLAY_WRITER_EMULATOR_RESULT.json": {
+      "approvedBlob": "86737aeed8abf5b65d5e0e47c9a3869ef225104d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/REPLAY_WRITER_RESULT.json": {
+      "approvedBlob": "5143e592759646debc55e0f048a1e0565dd6b7e1",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/SOURCE_MANIFEST.json": {
+      "approvedBlob": "68e6446aba8ac002fb5335deb8baab83638b60dc",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/mobile-action-metrics.json": {
+      "approvedBlob": "913e66b4fbe3e019706c05af591e3b202a077e68",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/my-day-desktop.png": {
+      "approvedBlob": "edc3daa24f3ba4fdc13f8283c66f8ba8c78571eb",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/my-day-laptop.png": {
+      "approvedBlob": "2957912f0cd9a5179a7c9b458e7842752e1f61de",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png": {
+      "approvedBlob": "e8696744afe250689814d9f7552361bfd6f7d389",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/my-day-mobile.png": {
+      "approvedBlob": "107d453ce81e7afdc9baefc0b255735411dc0d92",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/planner-desktop.png": {
+      "approvedBlob": "af392b6e23639e992ef9a552c144e2f8655c8431",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/planner-laptop.png": {
+      "approvedBlob": "68cf3f89158d155d390a3e3fc7fe2ebafde62c18",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/after/planner-mobile.png": {
+      "approvedBlob": "63586d3f107ef743267a40a911fb739bc92da543",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/my-day-desktop.png": {
+      "approvedBlob": "42cc56ab55a049b3242c1100551cfb351ffe419f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/my-day-laptop.png": {
+      "approvedBlob": "30e43d5baa57bf963e8be6c9b15608fe84ce0de6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/my-day-mobile-detail.png": {
+      "approvedBlob": "b049ab32cb7b767c187d3e968699e66607c0d6c2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/my-day-mobile.png": {
+      "approvedBlob": "e6e6bcc64cda167d1a55d9bb30d16a65c97c7d78",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/planner-desktop.png": {
+      "approvedBlob": "137bf0d995c50e664c42eea8871b336c44884b70",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/planner-laptop.png": {
+      "approvedBlob": "8b05b460abd3bcb9c70e93f87977e54c5e2daa62",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/before/planner-mobile.png": {
+      "approvedBlob": "537d802fff076e70ee51399adc08e0f5c32bf15f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/compose.py": {
+      "approvedBlob": "754f51a6768caf4619f77e07bbb5b78ebc7c287f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/ARCHIVE_MANIFEST.json": {
+      "approvedBlob": "ea976e7cec28d1cf95f5dec8f5fe367882e0d547",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/README.md": {
+      "approvedBlob": "34ab1a8675a0a777b1caa05a8d0d6dd7248b18b5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/UNCONNECTED_EXPERIMENT.patch.gz": {
+      "approvedBlob": "639d426545f64b851fd4e1e308d2f8aaba42500e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/brain-dump-confirmation.js": {
+      "approvedBlob": "af500f8edb58d4f968227cd88e447d4e3f2c4943",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/brain-dump-confirmation.test.js": {
+      "approvedBlob": "da4af47d4f84a29e046a86d22b1c1c9d484ba98f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/firebase.rules.json": {
+      "approvedBlob": "80b25d635dc9c47a8e5a738bcf13ca50cb8c6c54",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/task033-contract-proof.txt.gz": {
+      "approvedBlob": "47d521a6a1c785eb201a6e2d893f312ab1a5432d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/task033-contract-proof2.txt.gz": {
+      "approvedBlob": "bc87911aa8bfab82f00684b5019898199746c702",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/task033-fence.txt.gz": {
+      "approvedBlob": "3add3e0de4a9c70dacdaecbe05c719932c1f7cbe",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/contract-prototype/task033-fence2.txt.gz": {
+      "approvedBlob": "fad95dd6bacfbdd4c5f6852311fdf74f94cc69ab",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/gates.py": {
+      "approvedBlob": "25651cfafb7641128ba264ff94140171ea07aa20",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/invariants.mjs": {
+      "approvedBlob": "64bea793fc73f53e107a32b28a4c764df5ae5ea4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/manifest.mjs": {
+      "approvedBlob": "764d030a68763b4791214f9871abe383ee504fa4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/my-day-laptop-before-after.png": {
+      "approvedBlob": "9f044fc18ef2b8a3204d06813648bf6a1d5d35dc",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/my-day-mobile-before-after.png": {
+      "approvedBlob": "6392acbdebb715d03d0adf83191f44e51b825929",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/my-day-mobile-detail-before-after.png": {
+      "approvedBlob": "06d5077cb9eecea946691ae2060b20cb775b2f8b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/planner-laptop-before-after.png": {
+      "approvedBlob": "1d40f15a1bd40b9bf7cb2e8c2b68908ba0d77a71",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/planner-mobile-before-after.png": {
+      "approvedBlob": "47dc4e2c06b651ea2e661aa5d5b347d6ae781ce2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/replay-writer-probe.mjs": {
+      "approvedBlob": "fdea310ec053bc7e2008d3b083e7fa6e7888dc9d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-product-quality/review-contact-sheet.png": {
+      "approvedBlob": "8eb1364c24d21869cfb0dd91e6bb78d66d2db752",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/GATE_RESULTS.json": {
+      "approvedBlob": "d8b666685f470955890abb0e160ee36cd46102f7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/INVARIANTS.json": {
+      "approvedBlob": "d0c5f3586077bfaf577511be223396c4252be502",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/LAYOUT_CHECKS.json": {
+      "approvedBlob": "0a7a22132fa7c6f75dde7aea8d01e944c97f1637",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/NODE_RESULTS.json": {
+      "approvedBlob": "8981696cd3c77b13643267e2194747f24381e66c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/SOURCE_MANIFEST.json": {
+      "approvedBlob": "3305c6957f9a85a430b8e0166f819f97a45ca4a1",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/MEASUREMENTS.json": {
+      "approvedBlob": "9aee06eafd176c33764d67ec137bf191859a291a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/mobile-action-metrics.json": {
+      "approvedBlob": "98437f0cd9a42e490f6057ee28600446997f48c0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/mobile-more.png": {
+      "approvedBlob": "c58e9dde8efbd31e8d626e694a03af13affe26ad",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/my-day-desktop.png": {
+      "approvedBlob": "985c6010353b16b4a840766c76f56ec00aea8fde",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/my-day-laptop.png": {
+      "approvedBlob": "89b05be3ea628b292fb0eee0c90a2204bbe7088c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/my-day-mobile-detail.png": {
+      "approvedBlob": "8bf734b1d2bd315131adde57f6817a5023d91667",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/my-day-mobile.png": {
+      "approvedBlob": "8b94dba84066623bf39fbd64b716d331e693e90b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/planner-desktop.png": {
+      "approvedBlob": "e7f111d020255c1bb69b523ca890bc5c7d8d46fc",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/planner-laptop.png": {
+      "approvedBlob": "eab1df93d19933501e6bad3e20a4e5cce96a5d29",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/planner-mobile-ideas.png": {
+      "approvedBlob": "e582d007f8da7c23c61693e0a3822f2bd7c355db",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/after/planner-mobile.png": {
+      "approvedBlob": "da1366e319870bf652db458b9f82471b29027fe5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/MEASUREMENTS.json": {
+      "approvedBlob": "1f2e6485ac6b58f54079f2211e407bc039868bc6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/my-day-desktop.png": {
+      "approvedBlob": "247100bc4fe21535d36e37a75545bde81f68c195",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/my-day-laptop.png": {
+      "approvedBlob": "2957912f0cd9a5179a7c9b458e7842752e1f61de",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/my-day-mobile-detail.png": {
+      "approvedBlob": "e8696744afe250689814d9f7552361bfd6f7d389",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/my-day-mobile.png": {
+      "approvedBlob": "107d453ce81e7afdc9baefc0b255735411dc0d92",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/planner-desktop.png": {
+      "approvedBlob": "0aca700070281c6fe0551e98bbf2df52ba83f1b8",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/planner-laptop.png": {
+      "approvedBlob": "8aa09bde88e6f7815632c182d621e3e2dbbbcd66",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/before/planner-mobile.png": {
+      "approvedBlob": "57a66521bb0177197aebd1c4308c976f9553440d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/compose.py": {
+      "approvedBlob": "6a2b3a4f783cea51a5433b88f395cdc493515370",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/desktop-before-after.png": {
+      "approvedBlob": "778184f5a9b39d881dcc736a9c73a9d2995642d0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/laptop-before-after.png": {
+      "approvedBlob": "5ebb901ba9ac80a707406c80a9d4623134b72ac2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-before-final.log.gz": {
+      "approvedBlob": "d824ae5324a4180808b5f0fbebb8059b4ce0c716",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-browser.log.gz": {
+      "approvedBlob": "33201bbcf77504068c13bec170ca376f11523fd3",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-dashboard-final.log.gz": {
+      "approvedBlob": "1e1df5cd755408c7557389069cec4aacfb38d08e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-final-static.log.gz": {
+      "approvedBlob": "30ce1185703debee028af4d8ee1ffc28f37fd296",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-focus-final.log.gz": {
+      "approvedBlob": "2db1d71d0abbac6df9bf14d60c20d80f01d718bd",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-lint.log.gz": {
+      "approvedBlob": "13a6941e252b448696cebcba5e5bb9b230ad03fc",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-node-final.log.gz": {
+      "approvedBlob": "bda1901e3d99de5b8f9cd09c706cec9d496b0702",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/logs/task033-visual-review-final.log.gz": {
+      "approvedBlob": "ebcf9b29b3bb8e703e8c77ba671e5da6956a4242",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/mobile-before-after.png": {
+      "approvedBlob": "f18570c232fb45c1e8900c524dbe36f56832af67",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/my-day-desktop-before-after.png": {
+      "approvedBlob": "9a7ebee1b76b9ac185e7a0df74d335eb58661380",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/my-day-laptop-before-after.png": {
+      "approvedBlob": "0681413c0551fc88bc6702f9a6530f7bb34adb85",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/my-day-mobile-before-after.png": {
+      "approvedBlob": "136763c8867f1661027400af1d534ef1ec2f05d1",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/my-day-mobile-detail-before-after.png": {
+      "approvedBlob": "34e942c2220bf52c3d4ababd3c84b291feea6a4b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/planner-desktop-before-after.png": {
+      "approvedBlob": "987764a31396a3887905bfaa9145a14e21ccfd06",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/planner-laptop-before-after.png": {
+      "approvedBlob": "0ac94e3e8087cfd78e84bc454bcd8f56391a37a3",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/planner-mobile-before-after.png": {
+      "approvedBlob": "b1dcfed11da20644ee705dedb57515e353fafb9e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/review-contact-sheet.png": {
+      "approvedBlob": "24215b1e14c1d4b31b4dbc792808bb5c14cadd50",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-033-visual-refinement/verify.py": {
+      "approvedBlob": "d257258bde6901cb91cdcc57c0e944d73dc7ed27",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/ARTIFACT_MANIFEST.json": {
+      "approvedBlob": "92c41016df21bf3541b7a9860c18a9c209a8737a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/FINAL_SCOPE.json": {
+      "approvedBlob": "21b6fba79ab03b5d108c0e84ced4258851d6638a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/GATE_RESULTS.json": {
+      "approvedBlob": "78bd0fb6ebfd84b6f9457af1ad87ad002bac713b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/HARD_RULES.json": {
+      "approvedBlob": "c2cc0f4111c1d0dbb37b2038fc356b8ee7caefae",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/INDEPENDENT_REVIEW.md": {
+      "approvedBlob": "a3813a2353280844b6e516333bfb7f41e24ba25e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/PROTECTED_BEFORE.json": {
+      "approvedBlob": "55a052bce6a4caaa3bc4d510b5fc2557adb1243e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/PROTECTED_VERIFICATION.json": {
+      "approvedBlob": "deea4052c4926e8d7b364e2dc36c9202318d0573",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/SELF_REVIEW_QA.md": {
+      "approvedBlob": "774ca9ecbfb19ee1df6a9366b3eb5d6b0b200090",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/SOURCE_VERIFICATION.json": {
+      "approvedBlob": "7857f26edaf9910bc61f74e097d0dfc4ea111c44",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/MEASUREMENTS.json": {
+      "approvedBlob": "9aee06eafd176c33764d67ec137bf191859a291a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/mobile-action-metrics.json": {
+      "approvedBlob": "98437f0cd9a42e490f6057ee28600446997f48c0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/my-day-desktop.png": {
+      "approvedBlob": "985c6010353b16b4a840766c76f56ec00aea8fde",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/my-day-laptop.png": {
+      "approvedBlob": "89b05be3ea628b292fb0eee0c90a2204bbe7088c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/my-day-mobile-detail.png": {
+      "approvedBlob": "8bf734b1d2bd315131adde57f6817a5023d91667",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/my-day-mobile.png": {
+      "approvedBlob": "8b94dba84066623bf39fbd64b716d331e693e90b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/planner-desktop.png": {
+      "approvedBlob": "f986b1b3347908d13a8443d53672536d22d2ab45",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/planner-laptop.png": {
+      "approvedBlob": "eab1df93d19933501e6bad3e20a4e5cce96a5d29",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/after/planner-mobile.png": {
+      "approvedBlob": "11bdf744a5eb4847cc433d18f7eb30ec728dfe85",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/LAYOUT_CHECKS.json.gz": {
+      "approvedBlob": "7af984fada36021831253e769164b2d109e9bdc5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/before-strict.json.gz": {
+      "approvedBlob": "48b3f38f46ec29284fb5bb8e4300a97dfcc09a9c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/before-strict.log.gz": {
+      "approvedBlob": "2cd63fc552f8be7269c3108f0e241b284617a0de",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/browser-full-final.json.gz": {
+      "approvedBlob": "386dabc04a077a1cdf7811608566024c916c1cf6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/browser-full-final.log.gz": {
+      "approvedBlob": "98327db798502ab7bb6f785362a09a0b323bcccf",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/browser-full.json.gz": {
+      "approvedBlob": "4582551c4a9045161244507bd49694f93ca31238",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/browser-full.log.gz": {
+      "approvedBlob": "b0435c98538742c4f1da569e494aaa1da52e7e04",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/bundle-final.log.gz": {
+      "approvedBlob": "b47a7a55ab6b0dafd7a39180c890db929647f8e4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/entry-unit.log.gz": {
+      "approvedBlob": "31a61a6772f62c1365101195b5e08a104f1a336b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/fence-final.log.gz": {
+      "approvedBlob": "1fb19c42f42b1b9135ef87b6a02426d5b6c81d9a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/first-strict.json.gz": {
+      "approvedBlob": "2ecd1f3a4dc47e18822634d03eeac7e840697fb7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/first-strict.log.gz": {
+      "approvedBlob": "6542147d6e51cb25e8bb79921ab449afabe3a16a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/focused-final.json.gz": {
+      "approvedBlob": "38fb0190dbb812ebdcdd66fefa711d09255577b6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/focused-final.log.gz": {
+      "approvedBlob": "517709681c0d73ce9b24f999a49c25d62046fa41",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/focused.json.gz": {
+      "approvedBlob": "15defeda084aa80fffa3974063b82bb64be21b9a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/focused.log.gz": {
+      "approvedBlob": "ccf15c40a7a092325118c0bc345b8cc099d091f4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/full-gate-corrections.json.gz": {
+      "approvedBlob": "a341610435ad17be9003a5ea7f1ccc4e3629379c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/full-gate-corrections.log.gz": {
+      "approvedBlob": "69bbc1b22551effdfe0dd5fe1a6507d5fd448937",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/install.log.gz": {
+      "approvedBlob": "89d1b35aedaaf2e874862042b572d0651fb5845a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/lint-final.log.gz": {
+      "approvedBlob": "0b08f99d6f61998d2e33e8c349cf6fa3c1481538",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/lint.log.gz": {
+      "approvedBlob": "044c78a6cd056cfad23dc15928fc1e870fdc557a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/node-final.log.gz": {
+      "approvedBlob": "804bdb573022ab111c89d231a905d67b6b31bc15",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/node-first.log.gz": {
+      "approvedBlob": "a6265af159304e9c739ae7f77c6efd288bd3668a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/sdk-final.log.gz": {
+      "approvedBlob": "cb01af093920d36b7db539ee07a31ea293ab29c4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/sdk-first.log.gz": {
+      "approvedBlob": "d45ac2a29dbf8b4f0969a0ee88701264c72f450d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/source-check.log.gz": {
+      "approvedBlob": "9245d2398e45f03836cfe3d00f14930849c99767",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/static-final.log.gz": {
+      "approvedBlob": "72ec8ffab428607ed5bf87a49666a6dc33d1ef47",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/strict-repeat.json.gz": {
+      "approvedBlob": "4369624c9e65647bde4119fc69f266022b1e75d8",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/strict-repeat.log.gz": {
+      "approvedBlob": "9a782dd75e1b439d64ce817ed26826de0fb32a5e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/worker-final.log.gz": {
+      "approvedBlob": "0d49cb69faa631a92f3f0c4e81b97c9d7784cc5f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/logs/worker-install.log.gz": {
+      "approvedBlob": "a32808a8c0a10b7651f6c69c756b4b21f2498498",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/package-evidence.py": {
+      "approvedBlob": "61d7b10c674519e2a3e229de57144d80913a0227",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/summarize-gates.py": {
+      "approvedBlob": "ea2c9de4976a99a0c5d4dbba76130b628790faf3",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/verify-protected.py": {
+      "approvedBlob": "aa776e9d773cce09f222f0ce3a1eabed7b7cbf7e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-035-release-reliability/verify-scope.py": {
+      "approvedBlob": "f31ca4f722a7197cefc5b7839bd6a22d07873ad4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/ARTIFACT_MANIFEST.json": {
+      "approvedBlob": "1fbf974c1611884f1ec22f79890b967a4b3f1729",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/GATE_RESULTS.json": {
+      "approvedBlob": "1d883dccb6d701588a65cab55c0d7cdaab8341b7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/GENERATED_VISUAL_OUTPUTS.json": {
+      "approvedBlob": "031c6e27a9c71f645a1fb666bd860ab01b8ce38a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/INDEPENDENT_REVIEW.md": {
+      "approvedBlob": "a5e732f9678c3ef1778dc3b0401500514d67666c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/PRESERVATION.json": {
+      "approvedBlob": "f1c34807c81609229aff2b9479f3e3c7ffd3a304",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/SOURCE_REVIEW_HASHES.json": {
+      "approvedBlob": "cd5b3269edca5fa576c98bad827393e303c72cdf",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/affected-browser.log.gz": {
+      "approvedBlob": "f248593a8eba444a1da5641c58c7666b33d79ac8",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/baseline-notification.tap.gz": {
+      "approvedBlob": "09b639b72601ee5a2d0f6c3c434a254a4321fc92",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/baseline-planner.tap.gz": {
+      "approvedBlob": "6b28068b7a3557190e223cd0f3437161ed9c41d0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/fence.log.gz": {
+      "approvedBlob": "5123e703da51338b9d79e1aacf8a88bc844dd6eb",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/full-browser.log.gz": {
+      "approvedBlob": "a797be35d429cf00130a3950ce4f64028271760b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/lint.log.gz": {
+      "approvedBlob": "88316febef9a6d802ce815269741a21fd5803b9b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/notification-expanded.tap.gz": {
+      "approvedBlob": "89b8c0bcb2dd890f551848cbc4a7ff9737f1201c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/notification-green-attempt.tap.gz": {
+      "approvedBlob": "013f918c73997dcb23133e6dd49d1bfb10510029",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/notification-green.tap.gz": {
+      "approvedBlob": "becefea49d63309980e4f64d8d2c11c0ed704f6e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/notification-reviewed-green.tap.gz": {
+      "approvedBlob": "2e0fa7ea280988f29c4b14d01330c996d5b4486a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/npm-first-counterfactual-failure.log.gz": {
+      "approvedBlob": "471c6fbf38d613479b84cd24a36df8628c2ad8cc",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/npm-second-windows-lock-failure.log.gz": {
+      "approvedBlob": "76fa00c34ee3b9a6242da891580047667e138a40",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/npm-test.log.gz": {
+      "approvedBlob": "696779636fdf19ce868dea212a542dd4d5fb36ec",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-fifth-separate-open-failure.log.gz": {
+      "approvedBlob": "057069c2393c5613708b655c6e8cb9ed4d7ca3fb",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-first-readiness-failure.log.gz": {
+      "approvedBlob": "921644204be0359a17b5dfac28ae6463ab81396a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-fourth-authority-init-failure.log.gz": {
+      "approvedBlob": "82083e9e79ccd1cf98c88cac1b4e972beeb27fb0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-initial-repeat.log.gz": {
+      "approvedBlob": "49f3a69394e191d2eda1a092941f8164b9248682",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-repeat.log.gz": {
+      "approvedBlob": "feedafa69414a2e4bdbefa82fd0abe9256ef2fd5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-second-open-failure.log.gz": {
+      "approvedBlob": "46789f0397f2c3b36962fcb2e2f3a6a95d001a80",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-seventh-unpinned-cache-failure.log.gz": {
+      "approvedBlob": "94aaf5cecb6e9ccb97141c937a0dbfa8bea2895d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-sixth-unhydrated-node-cache-failure.log.gz": {
+      "approvedBlob": "7eed177f2915607c1786cf4f747c9081980b1ca9",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui-third-hydration-failure.log.gz": {
+      "approvedBlob": "6e1821e9395beb8dcff83f9aa0b38a177199ad98",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/online-sdk-ui.log.gz": {
+      "approvedBlob": "99d4586beb0780b1b347a073bd1db49976d0eb17",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/planner-calendar-reviewed.tap.gz": {
+      "approvedBlob": "01d1cfe6094dd3f5d153f07293ddbea61f107721",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/planner-green.tap.gz": {
+      "approvedBlob": "d86ae55e1505398c6b33b1ca2130dfe6a635b240",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/planner-ui-green.log.gz": {
+      "approvedBlob": "80bd1363400783454711fdb10826e66facd625a8",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/strict-repeat.log.gz": {
+      "approvedBlob": "ea9ec3c09146ba68b2e7d8c06b0d89d04f4cb3a6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/windows-lock-focused.tap.gz": {
+      "approvedBlob": "2967e503a0bbc81c5909471ae7af966f71710a44",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/worker-bundle.log.gz": {
+      "approvedBlob": "b47a7a55ab6b0dafd7a39180c890db929647f8e4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/logs/worker.log.gz": {
+      "approvedBlob": "04a867697b3d993b5f5af2012580f879d5d15622",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/package-evidence.py": {
+      "approvedBlob": "9a84678503ab29aa9fc0edff96633a3ecb585fc6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/verify-preservation.py": {
+      "approvedBlob": "144e554526089fb585ce035d642e842a292dc8e6",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json": {
+      "approvedBlob": "0a7a22132fa7c6f75dde7aea8d01e944c97f1637",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/MEASUREMENTS.json": {
+      "approvedBlob": "9aee06eafd176c33764d67ec137bf191859a291a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/mobile-action-metrics.json": {
+      "approvedBlob": "98437f0cd9a42e490f6057ee28600446997f48c0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-desktop.png": {
+      "approvedBlob": "985c6010353b16b4a840766c76f56ec00aea8fde",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-laptop.png": {
+      "approvedBlob": "89b05be3ea628b292fb0eee0c90a2204bbe7088c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png": {
+      "approvedBlob": "8bf734b1d2bd315131adde57f6817a5023d91667",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile.png": {
+      "approvedBlob": "8b94dba84066623bf39fbd64b716d331e693e90b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-desktop.png": {
+      "approvedBlob": "658ea0fb992bcd714c44948c2439f1a989bfe846",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-laptop.png": {
+      "approvedBlob": "eab1df93d19933501e6bad3e20a4e5cce96a5d29",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-mobile.png": {
+      "approvedBlob": "398d850d522afa763e54fb8bd6155a46b310e69a",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-online-release-repair/visual-verification/review-artifacts/task-033-visual-refinement/after/mobile-more.png": {
+      "approvedBlob": "68d49a121a15197de187d67b902524837e4f9c58",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/.gitattributes": {
+      "approvedBlob": "162daf7552cc39ba35f5618e919ce1ad40e66a07",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/.gitignore": {
+      "approvedBlob": "22ef374bfea4f057320b31ed608b501221e2fe1d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/ARTIFACT_MANIFEST.json": {
+      "approvedBlob": "5e45c1a882019fd8152bf8e6fc467e99d570662c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/DEVICE_CHECKPOINT_HASHES.json": {
+      "approvedBlob": "b1a882b317b9276c6e20a4099586fae671ff2095",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/EXISTING_TEST_RECORDS.json": {
+      "approvedBlob": "854739b1167b3f96bdd112079ad131e745090fa1",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/GATE_RESULTS.json": {
+      "approvedBlob": "e6a4b02ef40531877681c70d0679e3821cc59340",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/GENERATED_VISUAL_OUTPUTS.json": {
+      "approvedBlob": "dbea2d893da2f516932e90a52788033a0b78d9ce",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/INDEPENDENT_REVIEW.md": {
+      "approvedBlob": "2879609d114ae3078fb22dee89c06ff54703c9f5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/PRESERVATION.json": {
+      "approvedBlob": "eeb2892fab87d510cd25081e06881d1153048f14",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/SOURCE_REVIEW_HASHES.json": {
+      "approvedBlob": "ca49d06c27b1a1adf2233439ed3edbdb3c820d7e",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/archive-generated-visuals.py": {
+      "approvedBlob": "9cae326240a78439eb87799a3240e3a428879159",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/ACCEPTANCE_ANDROID_NOTIFICATION-ARRIVED.json": {
+      "approvedBlob": "bf56a6f5908e1ca14e814848cc81acf67c2afb28",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/ACCEPTANCE_ANDROID_PLANNER-PASSED.json": {
+      "approvedBlob": "5350893e106034527d0e86e69ca2924f608a61a0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/PROPOSED_SAVE_ACTION_REPAIR.md": {
+      "approvedBlob": "9aba52e0a72d88e983042ea335b98b939dabe704",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/SAVE_ACTION_STRICT_REPRO.json": {
+      "approvedBlob": "9fbc2382f77108f3f61795d85ca27ad5cd5baad7",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/SAVE_FAILURE_BASELINE_AND_PRESERVATION.json": {
+      "approvedBlob": "b8ffb0fe17d5a006d4dfe11dcfbaa3b9105564f9",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/SAVE_FAILURE_SAFE_STOP.json": {
+      "approvedBlob": "8b84a1f4b77a6c24d3ff7e89e5ae7a91d4bf44e0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/device-checkpoint/SAVE_FORM_DIAGNOSTIC.json": {
+      "approvedBlob": "5025fde90b4d3ce99460d602892c804f737b9ae0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/independent-last-run.json": {
+      "approvedBlob": "cbcc1fbac11a74b608b2b3edc3a2ffd6ab639cb2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/firebase-fence.log.gz": {
+      "approvedBlob": "4243b162a9ddb2408ee6d826c31d3c68842ac462",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/full-browser.log.gz": {
+      "approvedBlob": "594af3dc88d5177625e4b9e60aabae0fa7ce1dc8",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/full-node.log.gz": {
+      "approvedBlob": "d98d17c1f1eb0a8185279dc4d070da79740d4555",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/green-ui-final.log.gz": {
+      "approvedBlob": "81e9f2135dabec62c3b011378fb8fe798b70c9e0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/green-ui-fixture-corrected.log.gz": {
+      "approvedBlob": "557bbfe296b79cbc1a2fcb289e18814e2b5c5605",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/green-ui-repeated.log.gz": {
+      "approvedBlob": "326ea0b6c66b25c43a40ad486bfdb8303aec1a1d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/lint.log.gz": {
+      "approvedBlob": "c76d9423452ad5fe0bf512b807c4ad4cafa4a2a5",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/red-ui-ready.log.gz": {
+      "approvedBlob": "696f692ec159010ce2eb3e13d3c00fc4eddb9690",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/red-ui.log.gz": {
+      "approvedBlob": "4946560e3a5460b89d8533216642d930c8631d6c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/strict-seven.log.gz": {
+      "approvedBlob": "fec9f6f9493e52bf8f53b2c0d35f5f33ab2c8f06",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/worker-dry-run.log.gz": {
+      "approvedBlob": "7c3c8b629986fea65090ad2e0e3f84a698f3896d",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/logs/worker.log.gz": {
+      "approvedBlob": "b03a569f1e9b6f7e326d7333fb4d2f90f6d5da4f",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/package-evidence.py": {
+      "approvedBlob": "5aca30d721f6aea1cfb178acec8997419fcda660",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/verify-preservation.py": {
+      "approvedBlob": "0e1e3a7a45dbdc6296e3a3506986c74c172bfeb2",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/LAYOUT_CHECKS.json": {
+      "approvedBlob": "0a7a22132fa7c6f75dde7aea8d01e944c97f1637",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/mobile-action-metrics.json": {
+      "approvedBlob": "98437f0cd9a42e490f6057ee28600446997f48c0",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-desktop.png": {
+      "approvedBlob": "6a4c41db9691a4f10571135f3f522cf33e2937c1",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-laptop.png": {
+      "approvedBlob": "89b05be3ea628b292fb0eee0c90a2204bbe7088c",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile-detail.png": {
+      "approvedBlob": "8bf734b1d2bd315131adde57f6817a5023d91667",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/my-day-mobile.png": {
+      "approvedBlob": "8b94dba84066623bf39fbd64b716d331e693e90b",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-desktop.png": {
+      "approvedBlob": "ce2485e6cd2ef4b8632522e375b7eae6554050da",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-laptop.png": {
+      "approvedBlob": "eab1df93d19933501e6bad3e20a4e5cce96a5d29",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-product-quality/after/planner-mobile.png": {
+      "approvedBlob": "f555b73bb299e0c3fdf4fe86eb1f388e9793dcd4",
+      "overlapsCurrentMain": false
+    },
+    "review-artifacts/task-037-save-action-repair/visual-verification/review-artifacts/task-033-visual-refinement/after/mobile-more.png": {
+      "approvedBlob": "68d49a121a15197de187d67b902524837e4f9c58",
+      "overlapsCurrentMain": false
+    },
+    "scripts/firebase-rules-builder.mjs": {
+      "approvedBlob": "dfa2f968ed6c32c248a332fa4e2d052b3bfb9e81",
+      "overlapsCurrentMain": false
+    },
+    "scripts/runtime-mirror.mjs": {
+      "approvedBlob": "c749f22f16b7bbc67cd2effef3ce27be6ca1161d",
+      "overlapsCurrentMain": false
+    },
+    "scripts/runtime-mirror.test.js": {
+      "approvedBlob": "9b1eb26a58e3b0e4150156652c3f56e3f4b06e92",
+      "overlapsCurrentMain": false
+    },
+    "stale-plan-recovery-model.js": {
+      "approvedBlob": "314fbe94fb9dad5ed4a71f8cf93d543d3812fa44",
+      "overlapsCurrentMain": false
+    },
+    "storage.js": {
+      "approvedBlob": "452001f0507ec298e327521153c1edb312589cf3",
+      "overlapsCurrentMain": false
+    },
+    "sw.js": {
+      "approvedBlob": "2c31c98856d94a1ea36534afa9b69346e2777061",
+      "overlapsCurrentMain": false
+    },
+    "tests/agenda-actions.js": {
+      "approvedBlob": "2ae108f0ac3ed83dbaab1b9e897986ccb80573a7",
+      "overlapsCurrentMain": false
+    },
+    "tests/calendar-day-extended-my-day.spec.js": {
+      "approvedBlob": "e9ae7cb7d9ff1cac97c0737c2a7eb93fdc3d09e2",
+      "overlapsCurrentMain": false
+    },
+    "tests/calendar-native-plan-identity.spec.js": {
+      "approvedBlob": "d98810b53d02e7aea52ca312d67ef7f496692b01",
+      "overlapsCurrentMain": false
+    },
+    "tests/capability-career-ui.spec.js": {
+      "approvedBlob": "d5f4ec250d56f3fa1fb7f2a256e4c63c59026b67",
+      "overlapsCurrentMain": false
+    },
+    "tests/cross-domain-intelligence-ui.spec.js": {
+      "approvedBlob": "25abe6f27cf79ff37e426a558f962bf09a88229a",
+      "overlapsCurrentMain": false
+    },
+    "tests/daily-command-center.spec.js": {
+      "approvedBlob": "7e58fdec255bf707b5b2837d05a1081c5b48931c",
+      "overlapsCurrentMain": false
+    },
+    "tests/daily-reconciliation.spec.js": {
+      "approvedBlob": "87282d596af3beaf363036fcad77bce6a68c2fdf",
+      "overlapsCurrentMain": false
+    },
+    "tests/daily-use-reliability.spec.js": {
+      "approvedBlob": "5216113e91626f39ea7b01c082220f8b11b4aa11",
+      "overlapsCurrentMain": false
+    },
+    "tests/guided-measurement-loop.spec.js": {
+      "approvedBlob": "8aca7d3533656f058fcbd170da09eec5e4740e2a",
+      "overlapsCurrentMain": false
+    },
+    "tests/install-interruption.spec.js": {
+      "approvedBlob": "3ee6aaa3b55f212739ab9b7929c5182264e0c773",
+      "overlapsCurrentMain": false
+    },
+    "tests/learning-plan-ui.spec.js": {
+      "approvedBlob": "0e641a3698f560c660c5331a898fab6e6cc36350",
+      "overlapsCurrentMain": false
+    },
+    "tests/online-planner-sdk-ui.spec.js": {
+      "approvedBlob": "693e80027860238bb03a3a1aae8bdfec436bf100",
+      "overlapsCurrentMain": false
+    },
+    "tests/personal-day-boundary.spec.js": {
+      "approvedBlob": "ff05a8052e5235f5704113e239b98e98521cceb8",
+      "overlapsCurrentMain": false
+    },
+    "tests/plan-time-range.spec.js": {
+      "approvedBlob": "17043f769ae101c19f4986f2d021be064f856950",
+      "overlapsCurrentMain": false
+    },
+    "tests/plan-tomorrow-ui.spec.js": {
+      "approvedBlob": "4827d6245d4a311180e26572161b54e31ada33cf",
+      "overlapsCurrentMain": false
+    },
+    "tests/planning-continuity-fixes.spec.js": {
+      "approvedBlob": "bf8294ee6acce3fbc4ea0bb36e55f6ac503cf205",
+      "overlapsCurrentMain": false
+    },
+    "tests/planning-continuity.spec.js": {
+      "approvedBlob": "2ffc881fb09a69e7e89e44c269c317d7b2f6e760",
+      "overlapsCurrentMain": false
+    },
+    "tests/single-plan-authority.spec.js": {
+      "approvedBlob": "9256a2a1bd629065bb86dcc846e8b304c9d8970f",
+      "overlapsCurrentMain": false
+    },
+    "tests/smoke.spec.js": {
+      "approvedBlob": "c8eed9b49fc9af6bb31a221ed616399546578d79",
+      "overlapsCurrentMain": false
+    },
+    "tests/today-simplification.spec.js": {
+      "approvedBlob": "e766157f956a3c78e5ae9c85f16abdfdd0bb7205",
+      "overlapsCurrentMain": false
+    },
+    "tests/tomorrow-view.spec.js": {
+      "approvedBlob": "ad688beff2ceb96e8acadc89066abc718f39586b",
+      "overlapsCurrentMain": false
+    },
+    "www/assets/fonts/InterVariable.woff2": {
+      "approvedBlob": "5a8d3e72ad7ffb62af3b146e1b1f54ab5813a212",
+      "overlapsCurrentMain": false
+    },
+    "www/brain-dump-model.js": {
+      "approvedBlob": "34819405f747652a4fa6aa5aae30ac4ee9b9d53c",
+      "overlapsCurrentMain": false
+    },
+    "www/brain-dump-sync.js": {
+      "approvedBlob": "d09073e1511b50f9cf672be7083321406ea97c2d",
+      "overlapsCurrentMain": false
+    },
+    "www/brain-dump-ui.js": {
+      "approvedBlob": "e2d1b5d28afc16ba64c2dc6216cc49fa9976a277",
+      "overlapsCurrentMain": false
+    },
+    "www/daily-command-center.css": {
+      "approvedBlob": "f22d7829679f941bed5c121e9107b68b69529cb0",
+      "overlapsCurrentMain": false
+    },
+    "www/daily-command-center.js": {
+      "approvedBlob": "a384337b9b18279570f2b5fef3a016365a901300",
+      "overlapsCurrentMain": false
+    },
+    "www/index.html": {
+      "approvedBlob": "2b4233f287531d9e492220cfe07ce81ed4bc78d7",
+      "overlapsCurrentMain": true
+    },
+    "www/plan-tomorrow-model.js": {
+      "approvedBlob": "bebbab27fb72ad1e269ed9264ac3871805cfc2de",
+      "overlapsCurrentMain": false
+    },
+    "www/plan-tomorrow-ui.js": {
+      "approvedBlob": "8724926c0a8f594c2033046c8df6e0e9528a84df",
+      "overlapsCurrentMain": false
+    },
+    "www/plan-tomorrow.css": {
+      "approvedBlob": "c8006c19b8927a32b501499338301439f16454bf",
+      "overlapsCurrentMain": false
+    },
+    "www/planning-continuity-ui.js": {
+      "approvedBlob": "8d3c541b3fcd18fc9acddb763c373801e5030d90",
+      "overlapsCurrentMain": false
+    },
+    "www/stale-plan-recovery-model.js": {
+      "approvedBlob": "314fbe94fb9dad5ed4a71f8cf93d543d3812fa44",
+      "overlapsCurrentMain": false
+    },
+    "www/storage.js": {
+      "approvedBlob": "452001f0507ec298e327521153c1edb312589cf3",
+      "overlapsCurrentMain": false
+    },
+    "www/sw.js": {
+      "approvedBlob": "2c31c98856d94a1ea36534afa9b69346e2777061",
+      "overlapsCurrentMain": false
+    }
+  },
+  "retainedMainOnlyPaths": [
+    "CHANGELOG.md",
+    "DECISIONS.md",
+    "REVIEW.md",
+    "STATUS.md",
+    "TASKS.md",
+    "TASK_029_HANDOFF.md",
+    "TEST_REPORT.md",
+    "commitments-model.js",
+    "commitments-model.test.js",
+    "docs/CHRONASENSE_ACTION_API_V1.md",
+    "functions/README.md",
+    "functions/index.js",
+    "functions/shared/commitments-model.js",
+    "functions/src/action-api.js",
+    "functions/src/envelope.js",
+    "functions/src/identity.js",
+    "functions/src/plan-mutation-action.js",
+    "functions/src/plan-read.js",
+    "functions/src/user-scoped-rtdb.js",
+    "functions/test/conversational-read.test.js",
+    "functions/test/plan-domain-support.js",
+    "functions/test/plan-legacy-completion.test.js",
+    "functions/test/plan-legacy-move.test.js",
+    "functions/test/plan-mutation-anchors.test.js",
+    "functions/test/two-user-identity.test.js",
+    "functions/test/user-scoped-rtdb.test.js",
+    "tests/no-pc-autostart.spec.js",
+    "workers/chronasense-conversational-bridge/README.md",
+    "workers/chronasense-conversational-bridge/scripts/deploy.mjs",
+    "workers/chronasense-conversational-bridge/src/index.js",
+    "workers/chronasense-conversational-bridge/src/mcp.js",
+    "workers/chronasense-conversational-bridge/test/deploy-bindings.test.js",
+    "workers/chronasense-conversational-bridge/test/plan-mutation.test.js",
+    "workers/chronasense-conversational-bridge/test/two-user.test.js",
+    "www/commitments-model.js"
+  ],
+  "excludedProtectedOwnershipPaths": [
+    "CHANGELOG.md",
+    "TASKS.md",
+    "TEST_REPORT.md"
+  ],
+  "initialRemoteMain": "0d9ab8f2a3ddb5e91c4a44ecdaec272ef3150ca6",
+  "mainRefresh": {
+    "from": "0d9ab8f2a3ddb5e91c4a44ecdaec272ef3150ca6",
+    "to": "ce24092f4037cbacd9e2cf79a7465638bb8ef2ec",
+    "changedPaths": [
+      "CHANGELOG.md",
+      "DECISIONS.md",
+      "REVIEW.md",
+      "STATUS.md",
+      "TASKS.md",
+      "TEST_REPORT.md",
+      "docs/CHRONASENSE_ACTION_API_V1.md",
+      "firebase-rules-emulator.test.js",
+      "functions/src/envelope.js",
+      "functions/src/plan-mutation-action.js",
+      "functions/src/user-scoped-rtdb.js",
+      "functions/test/plan-domain-support.js",
+      "functions/test/plan-legacy-completion.test.js",
+      "functions/test/plan-legacy-move.test.js",
+      "functions/test/plan-mutation-anchors.test.js",
+      "functions/test/user-scoped-rtdb.test.js",
+      "workers/chronasense-conversational-bridge/src/mcp.js",
+      "workers/chronasense-conversational-bridge/test/plan-mutation.test.js"
+    ],
+    "application": "three-way source patch + canonical main history + isolated branch soft reparent; no merge"
+  }
+}

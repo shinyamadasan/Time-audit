@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-10-27T23:49:44.369Z",
+  "observationOnly": true,
+  "candidate": "6fcee749417a2ad49ea3a047c6988c01c0526603",
+  "quickLogOpen": false,
+  "activity": "",
+  "energy": "deep",
+  "busy": true,
+  "owned": true,
+  "timerOwner": "device_e4jcpy",
+  "thisDevice": "device_e4jcpy",
+  "toast": "Snoozed — logging in 3 min (1 left)",
+  "formDisplay": "block",
+  "selectedEnergy": [
+    "Deep WorkCoding, writing, designing"
+  ],
+  "visibleSaveButtons": [
+    {
+      "overlay": "quicklog-overlay",
+      "onclick": "saveQuickEntry()",
+      "disabled": false
+    },
+    {
+      "overlay": "log-overlay",
+      "onclick": "saveEntry()",
+      "disabled": false
+    }
+  ]
+}

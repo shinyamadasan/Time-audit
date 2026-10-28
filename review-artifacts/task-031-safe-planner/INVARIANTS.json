@@ -1,0 +1,25 @@
+{
+  "base": "17608cdd19900290843d0a86d29bddb5139d5c44",
+  "unchanged": {
+    "daily-command-center.js": true,
+    "daily-command-center.css": true,
+    "storage.js": true,
+    "focus-mode.js": true,
+    "insights.js": true,
+    "brain-dump-repository.js": true,
+    "brain-dump-promotion.js": true,
+    "plan-authority.js": true,
+    "plan-tomorrow-model.js": true,
+    "personal-day-boundary-model.js": true,
+    "personal-day-boundary-repository.js": true,
+    "personal-day-boundary-sync.js": true,
+    "personal-day-boundary-live.js": true,
+    "calendar-plan-model.js": true,
+    "calendar-plan-repository.js": true,
+    "calendar-plan-sync.js": true,
+    "calendar-plan-live.js": true,
+    "daily-routines-model.js": true,
+    "daily-routines-repository.js": true
+  },
+  "indexOnlyRuntimeGenerationChanged": true
+}

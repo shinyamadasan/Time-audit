@@ -150,7 +150,7 @@ test.describe('Prepared vs draft truth', () => {
     await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
     await page.locator('#plan-tomorrow-add input[name="task"]').fill('Call Alyssa');
     await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
     await page.locator('#tmr-tab-tomorrow').click();
@@ -168,9 +168,9 @@ test.describe('Prepared vs draft truth', () => {
   test('an explicit Open Day is shown distinctly, never inferred from zero items', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => openPlanTomorrow());
-    await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+    await page.getByRole('button', { name: 'Quick plan' }).click();
     await page.locator('#plan-tomorrow-overlay').getByRole('button', { name: 'Open day / no commitments' }).click();
-    await page.getByRole('button', { name: 'Use this plan' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
     await page.locator('#tmr-tab-tomorrow').click();

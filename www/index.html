@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20261024-task025-entry-validation-v1">
+<meta name="pdb-release" content="20261027-task039-release-integration-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,15 +13,16 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261024-task025-entry-validation-v1">
+<link rel="stylesheet" href="style.css?v=20261027-task039-release-integration-v1">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
-<link rel="stylesheet" href="plan-tomorrow.css?v=20260908-plan-tomorrow-v1">
+<link rel="stylesheet" href="plan-tomorrow.css?v=20261027-task039-release-integration-v1">
 <link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
-<link rel="stylesheet" href="planning-continuity.css?v=20261024-task025-entry-validation-v1">
-<link rel="stylesheet" href="brain-dump-tray.css?v=20261021-task016-promotion-reliability-v1">
+<link rel="stylesheet" href="planning-continuity.css?v=20261027-task039-release-integration-v1">
+<link rel="stylesheet" href="brain-dump-tray.css?v=20261026-task031-source-guard-v1">
+<link rel="stylesheet" href="daily-command-center.css?v=20261027-task039-release-integration-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -43,7 +44,7 @@
       </button>
     </div>
     <div style="display:flex;gap:6px;align-items:center;position:relative">
-      <button class="hdr-more-btn" id="hdr-more-btn" onclick="toggleHdrMenu()"
+      <button class="hdr-more-btn" id="hdr-more-btn" onclick="toggleHdrMenu()" aria-label="My Day options"
         style="width:32px;height:32px;border-radius:50%;background:none;border:1px solid var(--border2);
                color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;
                justify-content:center;line-height:1;font-family:var(--head);flex-shrink:0;
@@ -115,10 +116,12 @@
   <section id="up-next" aria-label="Up Next">
     <div class="today-action-strip" id="today-action-strip" style="display:none" aria-live="polite"></div>
     <div id="execution-controls"></div>
+    <details class="execution-alternatives"><summary aria-label="Other task actions" title="Other task actions">Other actions</summary>
     <div class="execution-options" id="execution-options">
-      <button class="btn sm ghost" id="choose-work" onclick="chooseTodayWork()">Choose something else</button>
+      <button class="btn sm ghost" id="choose-work" onclick="chooseTodayWork()">Choose task</button>
       <button class="btn sm ghost" onclick="focusTodayAction()">Focus mode</button>
     </div>
+    </details>
   </section>
   <!-- Personal Day Boundary Live Wiring V1 — rendered ONLY for an account that has
        explicitly enabled a personal day boundary. It stays hidden and empty (and so
@@ -1112,19 +1115,32 @@
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Trends
   </button>
-  <button class="nav-btn" id="nav-life" onclick="showView('life')">
+  <button class="nav-btn nav-secondary" id="nav-life" onclick="showView('life')">
     <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
   </button>
-  <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
+  <button class="nav-btn nav-secondary" id="nav-learning" onclick="showView('learning')">
     <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learning plans
   </button>
-  <button class="nav-btn" id="nav-career" onclick="showView('career')">
+  <button class="nav-btn nav-secondary" id="nav-career" onclick="showView('career')">
     <svg viewBox="0 0 24 24"><path d="M4 19V7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Career
   </button>
-  <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
+  <button class="nav-btn nav-secondary" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
   </button>
+  <button class="nav-btn" id="nav-more" aria-haspopup="dialog" onclick="document.getElementById('nav-more-dialog').showModal()">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>More
+  </button>
 </nav>
+
+<dialog id="nav-more-dialog" aria-labelledby="nav-more-title" onclick="if(event.target===this)this.close()">
+  <div class="nav-more-head"><h2 id="nav-more-title">More</h2><button type="button" class="btn ghost" aria-label="Close navigation" onclick="document.getElementById('nav-more-dialog').close()">Close</button></div>
+  <div class="nav-more-items">
+    <button type="button" class="btn" onclick="document.getElementById('nav-more-dialog').close();document.getElementById('nav-life').click()">Life</button>
+    <button type="button" class="btn" onclick="document.getElementById('nav-more-dialog').close();document.getElementById('nav-learning').click()">Learning plans</button>
+    <button type="button" class="btn" onclick="document.getElementById('nav-more-dialog').close();document.getElementById('nav-career').click()">Career</button>
+    <button type="button" class="btn" onclick="document.getElementById('nav-more-dialog').close();document.getElementById('nav-settings').click()">Settings</button>
+  </div>
+</dialog>
 
 <!-- ══ RECURRING BLOCK MODAL ══ -->
 <div class="overlay" id="template-form-overlay" onclick="if(event.target.id==='template-form-overlay')cancelTemplateEdit()">
@@ -1611,8 +1627,7 @@
 <div class="review-modal plan-tomorrow-modal" role="dialog" aria-modal="true" aria-labelledby="plan-tomorrow-title">
   <div class="pt-head">
     <div>
-      <div class="pt-kicker">Preparation, not execution</div>
-      <div class="pt-title" id="plan-tomorrow-title">Plan tomorrow</div>
+      <div class="pt-title" id="plan-tomorrow-title">Plan your next day</div>
       <div class="pt-date"><span id="plan-tomorrow-date"></span> · <span id="plan-tomorrow-timezone"></span></div>
       <div class="pt-sub" id="plan-tomorrow-starts"></div>
       <div class="pt-readiness" id="plan-tomorrow-readiness"></div>
@@ -1621,13 +1636,14 @@
   </div>
   <div class="pt-mode-row" aria-label="Planning mode">
     <button type="button" class="btn sm" data-pt-mode="normal">Plan</button>
-    <button type="button" class="btn sm" data-pt-mode="rescue">Rescue / minimum</button>
+    <button type="button" class="btn sm" data-pt-mode="rescue">Quick plan</button>
+    <button type="button" class="btn ghost pt-source-jump" data-pt-action="consider">From Brain Dump</button>
   </div>
   <div id="plan-tomorrow-body"></div>
   <div id="plan-tomorrow-error" role="alert"></div>
   <div class="pt-footer">
     <button type="button" class="btn ghost" data-pt-action="close">Cancel</button>
-    <button type="button" class="btn primary" id="plan-tomorrow-confirm" data-pt-action="confirm">Tomorrow is ready</button>
+    <button type="button" class="btn primary" id="plan-tomorrow-confirm" data-pt-action="confirm">Save plan</button>
   </div>
 </div></div>
 
@@ -1719,7 +1735,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261024-task025-entry-validation-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261027-task039-release-integration-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1738,81 +1754,82 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261024-task025-entry-validation-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261024-task025-entry-validation-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20261024-task025-entry-validation-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261024-task025-entry-validation-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261024-task025-entry-validation-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20261024-task025-entry-validation-v1",
-    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261024-task025-entry-validation-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20261024-task025-entry-validation-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20261024-task025-entry-validation-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261024-task025-entry-validation-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261024-task025-entry-validation-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261024-task025-entry-validation-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261024-task025-entry-validation-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20261024-task025-entry-validation-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261024-task025-entry-validation-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261024-task025-entry-validation-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261024-task025-entry-validation-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261024-task025-entry-validation-v1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261024-task025-entry-validation-v1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261024-task025-entry-validation-v1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261024-task025-entry-validation-v1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261024-task025-entry-validation-v1",
-    "./plan-item-origin.js": "./plan-item-origin.js?v=20261024-task025-entry-validation-v1",
-    "./task-completion-model.js": "./task-completion-model.js?v=20261024-task025-entry-validation-v1",
-    "./task-completion-repository.js": "./task-completion-repository.js?v=20261024-task025-entry-validation-v1",
-    "./task-completion-sync.js": "./task-completion-sync.js?v=20261024-task025-entry-validation-v1",
-    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261024-task025-entry-validation-v1",
-    "./brain-dump-model.js": "./brain-dump-model.js?v=20261021-task016-promotion-reliability-v1",
-    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261021-task016-promotion-reliability-v1",
-    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261021-task016-promotion-reliability-v1",
-    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261021-task016-promotion-reliability-v1",
-    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261021-task016-promotion-reliability-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261027-task039-release-integration-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261027-task039-release-integration-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20261027-task039-release-integration-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261027-task039-release-integration-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261027-task039-release-integration-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20261027-task039-release-integration-v1",
+    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261027-task039-release-integration-v1",
+    "./commitments-model.js": "./commitments-model.js?v=20261027-task039-release-integration-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20261027-task039-release-integration-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20261027-task039-release-integration-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261027-task039-release-integration-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261027-task039-release-integration-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261027-task039-release-integration-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261027-task039-release-integration-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20261027-task039-release-integration-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261027-task039-release-integration-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261027-task039-release-integration-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261027-task039-release-integration-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261027-task039-release-integration-v1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261027-task039-release-integration-v1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261027-task039-release-integration-v1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261027-task039-release-integration-v1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261027-task039-release-integration-v1",
+    "./plan-item-origin.js": "./plan-item-origin.js?v=20261027-task039-release-integration-v1",
+    "./task-completion-model.js": "./task-completion-model.js?v=20261027-task039-release-integration-v1",
+    "./task-completion-repository.js": "./task-completion-repository.js?v=20261027-task039-release-integration-v1",
+    "./task-completion-sync.js": "./task-completion-sync.js?v=20261027-task039-release-integration-v1",
+    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261027-task039-release-integration-v1",
+    "./brain-dump-model.js": "./brain-dump-model.js?v=20261026-task031-source-guard-v1",
+    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261026-task031-source-guard-v1",
+    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261026-task031-source-guard-v1",
+    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261026-task031-source-guard-v1",
+    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261026-task031-source-guard-v1"
   }
 }
 </script>
-<script src="storage.js?v=20261024-task025-entry-validation-v1"></script>
+<script src="storage.js?v=20261027-task039-release-integration-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="plan-tomorrow-ui.js?v=20261027-task039-release-integration-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20261027-task039-release-integration-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
-<script type="module" src="windows-hud-bridge.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="windows-hud-bridge.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20261027-task039-release-integration-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20261027-task039-release-integration-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261024-task025-entry-validation-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261027-task039-release-integration-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="commitments-sync.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="planning-continuity-ui.js?v=20261024-task025-entry-validation-v1"></script>
-<script type="module" src="brain-dump-sync.js?v=20261021-task016-promotion-reliability-v1"></script>
-<script type="module" src="brain-dump-ui.js?v=20261021-task016-promotion-reliability-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="commitments-sync.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20261027-task039-release-integration-v1"></script>
+<script type="module" src="brain-dump-sync.js?v=20261026-task031-source-guard-v1"></script>
+<script type="module" src="brain-dump-ui.js?v=20261026-task031-source-guard-v1"></script>
 <script type="module" src="intelligence-ui.js?v=20261008-intelligence-int001"></script>
 
 <script>
@@ -1898,6 +1915,7 @@ let continueBannerTimer = null;
 let continueBannerCountdown = 0;
 let recentChipTasks = [];
 let taskStartTime = null;
+let trackingStartedAt = null; // presentation origin; taskStartTime is the unlogged accounting cursor
 let awayElapsedTicker = null;
 let partnerData = null; // live data from accountability partner's public node
 let lastUndoAction = null;
@@ -2269,6 +2287,17 @@ function undoLastAction() {
     entriesChanged = restoreUndoEntries(action.entries, now) || entriesChanged;
   }
 
+  const cursor = action.timerCursor;
+  if (cursor && running && timerStateOwnedByCurrentAccount()
+    && timerStateOwnerRoom() === cursor.ownerRoom && timerOwnerDeviceId === cursor.deviceId
+    && (!timerOwnerDeviceId || timerOwnerDeviceId === syncedDeviceId)
+    && taskStartTime === cursor.savedThrough && blockStartTime === cursor.savedThrough
+    && currentTask === cursor.task && (trackingStartedAt || taskStartTime) === cursor.trackingStart) {
+    taskStartTime = cursor.taskStart;
+    blockStartTime = cursor.blockStart;
+    syncTimerState();
+  }
+
   if (entriesChanged) {
     entries.sort((a, b) => (b.ts || 0) - (a.ts || 0));
     _todayRenderKey = '__FORCE__';
@@ -2315,7 +2344,8 @@ function updateRing() {
 
   // Hero: total elapsed on this task
   const _now2 = Date.now();
-  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((_now2 - taskStartTime) / 60000)) : 0;
+  const trackingStart = trackingStartedAt || taskStartTime;
+  const totalElapsedMin = trackingStart ? Math.max(0, Math.floor((_now2 - trackingStart) / 60000)) : 0;
   const elEl = document.getElementById('hero-elapsed');
   const unitEl = document.getElementById('hero-elapsed-unit');
   if (elEl) {
@@ -2328,8 +2358,8 @@ function updateRing() {
     if (unitEl) unitEl.textContent = ' on task';
   }
   const metaEl = document.getElementById('hero-time-meta');
-  if (metaEl && taskStartTime) {
-    metaEl.textContent = `Started ${tzTime(taskStartTime)}  ·  Now ${tzTime(_now2)}`;
+  if (metaEl && trackingStart) {
+    metaEl.textContent = `Started ${tzTime(trackingStart)}  ·  Now ${tzTime(_now2)}`;
   } else if (metaEl) {
     metaEl.textContent = '';
   }
@@ -2423,7 +2453,7 @@ function getHudTrackingFields() {
   if (breakActive || awayActive) return null;
   if (!timerOwnerDeviceId || timerOwnerDeviceId !== syncedDeviceId) return null;
   if (typeof timerStateOwnedByCurrentAccount !== 'function' || !timerStateOwnedByCurrentAccount()) return null;
-  return { title: currentTask, startedAt: taskStartTime };
+  return { title: currentTask, startedAt: trackingStartedAt || taskStartTime };
 }
 
 // Re-projects immediately after a timer transition, so a stop never lingers on the HUD.
@@ -2437,11 +2467,14 @@ async function _startTimer(task, planItemId = null) {
     return false;
   }
   task = canonicalizeActivityInput(task);
+  invalidateTimerRecovery();
+  _restoredTimerSync = null;
+  trackingStartedAt = null;
   currentTask = task;
   currentTaskPlanItemId = typeof planItemId === 'string' && planItemId ? planItemId : null;
   lastTaskForRepeat = task;
   taskStartTime = Date.now();
-  blockStartTime = Date.now();
+  blockStartTime = taskStartTime;
   lastStateChange = Date.now();
   currentState = 'deep';
   blockSegments = [];
@@ -2520,11 +2553,14 @@ function resetTimer() {
   const breakOwner = typeof breakStateOwnerRoom === 'function' ? breakStateOwnerRoom() : null;
   if (breakActive && (!ownerRoom || breakOwner !== ownerRoom
     || typeof breakStateOwnedByCurrentAccount !== 'function' || !breakStateOwnedByCurrentAccount())) return false;
+  invalidateTimerRecovery();
+  _restoredTimerSync = null;
   running = false; clearInterval(ticker); ticker = null;
   _stopHeartbeat();
   cancelNativePing();
   if (breakActive) clearBreakRuntime(breakOwner, { removeScoped: true, release: false });
   taskStartTime = null;
+  trackingStartedAt = null;
   blockStartTime = null;
   timerStartedAt = null;
   document.getElementById('interval-input').disabled = false;
@@ -2770,6 +2806,7 @@ function doPing() {
 
   pingCount++;
   const now = Date.now();
+  const swDueAt = timerStartedAt + totalSecs * 1000;
 
   // Save block start BEFORE resetting
   const prevBlockStart = blockStartTime || (now - totalSecs * 1000);
@@ -2785,8 +2822,8 @@ function doPing() {
 
   updateRing();
   scheduleNativePing(totalSecs);
-  swCancelPing();
-  if (document.hidden) swSchedulePing();
+  if (document.hidden) { swDeliverPing(swDueAt); swSchedulePing(); }
+  else swCancelPing();
 
   // Sound
   playAlert(2, 400);
@@ -2880,7 +2917,8 @@ function openQuickLog() {
   clearTimeout(snoozeTimer);
   quickLogBusy = false;
   qlEnergy = '';
-  const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
+  const pendingStart = taskStartTime || blockStartTime;
+  const elapsedMin = pendingStart ? Math.max(1, Math.round((Date.now() - pendingStart) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
   document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${tzTime(Date.now())}`;
   document.getElementById('ql-activity').value = '';
@@ -2912,12 +2950,10 @@ function openQuickLog() {
 
   renderQuickActionGrid('ql-quick-actions', option => {
     if (quickLogBusy) return;
-    quickLogBusy = true;
     _doQuickSave(option.activity, option.energy);
   });
   renderRecentTaskGrid('ql-recent-tasks', 'ql-recent-wrap', item => {
     if (quickLogBusy) return;
-    quickLogBusy = true;
     _doQuickSave(item.activity, item.energy);
   });
 
@@ -2970,7 +3006,6 @@ function showQuickForm() {
 
 function quickSaveLast() {
   if (quickLogBusy) return;
-  quickLogBusy = true;
   const btn = document.getElementById('ql-continue-btn');
   _doQuickSave(btn.dataset.lastActivity, btn.dataset.lastEnergy);
 }
@@ -2997,7 +3032,6 @@ function quickSaveFromPlan(id) {
   if (!it) return;
   const energy = inferPlanEnergy(it.task);
   if (energy) {
-    quickLogBusy = true;
     _doQuickSave(it.task, energy);
     return;
   }
@@ -3012,7 +3046,6 @@ function saveQuickEntry() {
   const activity = normalizeActivity(document.getElementById('ql-activity').value.trim());
   if (!activity) { showToast('Add an activity name'); return; }
   if (!qlEnergy) { showToast('Pick an energy type'); return; }
-  quickLogBusy = true;
   _doQuickSave(activity, qlEnergy);
 }
 
@@ -3029,6 +3062,12 @@ function learnWastePattern(activity, energy) {
 }
 
 function _doQuickSave(activity, energy) {
+  if (quickLogBusy) return;
+  if (!timerStateOwnedByCurrentAccount() || (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId)) {
+    showToast('Take over this timer before logging on this device');
+    return;
+  }
+  quickLogBusy = true;
   clearTimeout(snoozeTimer);
   clearTimeout(followupNotifTimer);
   if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
@@ -3036,8 +3075,8 @@ function _doQuickSave(activity, energy) {
   if (!activity) activity = energy;
   activity = canonicalizeActivityInput(activity);
   const _now = Date.now();
-  const tsStart = blockStartTime || (_now - totalSecs * 1000);
-  const loggedDur = Math.round((_now - tsStart) / 60000) || settings.intervalMin;
+  const tsStart = taskStartTime || blockStartTime || (_now - totalSecs * 1000);
+  const loggedDur = Math.max(1, Math.round((_now - tsStart) / 60000));
 
   // If the previous entry is the same activity+energy and ended right where
   // this block starts (within 2 min tolerance), extend it instead of creating
@@ -3056,14 +3095,14 @@ function _doQuickSave(activity, energy) {
   if (canExtend) {
     undoSnapshot = cloneUndoValue(prev);
     prev.ts = _now;
-    prev.blockIntervalMin = Math.round((_now - (prev.tsStart || tsStart)) / 60000);
+    prev.blockIntervalMin = Math.max(1, Math.round((_now - (prev.tsStart || tsStart)) / 60000));
     prev.updatedAt = _now;
     learnWastePattern(activity, energy);
     _lastLoggedEntryId = prev.id;
   } else {
     const entry = {
       id: _now, ts: _now, updatedAt: _now, tsStart,
-      blockIntervalMin: Math.round((_now - tsStart) / 60000) || settings.intervalMin,
+      blockIntervalMin: loggedDur,
       date: toDateKey(new Date()),
       activity, energy,
       onPlan: energy !== 'distraction' && energy !== 'waste',
@@ -3077,11 +3116,22 @@ function _doQuickSave(activity, energy) {
     _lastLoggedEntryId = entry.id;
   }
 
+  const timerCursor = running && timerStateOwnedByCurrentAccount() && (!timerOwnerDeviceId || timerOwnerDeviceId === syncedDeviceId)
+    ? { ownerRoom: timerStateOwnerRoom(), deviceId: timerOwnerDeviceId, task: currentTask, taskStart: taskStartTime,
+      blockStart: blockStartTime, trackingStart: trackingStartedAt || taskStartTime, savedThrough: _now } : null;
+  if (timerCursor) {
+    trackingStartedAt = timerCursor.trackingStart;
+    taskStartTime = _now;
+    blockStartTime = _now;
+    invalidateTimerRecovery();
+  }
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); scheduleRenderToday(); syncEntries();
   if (undoSnapshot) rememberRestoreEntriesUndo('log extension', [undoSnapshot]);
   else rememberCreatedUndo('log', [createdEntry]);
+  if (timerCursor && lastUndoAction) lastUndoAction.timerCursor = timerCursor;
+  if (timerCursor) syncTimerState();
   showUndoToast(`Logged · ${activity} · ${fmtDur(loggedDur)}`, energy);
   showLogFeedback(energy);
   checkReviewPrompt();
@@ -3188,9 +3238,20 @@ function _stopHeartbeat() {
   _stopHeartbeatForAccount(typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null);
 }
 
-function showRecoveryModal() {
-  const s = window._timerRecoveryState;
-  if (!s) return;
+function invalidateTimerRecovery() {
+  window._timerRecoveryState = null;
+  const overlay = document.getElementById('recovery-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function isCurrentTimerRecovery(s) {
+  return !!s && s === window._timerRecoveryState && running && timerStateOwnedByCurrentAccount()
+    && s.ownerRoom === timerStateOwnerRoom() && s.ownerRoom === globalThis.getChronaSenseRoomCode?.()
+    && s.taskStartTime === taskStartTime && s.task === currentTask && s.ownerDeviceId === timerOwnerDeviceId;
+}
+
+function showRecoveryModal(s = window._timerRecoveryState) {
+  if (!isCurrentTimerRecovery(s)) return;
   const shutdownTime = new Date(s.shutdownTs);
   const taskStart = s.taskStartTime || s.timerStartedAt;
   const dur = Math.round((s.shutdownTs - taskStart) / 60000);
@@ -3206,10 +3267,10 @@ function showRecoveryModal() {
 }
 
 function handleRecovery(intentional) {
-  document.getElementById('recovery-overlay').style.display = 'none';
   const s = window._timerRecoveryState;
-  window._timerRecoveryState = null;
-  if (!s) return;
+  const current = isCurrentTimerRecovery(s);
+  invalidateTimerRecovery();
+  if (!current) return;
 
   if (intentional) {
     // Log only up to the shutdown time, then stop
@@ -3223,8 +3284,8 @@ function handleRecovery(intentional) {
   } else {
     if (s.timerExpired) {
       // Timer expired while away — trigger the ping now so they can log
-      _stopHeartbeat();
       doPing();
+      _startHeartbeat();
     } else {
       // Accidental close, timer still valid — resume and restart heartbeat
       _startHeartbeat();
@@ -4698,7 +4759,7 @@ function renderPlannedTimelineRow(row, editable, { completable = editable, toggl
   return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}${row.carryIn ? ' tl-carry-in' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}">
     <div class="tl-time">${timelineRowEscape(startLabel)}</div><div class="tl-bar-col tl-bar-plan"></div>
     <button class="tl-plan-check" onclick="${toggleFn}('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${completable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
-    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · no time logged by this check</div></div>
+    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · Planned time only</div></div>
     ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
   </div>`;
 }
@@ -4710,9 +4771,9 @@ function renderAnytimeLane(rows, editable) {
   const shown = timelineAnytimeExpanded ? rows : rows.slice(0, 4);
   const rowHtml = shown.map(row => {
     const title = timelineRowEscape(row.title);
-    if (row.sourceType === 'commitment') return `<div class="anytime-row"><span class="anytime-marker" aria-hidden="true">◆</span><div class="anytime-title">${title}</div><span class="anytime-type">Commitment · date only</span>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}</div>`;
+    if (row.sourceType === 'commitment') return `<div class="anytime-row" data-commitment-id="${timelineRowEscape(row.commitmentId)}"><span class="anytime-marker" aria-hidden="true">◆</span><div class="anytime-title">${title}</div><span class="anytime-type">Commitment · date only</span>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}</div>`;
     const star = row.planKind === 'priority' ? '<span class="anytime-star" aria-label="Top Priority">★</span>' : '';
-    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
+    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
   }).join('');
   const more = rows.length > 4 ? `<button class="pc-more" onclick="toggleTimelineAnytime()">${timelineAnytimeExpanded ? 'Show less' : `Show ${rows.length - 4} more`}</button>` : '';
   root.hidden = false;
@@ -5343,17 +5404,23 @@ function renderTodayActionStrip() {
   const active = remote || focus || breakActive || awayActive || running;
   const free = !active && !state.task;
   const shell = document.getElementById('up-next');
+  const previousState = shell.dataset.state;
   shell.dataset.state = remote ? 'remote' : focus ? 'focus' : breakActive ? 'break' : awayActive ? 'away' : running ? 'tracker' : free ? 'free' : 'known';
   if (active) shell.classList.remove('choose-work');
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const nativeControls = !remote && !focus && (breakActive || awayActive || running);
   el.style.display = 'flex';
-  el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Current' : 'Up next'}</div>
+  el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Now' : 'Up next'}</div>
     ${nativeControls || free ? '' : `<div class="today-action-title" id="today-action-title">${esc(state.title.replace(/^Next: /, ''))}</div><div class="today-action-sub" id="today-action-sub">${esc(state.sub)}</div>`}</div>
     ${nativeControls || free ? '' : `<button type="button" class="today-action-btn" id="today-action-primary" onclick="${state.action}">${esc(active ? state.button : state.button === 'Done' ? 'Done' : 'Start')}</button>`}`;
   document.getElementById('execution-options').hidden = active;
   document.getElementById('choose-work').hidden = free;
+  const alternatives = shell.querySelector('.execution-alternatives');
+  if (active) alternatives.open = false;
+  else if (free) alternatives.open = true;
+  else if (previousState !== shell.dataset.state) alternatives.open = false;
   renderNeedsYou();
+  globalThis.DailyCommandCenter?.refresh();
 }
 
 function renderReviewCloseoutSummary() {
@@ -6346,6 +6413,7 @@ function renderToday() {
       }
     }
   }
+  globalThis.DailyCommandCenter?.refresh();
   perfStageStart = recordPerfStage('renderTodayTimeline', perfStageStart);
 
 
@@ -6800,9 +6868,9 @@ function quickRetroLog() {
   const _prevEntry = !_learnedWaste ? entries.find(e => !e.missed && !e.deleted && e.activity === task && e.energy) : null;
   const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || commonOption?.energy || 'shallow';
 
-  function makeQEntry(id, ts, tsS, dateKey) {
+  function makeQEntry(ts, tsS, dateKey) {
     const blkDur = Math.max(1, Math.round((ts - tsS) / 60000));
-    const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
+    const e = { id: newEntryId(), ts, tsStart: tsS, blockIntervalMin: blkDur,
       date: dateKey, activity: task, energy: learnedEng,
       onPlan: learnedEng !== 'waste' && learnedEng !== 'distraction', retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
@@ -6813,11 +6881,11 @@ function quickRetroLog() {
   getActivityColor(task);
   learnWastePattern(task, learnedEng);
   if (spansMidnight) {
-    const firstEntry = makeQEntry(midnight - 1, midnight, tsStart, startDateKey);
-    const secondEntry = makeQEntry(tsEnd, tsEnd, midnight, endDateKey);
+    const firstEntry = makeQEntry(midnight, tsStart, startDateKey);
+    entries.push(firstEntry);
+    const secondEntry = makeQEntry(tsEnd, midnight, endDateKey);
     const dur1 = firstEntry.blockIntervalMin;
     const dur2 = secondEntry.blockIntervalMin;
-    entries.push(firstEntry);
     entries.push(secondEntry);
     entries.sort((a, b) => b.ts - a.ts);
     persist(); scheduleRenderToday(); syncEntries();
@@ -6828,7 +6896,7 @@ function quickRetroLog() {
     showUndoToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`, learnedEng);
     checkBudget(learnedEng);
   } else {
-    const _qEntry = makeQEntry(tsEnd, tsEnd, tsStart, startDateKey);
+    const _qEntry = makeQEntry(tsEnd, tsStart, startDateKey);
     _lastLoggedEntryId = _qEntry.id;
     entries.push(_qEntry);
     entries.sort((a, b) => b.ts - a.ts);
@@ -12364,13 +12432,16 @@ function restoreHeartbeatRecoveryForAccount() {
   const task = currentTask || lastTaskForRepeat || savedTimer?.currentTask || savedTimer?.lastTask || 'Work block';
   const tStart = taskStartTime || timerStartedAt || savedTimer?.taskStartTime || savedTimer?.timerStartedAt || hbTs;
   window._timerRecoveryState = {
+    ownerRoom,
+    ownerDeviceId: timerOwnerDeviceId,
     shutdownTs: hbTs,
     task,
     timerStartedAt: timerStartedAt || savedTimer?.timerStartedAt,
     taskStartTime: tStart,
-    timerExpired: !running
+    timerExpired: remaining <= 0
   };
-  setTimeout(showRecoveryModal, 600);
+  const recovery = window._timerRecoveryState;
+  setTimeout(() => showRecoveryModal(recovery), 600);
 }
 
 // If timer was restored from localStorage, resume it.
@@ -12381,6 +12452,7 @@ if (running && timerStartedAt) {
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
   updateTimerTaskLabel();
   if (!ticker) ticker = setInterval(() => {
+    if (window._timerRecoveryState) return;
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
@@ -12425,7 +12497,7 @@ async function initNativeNotifications() {
 
 function scheduleNativePing(inSeconds) {
   if (!isNative || !LocalNotifications) return;
-  if (isInQuietHours(Date.now() + inSeconds * 1000)) { cancelNativePing(); return; }
+  if (isInQuietHours(Date.now() + inSeconds * 1000)) { cancelNativePing(false); return; }
   const at = new Date(Date.now() + inSeconds * 1000);
   const task = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/,'') : null;
   LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
@@ -12466,7 +12538,8 @@ function scheduleFollowUpPing(task) {
   }).catch(()=>{});
 }
 
-function cancelNativePing() {
+function cancelNativePing(endSession = true) {
+  swCancelPing(endSession);
   if (!isNative || !LocalNotifications) return;
   clearTimeout(followupNotifTimer);
   LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
@@ -12500,7 +12573,7 @@ function collapseRetroTimes() { /* no-op */ }
 resetRetroBar();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
-  taskStartTime = timerStartedAt || Date.now();
+  taskStartTime = taskStartTime || timerStartedAt || Date.now();
   currentTask = lastTaskForRepeat;
   document.getElementById('hero-idle').style.display = 'none';
   document.getElementById('hero-active').style.display = 'block';
@@ -12509,6 +12582,7 @@ if (running && lastTaskForRepeat) {
   // Restart ticker
   clearInterval(ticker);
   ticker = setInterval(() => {
+    if (window._timerRecoveryState) return;
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
@@ -12670,6 +12744,8 @@ setInterval(() => {
 // SERVICE WORKER — background ping notifications
 // ══════════════════════════════════════════════════════
 let _swReg = null;
+let _swPingEpoch = 0;
+let _swPingKey = null;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -12685,23 +12761,54 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Schedule a SW backup ping (called when page becomes hidden or timer resets)
+function swPingSessionKey() {
+  const owner = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : roomCode;
+  const start = trackingStartedAt || taskStartTime || timerStartedAt;
+  return owner && start ? JSON.stringify([owner, timerOwnerDeviceId, start]) : null;
+}
+
+function swPostPing(message) {
+  const epoch = _swPingEpoch;
+  const send = reg => {
+    // Terminal cancellation must reach the old session; a stale visibility cancel must not.
+    if (!(message.action === 'cancel-ping' && message.endSession) && epoch !== _swPingEpoch) return;
+    reg?.active?.postMessage(message);
+  };
+  if (_swReg?.active) send(_swReg);
+  else navigator.serviceWorker?.ready.then(send).catch(() => {});
+}
+
+function swDeliverPing(dueAt) {
+  if (!running || breakActive || timerOwnerDeviceId !== syncedDeviceId || isInQuietHours()) return;
+  const sessionKey = swPingSessionKey();
+  if (!sessionKey) return;
+  _swPingKey = sessionKey;
+  swPostPing({ action: 'ping-due', sessionKey, dueAt });
+}
+
+// Schedule a keyed backup; page and worker completion share the same due instant.
 function swSchedulePing() {
-  if (!_swReg?.active || !running || breakActive) return;
-  if (isInQuietHours(Date.now() + remaining * 1000)) return;
-  _swReg.active.postMessage({ action: 'schedule-ping', delayMs: remaining * 1000 });
+  if (!running || breakActive || timerOwnerDeviceId !== syncedDeviceId) return;
+  const dueAt = timerStartedAt + totalSecs * 1000;
+  if (isInQuietHours(dueAt)) return;
+  const sessionKey = swPingSessionKey();
+  if (!sessionKey) return;
+  _swPingKey = sessionKey;
+  swPostPing({ action: 'schedule-ping', sessionKey, dueAt, delayMs: Math.max(1, dueAt - Date.now()) });
 }
 
 // Cancel the SW backup ping (called when page is visible — JS timer handles it)
-function swCancelPing() {
-  navigator.serviceWorker?.ready.then(reg => {
-    reg.active?.postMessage({ action: 'cancel-ping' });
-  });
+function swCancelPing(endSession = false) {
+  _swPingEpoch++;
+  const sessionKey = _swPingKey || swPingSessionKey();
+  if (sessionKey) swPostPing({ action: 'cancel-ping', sessionKey, endSession });
+  if (endSession) _swPingKey = null;
 }
 
 // When tab is hidden: hand off to SW. When visible: cancel SW, JS takes over.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    _swPingEpoch++;
     swSchedulePing();
   } else {
     swCancelPing();
@@ -12748,7 +12855,7 @@ if (!localStorage.getItem('ta3-onboarded')) {
   setTimeout(openOnboarding, 400);
 }
 </script>
-<script src="focus-mode.js?v=20261024-task025-entry-validation-v1"></script>
+<script src="focus-mode.js?v=20261027-task039-release-integration-v1"></script>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="ob-overlay" id="ob-overlay">
@@ -12992,5 +13099,6 @@ function buildSessions(events) {
 initPhoneUsageTracking();
 </script>
 
+<script defer src="daily-command-center.js?v=20261027-task039-release-integration-v1"></script>
 </body>
 </html>

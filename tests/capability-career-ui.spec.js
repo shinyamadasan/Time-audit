@@ -264,7 +264,11 @@ async function openApp(page, { capabilityRaw = null, lifeLedgerRaw = null } = {}
 }
 
 async function openCareer(page) {
-  await page.locator('#nav-career').click();
+  if (await page.locator('#nav-career').isVisible()) await page.locator('#nav-career').click();
+  else {
+    await page.locator('#nav-more').click();
+    await page.locator('#nav-more-dialog').getByRole('button', { name: 'Career', exact: true }).click();
+  }
   await expect(page.locator('#view-career')).toHaveClass(/active/);
 }
 

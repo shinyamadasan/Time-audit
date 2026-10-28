@@ -1,0 +1,20 @@
+{
+  "reviewer": "/root/task037_independent_review",
+  "verdict": "PASS",
+  "sha256": {
+    "index.html": "42fa9ea18e9fb94cb3afafcec20a0a476b73335ef68452ec36a04d79de021c23",
+    "www/index.html": "42fa9ea18e9fb94cb3afafcec20a0a476b73335ef68452ec36a04d79de021c23",
+    "tests/online-planner-sdk-ui.spec.js": "584d974c3bb1a001b099ba1e2af46c4256251475bae4a95bb8e0ce0d68d43ee5",
+    "personal-day-boundary-web-runtime.test.js": "972b021889a145b03c52bba66f43b59fec6b117f8d951b6dc0538d38341d7887",
+    "tests/calendar-native-plan-identity.spec.js": "dfd835a98c7472fb83927cecc00819479818c005138653bdf07837abbd619f03",
+    "tests/daily-use-reliability.spec.js": "12b3dd89783ab5d24d2f30456c0f827c15bb7b55a7d1f1a7946878867dd66f15"
+  },
+  "canonicalLfSha256": {
+    "index.html": "8382d2571fb1ce39eb50c639502c84485c36f8ecc679dc67f28d8ada47d792c6",
+    "www/index.html": "8382d2571fb1ce39eb50c639502c84485c36f8ecc679dc67f28d8ada47d792c6",
+    "tests/online-planner-sdk-ui.spec.js": "e00ef7449af507caf6cf81c8b6f448b9b48d738a5f15574ea4a24729cb1b1dcd",
+    "personal-day-boundary-web-runtime.test.js": "9980d3d07a5386827f33fe5f2d5b208244a83ffb5a1a07a8f8981b88695a8a27",
+    "tests/calendar-native-plan-identity.spec.js": "4b6d27db90343792c007a75fd401d2201d1318e4b7b15a6db803392063038efe",
+    "tests/daily-use-reliability.spec.js": "6ea35624dcc48c2b82b8e72f7cbac466250b98af692d1fd759ce5fcee22d45bd"
+  }
+}

@@ -1,6 +1,93 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## TASK-037 bounded online release repair
+
+- Persisted `normalizePreparation()` accepts RTDB-omitted empty ID arrays without relaxing
+  confirmation inputs, invalid-list validation, source-change comparisons or plan authority.
+- Notification-only `doPing()` captures the completed due instant before advancing its interval.
+  `swPingSessionKey`, `swPostPing` and `swDeliverPing` send owned, keyed due events; `swSchedulePing`
+  retains the next backup. A page epoch fences deferred posts; `cancelNativePing` also cancels web
+  reminders. Visibility cancellation is nonterminal, Stop/account detach retires the cached session.
+- `sw.js` shares `deliverPing` between the worker backup and page due event. Bounded recent-session
+  receipts deduplicate intervals and reject ended-session deliveries/clicks. Existing unkeyed client
+  messages remain supported. Worker-process lifetime guarantees and snooze/periodic-tick interference
+  remain existing limitations, not new delivery architecture or timing contracts.
+- Strict tests: `notification-reliability.test.js`, `online-planner-sdk.test.js` and existing planner
+  model/UI suites. Governed generation: `20261027-task037-online-release-repair-v1`.
+
+## TASK-035 bounded release reliability closure
+
+- `restoreTimerAwayState` restores valid expired ordinary sessions with their owned accounting
+  anchors; `invalidateTimerRecovery` / `isCurrentTimerRecovery` bind delayed recovery to the
+  active account/device/session. Pending recovery holds its ticker and preserves the original heartbeat.
+- `syncTimerState` conditionally publishes a restored ordinary timer against its saved pre-restore
+  stamp. Newer server Stop/takeover wins; a changed local cursor catches up through the same conditional
+  boundary. Exact submitted echoes cannot rewind it. Existing Focus reconciliation stays separate.
+- `_doQuickSave` records the pending span through Save, advances existing task/block accounting
+  cursors and gives entry Undo a guarded cursor receipt. Optional `trackingStartedAt` on the same
+  timer preserves hero/HUD presentation origin; it has no recorded-time authority.
+- `newEntryId` (storage.js) supplies positive safe-integer identities for new quick-retro records,
+  independent of event timestamps. Existing records retain their IDs; chronology remains `tsStart`/`ts`.
+- Tests: original seven assertions plus bounded lifecycle/Undo/browser checks in
+  `tests/daily-use-reliability.spec.js`; two-client local SDK proof in `entry-reliability-sdk.test.js`
+  runs through the existing fence SDK gate. Generation: `20261027-task035-release-reliability-v1`;
+  Brain Dump remains unchanged. Release evidence: `TASK_035_RELIABILITY_CLOSURE.md`.
+
+## TASK-033 owner visual refinement (isolated from protected ff3d426)
+
+- Existing Up Next actions disclose through `.execution-alternatives`; the current action and Next stay visible.
+  `renderTodayActionStrip` closes alternatives on a state transition and leaves free-form controls available.
+- Existing eight destinations remain unchanged. At phone/tablet widths four stay in the bar plus More;
+  `#nav-more-dialog` invokes the original secondary buttons, using native dialog focus/Escape behavior.
+- `.pt-source-jump` opens/focuses the existing read-only Q1/Q2 list. No promotion path is connected.
+  Planner headings say Plan your next day; explicit future days retain their authoritative named date.
+- Visual evidence and pending owner approval: `TASK_033_VISUAL_REVIEW.md`.
+  Governed generation: `20261027-task033-visual-refinement-v1`; Brain Dump generation unchanged.
+
+## TASK-033 product quality candidate (from protected TASK-031 d7e01d0)
+
+- Existing My Day/Plan Tomorrow adapters keep their domain actions. Scoped styles use locally bundled
+  Inter, compact preparation cards and consistent controls. `render` puts recommendations after priorities
+  in DOM order before restoring disclosures; desktop grid and phone order share that reading order.
+- `scripts/runtime-mirror.mjs` includes local CSS `url()` assets, so the same font ships in `www/`.
+- Direct edited promotion is NOT connected. Its failed second gate and unconnected prototype are retained
+  only in `TASK_033_PROMOTION_CONTRACT.md` / `review-artifacts/task-033-product-quality/`.
+- Owner review package: `TASK_033_REVIEW.md`. Governed generation: `20261026-task033-product-quality-v1`;
+  Brain Dump retains TASK-031's source-guard generation and unchanged production contracts.
+
+## TASK-031 safe planner candidate (from protected TASK-028)
+
+- `plan-tomorrow-ui.js`: existing preparation renderer and actions now sit in the approved desktop modal/mobile
+  sheet. `considerationHtml` projects at most two explicit Q1 and two Q2 captures from the owned repository,
+  read-only, with existing Brain Dump navigation. No candidate insertion/promotion call is added.
+- Planner draft lifecycle: account/target-scoped bounded session checkpoint, draft-instance-bound input capture,
+  explicit keep/discard, owner/source/day/timezone guards, and exact submitted-signature/local/sync feedback.
+  Existing `confirmPreparation`, Top 3, scheduling and routine semantics remain authoritative. No new task store.
+- `brain-dump-model.js` `arbitratePromotionClaim`: fresh semantic source mismatch aborts; matching claims preserve
+  remote source/provenance. `brain-dump-sync.js` / `brain-dump-ui.js` surface `source-changed` and retain retryability.
+  Existing rules builder predicate `claimSourcePreserved` restricts new claims to unchanged source text/answers/status,
+  protecting against the demonstrated pre-fix-client write too. No wire/schema/claim identity change.
+- Actual evidence, release-order hold and deferred direct candidate insertion: `TASK_031_RELEASE_HANDOFF.md`.
+- Tests extend existing promotion/model/sync/rules/emulator/mutation and real-app planning suites. Runtime/shared
+  copies are generated. Governed generation: `20261026-task031-safe-planner-v1`; Brain Dump: `20261026-task031-source-guard-v1`.
+
+## Daily Command Center V1 (TASK-028 local candidate)
+
+- `daily-command-center.js` is a classic presentation adapter over existing My Day timeline rows. `refresh`
+  upgrades source-rendered rows to native single-open detail cards, retaining original edit/completion controls,
+  recorded-group edit identity and evidence labels. `editableSource`, `execute` and `deletePlanned` re-read the
+  exact Plan Authority target/item and account scope; deletion tombstones only the planned item.
+- `daily-command-center.css` owns the My Day-only desktop dashboard/sidebar, mobile order, compact cards and
+  vertical time indicator. Existing Brain Dump/Eisenhower UI remains unchanged. `refreshOverview` reads current
+  priorities and preparation; it introduces no AI status, domain store or scheduler.
+- `planning-continuity-ui.js` task editor exposes optional bounded plain-text `description` on the existing item.
+  Existing item-wide merge and plan write paths retain it. No entry fields, sync/rules or backend changes.
+- Plan Tomorrow keeps its existing draft/authority/confirmation flow, presented full-screen by `plan-tomorrow.css`;
+  `plan-tomorrow-ui.js` puts priorities before routine/reconciliation context.
+- Index hooks: `renderTodayActionStrip` and the composed timeline part of `renderToday` call the optional adapter.
+  Tests: `daily-command-center.test.js`, `tests/daily-command-center.spec.js`; generated `www/` parity only.
+
 ## Historical task resolution (TASK-018, approved Refined A)
 
 - `task-completion-model.js`: typed original identity, resolution validation, canonical hashes and conservative

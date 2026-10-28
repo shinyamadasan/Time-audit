@@ -1,0 +1,15 @@
+{
+  "product_files_changed": [],
+  "all_original_test_bodies_assertions_timeouts_byte_equal_after_removing_three_fixture_lines": true,
+  "canonical_sha256": {
+    ".github/workflows/ci.yml": "4979dac5617e4f7e8e5fa8913faad9e663fdeb735a1b7c4adc1bf401223b9372",
+    "tests\\daily-command-center.spec.js": "f463f1b05360f23f41625f3e53b878acf5caa716deac7d02e71b9f2af078af34"
+  },
+  "parity_checks": {
+    "runtime_closure": 98,
+    "runtime_www": "pass",
+    "shared_domain": "pass",
+    "rules": "pass"
+  },
+  "source_review": "independent agent verified every non-evidence tracked file outside CI/test/TASKS equals ddb6 after canonical checkout line normalization"
+}

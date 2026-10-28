@@ -371,6 +371,7 @@ function reportPromotionOutcome(result, successLabel, id) {
     // a different destination first). Our own claim, even if the reconciler
     // finished it, is reported as success instead.
     'already-claimed': 'This item is already being added to your plan.',
+    'source-changed': 'This capture changed or still has edits syncing. Review it, then try again.',
     offline: 'Could not confirm with the server — check your connection and try again.',
   };
   notify(messages[result.reason] || result.reason || 'Could not promote that item.');
