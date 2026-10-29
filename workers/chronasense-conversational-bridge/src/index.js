@@ -6,6 +6,8 @@ const ACCESS_ALGORITHM = 'RS256';
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 14 * 24 * 60 * 60;
 const MAX_TOKEN_FORM_BYTES = 8192;
+/** Live (code-exchanged) grants one subject may hold for one client + redirect + resource, the new one included. */
+export const MAX_GRANTS_PER_CLIENT = 5;
 
 let oauthWorkerPromise = null;
 let remoteJwksUrl = null;
@@ -173,12 +175,16 @@ async function finishAuthorization(request, oauth, accessSubject) {
 
     const approved = await oauth.approveConsent(request, handle);
     requireApprovedRequest(approved.request);
+    await pruneOldestGrants(oauth, accessSubject, approved.request);
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: accessSubject,
       metadata: {},
       scope: authorizedScopes(approved.request),
-      props: { ownerSubject: accessSubject, issuer: ISSUER, resource: RESOURCE, notBefore: Math.floor(Date.now() / 1000) }
+      props: { ownerSubject: accessSubject, issuer: ISSUER, resource: RESOURCE, notBefore: Math.floor(Date.now() / 1000) },
+      // ChatGPT web, mobile and a reconnect each hold their own grant; replacing them all on every new
+      // authorization signed the other holders out. pruneOldestGrants bounds how many stay live instead.
+      revokeExistingGrants: false
     });
     approved.headers.set('Location', redirectTo);
     approved.headers.set('Cache-Control', 'no-store');
@@ -186,6 +192,22 @@ async function finishAuthorization(request, oauth, accessSubject) {
   } catch (error) {
     return authorizationErrorResponse(error);
   }
+}
+
+/** Before adding a grant, revoke this subject's oldest live grants for the same client, redirect and resource so at
+ *  most MAX_GRANTS_PER_CLIENT remain. Only this subject's grants are listed. Pending grants (approved, code not yet
+ *  exchanged) have no expiresAt and are skipped: they expire on their own after 10 minutes. */
+async function pruneOldestGrants(oauth, subject, authRequest) {
+  const matching = [];
+  let cursor;
+  do {
+    const page = await oauth.listUserGrants(subject, cursor ? { cursor } : undefined);
+    matching.push(...page.items.filter(grant => grant.userId === subject && grant.expiresAt !== undefined
+      && grant.clientId === authRequest.clientId && grant.redirectUri === authRequest.redirectUri && grant.resource === RESOURCE));
+    cursor = page.cursor;
+  } while (cursor);
+  matching.sort((a, b) => b.createdAt - a.createdAt);
+  for (const grant of matching.slice(MAX_GRANTS_PER_CLIENT - 1)) await oauth.revokeGrant(grant.id, subject);
 }
 
 function requireAuthorizationRequest(request, authRequest) {
