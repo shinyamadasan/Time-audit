@@ -175,7 +175,6 @@ async function finishAuthorization(request, oauth, accessSubject) {
 
     const approved = await oauth.approveConsent(request, handle);
     requireApprovedRequest(approved.request);
-    await pruneOldestGrants(oauth, accessSubject, approved.request);
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: accessSubject,
@@ -186,6 +185,10 @@ async function finishAuthorization(request, oauth, accessSubject) {
       // authorization signed the other holders out. pruneOldestGrants bounds how many stay live instead.
       revokeExistingGrants: false
     });
+    // Only after the new grant exists, so a failed authorization never evicts one. The cap is hygiene, not the
+    // access boundary: if pruning fails, the approval still completes and the next authorization prunes.
+    try { await pruneOldestGrants(oauth, accessSubject, approved.request); }
+    catch (error) { console.warn('Grant pruning failed:', error instanceof Error ? error.name : 'unknown'); }
     approved.headers.set('Location', redirectTo);
     approved.headers.set('Cache-Control', 'no-store');
     return new Response(null, { status: 302, headers: approved.headers });
@@ -194,9 +197,10 @@ async function finishAuthorization(request, oauth, accessSubject) {
   }
 }
 
-/** Before adding a grant, revoke this subject's oldest live grants for the same client, redirect and resource so at
- *  most MAX_GRANTS_PER_CLIENT remain. Only this subject's grants are listed. Pending grants (approved, code not yet
- *  exchanged) have no expiresAt and are skipped: they expire on their own after 10 minutes. */
+/** After a new (still pending) grant is added, revoke this subject's oldest live grants for the same client, redirect
+ *  and resource, keeping MAX_GRANTS_PER_CLIENT - 1, so at most MAX_GRANTS_PER_CLIENT are live once its code is
+ *  exchanged. Only this subject's grants are listed. Pending grants (approved, code not yet exchanged, the new one
+ *  included) have no expiresAt and are skipped: they expire on their own after 10 minutes. */
 async function pruneOldestGrants(oauth, subject, authRequest) {
   const matching = [];
   let cursor;

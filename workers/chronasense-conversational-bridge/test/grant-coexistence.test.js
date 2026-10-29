@@ -107,12 +107,15 @@ function bridge(env = env0, kv = new MemoryKV()) {
       'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ handle, decision: 'approve' }) }));
     assert.equal(approved.status, 302);
     const code = new URL(approved.headers.get('Location')).searchParams.get('code');
-    if (!exchange) return { sub, grantId: code.split(':')[1] };
-    const tokens = await (await send(form({ grant_type: 'authorization_code', code, code_verifier: verifier,
-      client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, resource: RESOURCE }))).json();
-    assert.ok(tokens.access_token && tokens.refresh_token, 'code exchange issued both tokens');
-    assert.equal(tokens.expires_in, 15 * 60);
-    return { sub, at: tokens.access_token, rt: tokens.refresh_token, grantId: tokens.refresh_token.split(':')[1] };
+    const exchangeCode = async () => {
+      const tokens = await (await send(form({ grant_type: 'authorization_code', code, code_verifier: verifier,
+        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, resource: RESOURCE }))).json();
+      assert.ok(tokens.access_token && tokens.refresh_token, 'code exchange issued both tokens');
+      assert.equal(tokens.expires_in, 15 * 60);
+      return { sub, at: tokens.access_token, rt: tokens.refresh_token, grantId: tokens.refresh_token.split(':')[1] };
+    };
+    if (!exchange) return { sub, grantId: code.split(':')[1], exchange: exchangeCode };
+    return exchangeCode();
   }
   async function refresh(holder, rt = holder.rt) {
     const response = await send(form({ grant_type: 'refresh_token', refresh_token: rt, client_id: CLIENT_ID, resource: RESOURCE }));
@@ -255,4 +258,67 @@ test('grant cap ignores pending (approved, never exchanged) grants, which expire
   advance(11 * 60);
   assert.ok(!b.grants(A).includes(pending.grantId), 'an abandoned authorization expires after 10 minutes');
   for (const holder of [...holders, last]) assert.equal((await b.refresh(holder)).status, 200);
+});
+
+test('concurrent authorizations may exceed the cap by the number in flight; the next authorization restores it', async () => {
+  const b = bridge();
+  for (let i = 0; i < MAX_GRANTS_PER_CLIENT; i++) { await b.connect(A); advance(1); }
+  // Two approvals land before either code is exchanged: each sees the other as pending and does not count it.
+  const x = await b.connect(A, { exchange: false });
+  const y = await b.connect(A, { exchange: false });
+  const holders = [await x.exchange(), await y.exchange()];
+  assert.equal(b.grants(A).length, MAX_GRANTS_PER_CLIENT + 1, 'bounded overshoot: one extra per concurrent approval');
+  for (const holder of holders) assert.deepEqual(await b.mcp(holder), { status: 200, subject: A });
+  advance(1);
+  const next = await b.connect(A);
+  assert.equal(b.grants(A).length, MAX_GRANTS_PER_CLIENT);
+  assert.deepEqual(await b.mcp(next), { status: 200, subject: A });
+});
+
+test('a stale KV listing (eventual consistency) can only mis-size the cap, never reach another subject', async () => {
+  const b = bridge();
+  const bHolder = await b.connect(B);
+  const holders = [];
+  for (let i = 0; i < MAX_GRANTS_PER_CLIENT; i++) { holders.push(await b.connect(A)); advance(1); }
+  // Stale list 1: omits the newest live grant, so pruning under-counts and keeps one more than the cap.
+  const list = b.kv.list.bind(b.kv);
+  b.kv.list = async options => { const page = await list(options);
+    return { ...page, keys: page.keys.filter(key => !key.name.endsWith(':' + holders.at(-1).grantId)) }; };
+  await b.connect(A);
+  assert.equal(b.grants(A).length, MAX_GRANTS_PER_CLIENT + 1);
+  // Stale list 2: still shows a grant that is already gone; its record reads as missing and is skipped.
+  b.kv.list = list;
+  const gone = `grant:${A}:${holders[1].grantId}`;
+  const ghost = b.kv.map.get(gone);
+  await b.helpers().revokeGrant(holders[1].grantId, A);
+  b.kv.list = async options => { const page = await list(options);
+    return options.prefix === `grant:${A}:` ? { ...page, keys: [...page.keys, { name: gone, metadata: ghost.metadata }] } : page; };
+  await b.connect(A);
+  b.kv.list = list;
+  assert.ok(b.grants(A).length <= MAX_GRANTS_PER_CLIENT + 1);
+  assert.deepEqual(b.grants(B), [bHolder.grantId], 'B is never listed or revoked by A');
+  assert.deepEqual(await b.mcp(bHolder), { status: 200, subject: B });
+});
+
+test('pruning runs only after the grant is created, and a pruning failure never blocks the approval', async () => {
+  const subjectEnv = { ...env0 };
+  const headers = { 'Cf-Access-Jwt-Assertion': await accessJwt(A), 'Content-Type': 'application/x-www-form-urlencoded' };
+  const post = oauth => handleDefaultRequest(new Request(`${ISSUER}/authorize`, { method: 'POST', headers,
+    body: 'handle=opaque&decision=approve' }), { ...subjectEnv, OAUTH_PROVIDER: oauth }, { jwks, currentDate: new Date(clockMs) });
+  const approveConsent = async () => ({ request: { clientId: CLIENT_ID, redirectUri: REDIRECT_URI, scope: [READ_SCOPE], resource: RESOURCE },
+    headers: new Headers() });
+  const old = { id: 'old', userId: A, clientId: CLIENT_ID, redirectUri: REDIRECT_URI, resource: RESOURCE, createdAt: 1, expiresAt: nowS() + 99 };
+  const full = Array.from({ length: MAX_GRANTS_PER_CLIENT }, (_, i) => ({ ...old, id: 'g' + i, createdAt: 10 + i }));
+  const revoked = [];
+  const failed = await post({ approveConsent, listUserGrants: async () => ({ items: full }),
+    revokeGrant: async id => { revoked.push(id); }, completeAuthorization: async () => { throw new Error('boom'); } });
+  assert.notEqual(failed.status, 302);
+  assert.deepEqual(revoked, [], 'a failed authorization evicts nothing');
+  const ok = await post({ approveConsent, listUserGrants: async () => ({ items: full }),
+    revokeGrant: async id => { revoked.push(id); }, completeAuthorization: async () => ({ redirectTo: 'https://chatgpt.com/cb' }) });
+  assert.equal(ok.status, 302);
+  assert.deepEqual(revoked, ['g0'], 'only the oldest of the full set');
+  const broken = await post({ approveConsent, listUserGrants: async () => { throw new Error('KV down'); },
+    revokeGrant: async () => {}, completeAuthorization: async () => ({ redirectTo: 'https://chatgpt.com/cb' }) });
+  assert.equal(broken.status, 302, 'the cap is hygiene: KV listing failure still completes the approval');
 });
