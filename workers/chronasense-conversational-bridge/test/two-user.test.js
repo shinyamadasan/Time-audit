@@ -93,6 +93,7 @@ test('the grant B approves is bound to B: completeAuthorization userId and props
   let completed;
   const oauth = {
     approveConsent: async () => ({ request: { scope: [READ_SCOPE], resource: RESOURCE }, headers: new Headers() }),
+    listUserGrants: async () => ({ items: [] }),
     completeAuthorization: async value => { completed = value; return { redirectTo: 'https://client.test/callback' }; },
   };
   const response = await handleDefaultRequest(new Request(`${ISSUER}/authorize`, { method: 'POST', headers: {

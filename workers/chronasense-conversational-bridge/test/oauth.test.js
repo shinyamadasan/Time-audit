@@ -82,6 +82,7 @@ test('offline access is consented for refresh while unknown scopes remain reject
     describeConsent: async () => ({ clientName: 'Fixture client', redirectHost: 'chatgpt.com' }),
     beginConsent: async () => ({ handle: 'opaque', headers: new Headers() }),
     approveConsent: async () => ({ request: { scope: scopes, resource: RESOURCE }, headers: new Headers() }),
+    listUserGrants: async () => ({ items: [] }),
     completeAuthorization: async value => { completed = value; return { redirectTo: 'https://client.test/callback' }; },
   };
   const headers = { 'Cf-Access-Jwt-Assertion': await assertion() };
@@ -96,6 +97,7 @@ test('offline access is consented for refresh while unknown scopes remain reject
     body: 'handle=opaque&decision=approve' }), { ...env, OAUTH_PROVIDER: oauth }, deps);
   assert.equal(approved.status, 302);
   assert.deepEqual(completed.scope, [READ_SCOPE, OFFLINE_ACCESS_SCOPE]);
+  assert.equal(completed.revokeExistingGrants, false, 'a new grant never revokes the other ChatGPT holders');
   assert.equal(completed.userId, OWNER_SUB);
   const unknown = await handleDefaultRequest(request, { ...env, OAUTH_PROVIDER: {
     ...oauth, parseAuthRequest: async () => ({ scope: [READ_SCOPE, 'unknown:scope'], resource: RESOURCE }) } }, deps);
@@ -110,6 +112,7 @@ test('Brain Dump write authorization requires explicit step-up consent and grant
     describeConsent: async () => ({ clientName: 'Fixture client', redirectHost: 'chatgpt.com' }),
     beginConsent: async () => ({ handle: 'opaque', headers: new Headers() }),
     approveConsent: async () => ({ request: { scope: scopes, resource: RESOURCE }, headers: new Headers() }),
+    listUserGrants: async () => ({ items: [] }),
     completeAuthorization: async value => { completed = value; return { redirectTo: 'https://client.test/callback' }; },
   };
   const headers = { 'Cf-Access-Jwt-Assertion': await assertion() };
@@ -139,6 +142,7 @@ test('Access-gated consent POST accepts 8192 bytes, rejects 8193 and malformed f
   const calls = [];
   const oauth = {
     async approveConsent(_request, handle) { calls.push(['approve', handle]); return { request: { scope: [READ_SCOPE], resource: RESOURCE }, headers: new Headers() }; },
+    async listUserGrants() { return { items: [] }; },
     async denyConsent(_request, handle) { calls.push(['deny', handle]); return { headers: new Headers() }; },
     async completeAuthorization() { calls.push(['complete']); return { redirectTo: 'https://client.test/callback' }; },
   };

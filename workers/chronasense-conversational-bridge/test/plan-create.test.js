@@ -186,6 +186,7 @@ test('OAuth consent names the plan scope and grants exactly what was requested',
       describeConsent: async () => ({ clientName: 'Fixture', redirectHost: 'chatgpt.com' }),
       beginConsent: async () => ({ handle: 'opaque', headers: new Headers() }),
       approveConsent: async () => ({ request: { scope: scopes, resource: RESOURCE }, headers: new Headers() }),
+      listUserGrants: async () => ({ items: [] }),
       completeAuthorization: async value => { completed = value; return { redirectTo: 'https://client.test/cb' }; },
     };
     const headers = { 'Cf-Access-Jwt-Assertion': assertion };
