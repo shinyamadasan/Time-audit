@@ -1,0 +1,38 @@
+// Exact73739e9 storage.js entry listener, historical diagnostics only.
+  fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
+    if (!isCurrentSync()) return;
+    const data = snap.val();
+    if (!data) return;
+    const remoteEntries = Object.values(data);
+    // Build a Map for O(1) lookup and conflict resolution
+    const localMap = new Map(entries.map(e => [e.id, e]));
+    let changed = false;
+    remoteEntries.forEach(re => {
+      if (!re || !re.id) return;
+      const local = localMap.get(re.id);
+      const resolution = resolveEntrySync(local, re);
+      if (resolution.action === 'add') {
+        const entry = resolution.entry;
+        if (!entry.missed && !entry.deleted) validateEntry(entry);
+        entries.push(entry);
+        localMap.set(re.id, entry);
+        changed = true;
+      } else if (resolution.action === 'replace') {
+        if (!resolution.entry.missed && !resolution.entry.deleted) validateEntry(resolution.entry);
+        entries[entries.indexOf(local)] = resolution.entry;
+        localMap.set(re.id, resolution.entry);
+        changed = true;
+      }
+    });
+    if (changed) {
+      entries.sort((a,b) => b.ts - a.ts);
+      setAccountLocal('ta3-last-sync', Date.now());
+      persist();
+      scheduleRenderToday();
+      if (document.getElementById('view-week').classList.contains('active')) renderWeek();
+      publishSharedAccountability(); // a cross-device entry may newly link to today's plan
+    } else {
+      setAccountLocal('ta3-last-sync', Date.now());
+    }
+  });
+

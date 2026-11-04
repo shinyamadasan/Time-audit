@@ -507,3 +507,25 @@ Gate picked: `done` (reversible) | `approved` (red-zone: <why>)
 - item
 
 -->
+
+## TASK-039 · Integrate proven time acknowledgement lifecycle · 2026-10-28
+reviewer: independent Claude subagent on exact source (7d1ed10 REJECT -> 0d5dc14 APPROVE WITH FIXES -> f422f96 APPROVE).
+findings resolved: B1 permanent barrier after commit (operation-stamp proof); S1/M1 unguarded clear/Data Doctor/break/Focus commands; S2 abandon quiet period; S3 hold from Undo press + cursor republish; S4 accepted re-check; S5/S5' cross-tab flush without stale timer; N1 token deadline; N2 parse cache.
+accepted residuals: never-landed + changed-elsewhere stays UNKNOWN (owner decision); per-tab preparing hold; no watch on retired abandoned ops; automatic paths unbarred (superseded, not lost).
+gate: **approved (held)** — red-zone (timer state, entry schema metadata, RTDB sync). Human merges; no auto-merge or deploy.
+
+### TASK-039 - Shipped web and Android capability (November 2, 2026)
+verdict: APPROVE WITH CONDITIONS for exact commit 456acec, local candidate only. Independent delta review; prior reviews of 788a6a1, 5e6f6c2 and 60c0bde recorded alongside it. Not Guardian.
+conditions: owner decides F1 (refused Undo removes the only Undo button); cutover runbook and installed-rules verifier; synthetic CORS preflight; real-room timing; phone test.
+risk gate: red-zone. Nothing is merged. Task held as blocked on owner decisions, not approved for merge.
+evidence: accounting-hazards/evidence/shipped-capability-20261101/independent-review-final.md
+
+### TASK-039 - F1 correction (November 2, 2026)
+verdict: APPROVE WITH NOTES for exact commit 6abc40d (independent same-provider subagent; c925e7d and 7bb0928 each APPROVE WITH NOTES with a MEDIUM copy finding, both fixed). Not Guardian.
+notes: two rare persistent states (predecessor-unconfirmed capture, intake rejected by importCaptures) still get retry copy; retry refuses safely. Button lives 5.2s per toast. Effects-only blocks get neutral copy.
+risk gate: red-zone (Undo/accounting gate). Local checkpoint only; not merged.
+evidence: accounting-hazards/evidence/f1-undo-refusal-20261102/F1-CORRECTION.md
+
+### TASK-039 - Pending-sync panel pass-through (November 2, 2026)
+verdict: APPROVE WITH NOTES for c556671 (independent same-provider subagent, not Guardian). Notes: :has() unsupported before Chromium 105 falls back to old behaviour; long panel text no longer scrollable; text not selectable. No protective role lost (gates are in JS).
+risk gate: CSS only, but held with the red-zone task; nothing merged.

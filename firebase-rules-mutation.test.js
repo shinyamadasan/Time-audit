@@ -38,6 +38,28 @@ test('the committed firebase.rules.json is exactly the builder\'s output (no han
 
 /** predicate -> the attack it stops. Each returns true iff the SERVER ALLOWED the forbidden write. */
 const ATTACKS = {
+  async accountingRevision(db) {
+    return db.write(`${ROOM}/entries/e_1`, { id: 1, _csWrite: { v: 1, protocol: 'staged-command-v1', operationId: 'accounting_mutation', baseExists: false, baseRevision: 0, revision: 9 } });
+  },
+  async accountingCancellation(db) {
+    await db.seed(`${ROOM}/timeAckCancellations/accounting_mutation`, true);
+    return db.write(`${ROOM}/timer`, { running: false, _csWrite: { v: 1, protocol: 'staged-command-v1', operationId: 'accounting_mutation', baseExists: false, baseRevision: 0, revision: 1 } });
+  },
+  async accountingPhysicalBinding(db) {
+    await db.seed(`${ROOM}/entries/1`, { id: 1, ts: 10 });
+    return db.write(`${ROOM}/entries/e_1`, { id: 1, ts: 10, _csWrite: { v: 1, protocol: 'staged-command-v1', operationId: 'accounting_mutation', baseExists: false, baseRevision: 0, revision: 1 } });
+  },
+  async accountingMarkerPermanent(db) {
+    await db.seed(`${ROOM}/timeAckCancellations/accounting_mutation`, true);
+    return db.write(`${ROOM}/timeAckCancellations/accounting_mutation`, null);
+  },
+  async accountingProtocol(db) {
+    return db.write(`${ROOM}/timer`, { running: false, _csWrite: { v: 1, operationId: 'accounting_mutation', baseExists: false, baseRevision: 0, revision: 1 } });
+  },
+  async claimSourcePreserved(db) {
+    await db.seed(captureAt(),capture({text:'Newer source',status:'triaged',important:true,urgent:false}));
+    return db.write(captureAt(),capture({text:'Stale source',status:'triaged',important:true,urgent:true,promotionClaim:claim(CAL)}));
+  },
   async targetBinding(db) { await db.seed(captureAt(), capture({ promotionClaim: claim(CAL) })); return db.write(CAL.fenceAt(CAL.otherKey), fencedItem(CAL)); },
   async storeBinding(db) {
     // A calendar claim whose physical key happens to read as a legacy date: only the store check can refuse it in planFences.

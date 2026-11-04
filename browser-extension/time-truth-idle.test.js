@@ -33,7 +33,7 @@ function makeChromeMock({ now = 1_000_000_000_000, activeTabFixture = null, idle
     storage: {
       local: {
         get: async (keys) => {
-          const list = Array.isArray(keys) ? keys : [keys];
+          const list = keys == null ? Object.keys(store) : Array.isArray(keys) ? keys : [keys];
           const out = {};
           list.forEach(k => { if (k in store) out[k] = store[k]; });
           return out;
@@ -53,7 +53,7 @@ function makeChromeMock({ now = 1_000_000_000_000, activeTabFixture = null, idle
     },
     tabs: {
       query: (_opts, cb) => cb([]),
-      get: (_id, cb) => cb && cb(null),
+      get: (_id, cb) => cb && cb(state.tab || null),
       onActivated: { addListener: (cb) => tabActivatedListeners.push(cb) },
       onUpdated: { addListener: () => {} }
     },
@@ -73,6 +73,7 @@ function makeChromeMock({ now = 1_000_000_000_000, activeTabFixture = null, idle
   return {
     chrome,
     store,
+    fireTab: tab => { state.tab = tab; tabActivatedListeners.forEach(cb => cb({ tabId: 1 })); },
     fireIdleState: (s) => { state.idleState = s; idleListeners.forEach(cb => cb(s)); },
     fireAlarm: () => alarmListeners.forEach(cb => cb({ name: 'flush' }))
   };
@@ -104,7 +105,7 @@ test('idle transition closes the active session at the last heartbeat, not at "n
     activeTabFixture: {
       uid: 'u1', authToken: 'tok',
       customSites: {}, removedSites: [],
-      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt },
+      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt, ownerUid: 'u1' },
       lastHeartbeat: startedAt,
       trackedSites: undefined
     }
@@ -131,7 +132,7 @@ test('a long gap since the last heartbeat (service-worker restart after sleep) i
       activeTabFixture: {
         uid: 'u1', authToken: 'tok',
         customSites: {}, removedSites: [],
-        activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt: longAgo, sessionId: longAgo },
+        activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt: longAgo, sessionId: longAgo, ownerUid: 'u1' },
         lastHeartbeat: longAgo // no heartbeat since the gap started — this IS the unobserved gap
       }
     });
@@ -155,7 +156,7 @@ test('a short gap since the last heartbeat (normal SW restart) resumes the sessi
       activeTabFixture: {
         uid: 'u1', authToken: 'tok',
         customSites: {}, removedSites: [],
-        activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt: recent, sessionId: recent },
+        activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt: recent, sessionId: recent, ownerUid: 'u1' },
         lastHeartbeat: recent
       }
     });
@@ -175,7 +176,7 @@ test('flushAndRestart (periodic alarm) closes the session instead of bridging wh
     activeTabFixture: {
       uid: 'u1', authToken: 'tok',
       customSites: {}, removedSites: [],
-      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt },
+      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt, ownerUid: 'u1' },
       lastHeartbeat: startedAt
     }
   });
@@ -193,7 +194,7 @@ test('flushAndRestart (periodic alarm) extends the session normally when chrome.
     activeTabFixture: {
       uid: 'u1', authToken: 'tok',
       customSites: {}, removedSites: [],
-      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt },
+      activeTab: { url: 'https://github.com/x', title: 'x', domain: 'github.com', startedAt, sessionId: startedAt, ownerUid: 'u1' },
       lastHeartbeat: startedAt
     }
   });
@@ -232,4 +233,37 @@ test('init() re-fetches the account timezone on every service-worker wake when s
   const initEnd = src.indexOf('\nfunction markHeartbeat', initStart);
   const initBody = src.slice(initStart, initEnd);
   assert.match(initBody, /fetchUserTimezone\(/, 'init() must attempt to refresh the timezone so a later web-app change eventually reaches the extension without requiring re-sign-in');
+});
+
+for (const uid of ['alice', 'bob']) test(`${uid}: a legacy session without owner proof is retained UNKNOWN`, async () => {
+  const now = Date.now(), original = { url: 'https://github.com/local', domain: 'github.com', startedAt: now - 600000, sessionId: now - 600000 };
+  const { chrome, store } = makeChromeMock({ activeTabFixture: { uid, authToken: 'fixture', activeTab: original, lastHeartbeat: now } });
+  await importBackground(chrome); await new Promise(r => setTimeout(r, 10));
+  const retained = Object.keys(store).filter(key => key.startsWith('ta3-extension-unbound:'));
+  assert.equal(retained.length, 1); assert.deepEqual(JSON.parse(store[retained[0]]).activeTab, original);
+  assert.equal(JSON.parse(store[retained[0]]).phase, 'unknown'); assert.equal(store.activeTab, undefined);
+});
+
+test('sign out then a different account sign in preserves listeners and partitions captured sessions', async () => {
+  let now = 2000000; const realNow = Date.now; Date.now = () => now;
+  try {
+    const { chrome, store, fireTab } = makeChromeMock({ activeTabFixture: { uid: 'alice', authToken: 'alice-token', lastHeartbeat: now,
+      activeTab: { ownerUid: 'alice', domain: 'github.com', url: 'https://github.com/local', title: 'A', sessionId: 1400000, startedAt: 1400000 } } });
+    chrome.identity = { getRedirectURL: () => 'https://fixture.invalid/', launchWebAuthFlow: (_options, callback) => callback('https://fixture.invalid/#access_token=synthetic') };
+    const background = await importBackground(chrome, async url => {
+      const text = String(url);
+      if (text.includes('userinfo')) return { json: async () => ({ email: 'fixture@example.invalid' }) };
+      if (text.includes('signInWithIdp')) return { json: async () => ({ localId: 'bob', idToken: 'bob-token', refreshToken: 'bob-refresh' }) };
+      if (text.includes('timezone.json')) return { json: async () => 'UTC' };
+      throw Error('Unexpected network destination');
+    });
+    await new Promise(r => setTimeout(r, 10)); await background.signOut(); await background.signIn();
+    fireTab({ url: 'https://github.com/bob', title: 'B' }); await new Promise(r => setTimeout(r, 10));
+    now += 120000; fireTab({ url: 'https://youtube.com/local', title: 'B next' }); await new Promise(r => setTimeout(r, 10));
+    const a = JSON.parse(store['ta3-extension-writes-v1:alice']), b = JSON.parse(store['ta3-extension-writes-v1:bob']);
+    assert.equal(a.queue.length, 1); assert.equal(a.queue[0].entry.blockIntervalMin, 10);
+    assert.equal(b.queue.length, 1); assert.equal(b.queue[0].entry.blockIntervalMin, 2);
+    assert.equal(store.activeTab.ownerUid, 'bob'); assert.equal(store.activeTab.domain, 'youtube.com');
+    assert.equal(a.queue[0].uid, 'alice'); assert.equal(b.queue[0].uid, 'bob');
+  } finally { Date.now = realNow; }
 });

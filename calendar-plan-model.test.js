@@ -251,7 +251,7 @@ test('a record pruned by the database (no items, no routines) is restored before
   const written = { items: [], updatedAt: 5, updatedBy: 'a', preparation: { schemaVersion: 1, targetDate: SUNDAY, timezone: MANILA, firstPreparedAt: 1, firstPreparedMode: 'normal', lastPreparedAt: 1, lastPreparedMode: 'normal', updatedBy: 'a', intentionalBlank: true, routineInstanceIds: [], oneOffItemIds: [] } };
   const onTheWire = JSON.parse(JSON.stringify(written));
   delete onTheWire.items; delete onTheWire.preparation.routineInstanceIds; delete onTheWire.preparation.oneOffItemIds; // what RTDB does
-  assert.equal(normalizePreparation(onTheWire.preparation, SUNDAY), null, 'without restoring, the preparation is unreadable');
+  assert.deepEqual(normalizePreparation(onTheWire.preparation, SUNDAY), written.preparation, 'persisted preparation restores Firebase-omitted empty lists');
   const restored = restorePrunedPlanRecord(onTheWire);
   assert.deepEqual(restored.items, []);
   assert.deepEqual(normalizePreparation(restored.preparation, SUNDAY)?.routineInstanceIds, []);

@@ -1,0 +1,72 @@
+// Historical counterexample source from tested checkpoint 021d1eecb963d75fabd09735095e54c1fa6ff4b7.
+async function logSession(domain, title, startTs, endTs, durationMs) {
+  if (!uid) { console.warn('[Chronasense] not logged in, skipping'); return; }
+  if (!authToken) {
+    const ok = await refreshAuthToken();
+    if (!ok) { console.warn('[Chronasense] no token and refresh failed, skipping'); return; }
+  }
+
+  const site    = trackedSites[domain] || {};
+  const appName = site.label || domain;
+  const energy  = site.energy || 'waste';
+
+  // Merge with recent session for the same domain within the merge window
+  const last = lastSessionByDomain[domain];
+  let entryStartTs = startTs;
+  if (last && (startTs - last.endTs) <= MERGE_WINDOW_MS) {
+    entryStartTs = last.startTs; // extend the existing entry
+  }
+  lastSessionByDomain[domain] = { startTs: entryStartTs, endTs };
+  chrome.storage.local.set({ lastSessionByDomain });
+
+  const totalDuration = endTs - entryStartTs;
+  const entry = {
+    id: entryStartTs,
+    ts: endTs,
+    tsStart: entryStartTs,
+    updatedAt: endTs,
+    blockIntervalMin: Math.round(totalDuration / 60000),
+    date: toDateKey(new Date(entryStartTs)),
+    activity: appName,
+    energy,
+    onPlan: energy !== 'waste',
+    retro: true,
+    browserUsage: true,
+    quickLogged: true,
+    source: 'browser-extension',
+    // Time Truth V1 provenance: was `date` derived from a timezone actually confirmed
+    // from the account's Firebase settings, or the device-OS/cached fallback? The web
+    // app's own reads never trust this stored `date` field for day-bucketing (they
+    // re-derive from tsStart/ts in the account timezone), so this cannot mis-assign a
+    // day — it's an honest confidence marker for anything that does read `date` raw.
+    tzConfirmed: userTimezoneConfirmed
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy;
+
+  const path = `rooms/uid_${uid}/entries/${entryStartTs}`;
+  const doWrite = () => fetch(
+    `${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }
+  );
+
+  try {
+    let res = await doWrite();
+    console.log('[Chronasense] Firebase write status:', res.status);
+    if (res.status === 401) {
+      console.log('[Chronasense] token expired, refreshing…');
+      const ok = await refreshAuthToken();
+      if (ok) {
+        res = await doWrite();
+        console.log('[Chronasense] retry write status:', res.status);
+      } else {
+        console.warn('[Chronasense] refresh failed, session lost');
+      }
+    } else if (res.status !== 200) {
+      const t = await res.text();
+      console.warn('[Chronasense] Firebase error body:', t);
+    }
+  } catch (e) {
+    console.warn('[Chronasense] network error logging session:', e);
+  }
+}

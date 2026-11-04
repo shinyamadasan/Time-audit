@@ -320,7 +320,11 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
 }
 
 async function openLearningPlans(page) {
-  await page.locator('#nav-learning').click();
+  if (await page.locator('#nav-learning').isVisible()) await page.locator('#nav-learning').click();
+  else {
+    await page.locator('#nav-more').click();
+    await page.locator('#nav-more-dialog').getByRole('button', { name: 'Learning plans', exact: true }).click();
+  }
   await expect(page.locator('#view-learning')).toHaveClass(/active/);
 }
 

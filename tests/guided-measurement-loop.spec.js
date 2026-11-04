@@ -117,6 +117,7 @@ for (const kind of ['priorities', 'routines', 'open', 'rescue']) {
     await expect(page.locator('#plan-strip')).toContainText('Priorities');
     if (kind === 'priorities') {
       await expect(page.locator('#today-action-title')).toHaveText('Client build');
+      await page.locator('.execution-alternatives>summary').click();
       await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
       expect(await page.evaluate(() => ({ task: getFocusTaskLabel(), phase: pomodoroPhase }))).toEqual({ task: 'Client build', phase: 'work' });
     }
@@ -214,6 +215,7 @@ test('Today keeps one primary action usable at phone and desktop widths', async 
 
 test('Focus on a manual routine hands off its label without claiming completion', async ({ page }) => {
   await today(page, { routines: routineState([routine({ mode: 'anytime' })]) });
+  await page.locator('.execution-alternatives>summary').click();
   await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
   expect(await page.evaluate(() => getFocusTaskLabel())).toBe('Deep work');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user') || '{"manual":{}}').manual)).toEqual({});

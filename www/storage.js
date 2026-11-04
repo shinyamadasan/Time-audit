@@ -1,3 +1,4 @@
+/* global trackingStartedAt, invalidateTimerRecovery, crypto */
 // ══════════════════════════════════════════════════════
 // storage.js — persistence, Firebase sync, and data queries
 //
@@ -82,6 +83,7 @@ let _settingsDefaults = null; // pristine settings, captured at first load() —
 let _fbRoomRefRoom = '';      // the room fbRoomRef points at
 let _syncGeneration = 0;      // bumped on every bind/startSync; older listeners and callbacks go inert
 let _timerStateOwner = null;  // account whose ordinary/Focus timer is currently attached to the runtime
+let _restoredTimerSync = null; // first ordinary restore publication must not replace a newer server decision
 let _awayStateOwner = null;   // account whose Away state is currently attached to the runtime
 let _breakStateOwner = null;  // account whose Break is attached; it must always match the Timer owner
 let _breakStartedBy = null;   // device allowed to auto-complete/log the attached Break
@@ -94,7 +96,7 @@ function accountLocalKey(base, room = _localStateOwner) {
 /** Writes the active account's slot. Refused (false) when no account owns local state. */
 function setAccountLocal(base, value) {
   const key = _localStateOwner && _localStateOwner === roomCode ? accountLocalKey(base) : null;
-  if (!key) return false;
+  if (!key || typeof accountingBootstrapCacheHeld === 'function' && accountingBootstrapCacheHeld(base, _localStateOwner)) return false;
   localStorage.setItem(key, value);
   return true;
 }
@@ -102,7 +104,7 @@ function setAccountLocal(base, value) {
 /** Removes only the active account's scoped slot. Unowned pre-scoping keys remain quarantined. */
 function removeAccountLocal(base) {
   const key = _localStateOwner && _localStateOwner === roomCode ? accountLocalKey(base) : null;
-  if (!key) return false;
+  if (!key || typeof accountingBootstrapCacheHeld === 'function' && accountingBootstrapCacheHeld(base, _localStateOwner)) return false;
   localStorage.removeItem(key);
   return true;
 }
@@ -225,6 +227,8 @@ globalThis.getTaskCompletionAppContext = () => {
  *  Firebase room remain authoritative, so returning to that account restores/reconciles the same state. */
 function detachTimerAwayRuntime(previousOwner) {
   if (!previousOwner) return;
+  if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
+  _restoredTimerSync = null;
   if (typeof detachFocusSessionForAccountSwitch === 'function') detachFocusSessionForAccountSwitch(previousOwner);
   clearInterval(ticker); ticker = null;
   clearInterval(awayElapsedTicker); awayElapsedTicker = null;
@@ -234,6 +238,7 @@ function detachTimerAwayRuntime(previousOwner) {
   running = false;
   timerStartedAt = null;
   taskStartTime = null;
+  trackingStartedAt = null;
   blockStartTime = null;
   timerOwnerDeviceId = null;
   syncedFocusTimer = null;
@@ -273,36 +278,39 @@ function restoreTimerAwayState(room) {
   let restored = false;
   try {
     const saved = JSON.parse(localStorage.getItem(accountLocalKey(TIMER_STORAGE_KEY, room)) || 'null');
-    if (saved && saved.running && saved.timerStartedAt) {
+    if (saved && saved.running && Number.isFinite(saved.timerStartedAt) && saved.timerStartedAt > 0
+      && Number.isFinite(saved.totalSecs) && saved.totalSecs > 0) {
       const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
-      if (elapsed < saved.totalSecs) {
-        _timerStateOwner = room;
-        timerStartedAt = saved.timerStartedAt;
-        totalSecs = saved.totalSecs;
-        remaining = Math.max(0, totalSecs - elapsed);
-        running = true;
-        lastTaskForRepeat = saved.lastTask || '';
-        currentTask = saved.currentTask || saved.lastTask || '';
-        taskStartTime = saved.taskStartTime || saved.timerStartedAt;
-        blockStartTime = saved.blockStartTime || saved.timerStartedAt;
-        if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
-        timerOwnerDeviceId = saved.ownerDeviceId || null;
-        currentTaskPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
-        const mainBtn = document.getElementById('main-btn');
-        if (mainBtn) mainBtn.textContent = 'Break';
-        const status = document.getElementById('timer-status');
-        if (status) status.textContent = `Pinging every ${settings.intervalMin} min (restored)`;
-        const taskName = document.getElementById('hero-task-name');
-        if (taskName) taskName.textContent = currentTask;
-        if (typeof showHeroState === 'function') showHeroState('active');
-        if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
-        ticker = setInterval(() => {
-          if (!timerStateOwnedByCurrentAccount()) return;
-          remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-          remaining <= 0 ? doPing() : updateRing();
-        }, 1000);
-        restored = true;
-      }
+      _timerStateOwner = room;
+      timerStartedAt = saved.timerStartedAt;
+      totalSecs = saved.totalSecs;
+      remaining = Math.max(0, totalSecs - elapsed);
+      running = true;
+      lastTaskForRepeat = saved.lastTask || '';
+      currentTask = saved.currentTask || saved.lastTask || '';
+      taskStartTime = saved.taskStartTime || saved.timerStartedAt;
+      trackingStartedAt = saved.trackingStartedAt || null;
+      blockStartTime = saved.blockStartTime || saved.timerStartedAt;
+      if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
+      _restoredTimerSync = { ownerRoom: room, baseline: saved.timerUpdatedAt || saved.timerStartedAt,
+        sessionStart: trackingStartedAt || taskStartTime, inFlight: false };
+      timerOwnerDeviceId = saved.ownerDeviceId || null;
+      currentTaskPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
+      const mainBtn = document.getElementById('main-btn');
+      if (mainBtn) mainBtn.textContent = 'Break';
+      const status = document.getElementById('timer-status');
+      if (status) status.textContent = `Pinging every ${settings.intervalMin} min (restored)`;
+      const taskName = document.getElementById('hero-task-name');
+      if (taskName) taskName.textContent = currentTask;
+      if (typeof showHeroState === 'function') showHeroState('active');
+      if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
+      clearInterval(ticker);
+      ticker = setInterval(() => {
+        if (!timerStateOwnedByCurrentAccount() || window._timerRecoveryState) return;
+        remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+        remaining <= 0 ? doPing() : updateRing();
+      }, 1000);
+      restored = true;
     }
   } catch {}
   try {
@@ -351,6 +359,7 @@ function restoreTimerAwayState(room) {
     }
   } catch {}
   if (typeof restoreHeartbeatRecoveryForAccount === 'function') restoreHeartbeatRecoveryForAccount();
+  if (running && !window._timerRecoveryState && typeof _startHeartbeat === 'function') _startHeartbeat();
   const restoreBoundFocus = () => {
     if (room === roomCode && room === _localStateOwner && typeof restoreFocusSession === 'function') {
       restoreFocusSession();
@@ -365,31 +374,29 @@ function restoreTimerAwayState(room) {
  *  empty/default, nothing persisted) and drops every in-memory cache that belongs to the
  *  previous owner. */
 function bindAccountLocalState(room) {
+  if (typeof detachOrdinaryProvisional === 'function') detachOrdinaryProvisional();
+  if (typeof invalidateTimerRecovery === 'function') invalidateTimerRecovery();
   const previousOwner = _localStateOwner;
   if (previousOwner && previousOwner !== (room || null)) detachTimerAwayRuntime(previousOwner);
   _localStateOwner = room || null;
   _syncGeneration++;
+  window._accountingLegacyLoadError = null;
+  window._accountingSourcesSeen = new Set();
+  if (typeof _accountingRawTimer !== 'undefined') {
+    _accountingRawTimer = null; _accountingRawEntries = {}; _accountingRawAway = null; _accountingRawBreak = null;
+    if (room) _accountingAppliedGenerations.delete(room);
+  }
   const read = base => {
     const key = accountLocalKey(base);
     return key ? localStorage.getItem(key) : null;
   };
-  try { const raw = JSON.parse(read('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
-  // Migrate: stamp updatedAt on any entry that's missing it (older entries)
-  entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
-  // Migrate: clear stale away:true on user-logged entries (old code preserved away flag on edits)
-  entries.forEach(e => { if (e.away && e.activity && e.retro) delete e.away; });
-  // Migrate: rename old energy values to 9-category system
-  entries.forEach(e => {
-    if      (e.energy === 'distraction') e.energy = 'waste';
-    else if (e.energy === 'break')       e.energy = 'recovery';
-    else if (e.energy === 'admin')       e.energy = 'nine5';
-    else if (e.energy === 'away')        e.energy = AWAY_BUCKETS[e.activity] || 'recovery';
-  });
-  // Migrate: stamp category + originalLabel on any entry that's missing them
-  entries.forEach(e => {
-    if (!e.category)      e.category      = getBucket(e);
-    if (!e.originalLabel) e.originalLabel = e.energy || null;
-  });
+  try {
+    const raw = JSON.parse(read('ta3-entries') || '[]');
+    if (!raw || typeof raw !== 'object') throw Error('Unreadable entry cache');
+    entries = Array.isArray(raw) ? raw : Object.values(raw);
+    if (entries.some(entry => !entry || entry.id == null)) throw Error('Unreadable entry cache');
+  } catch(e) { entries = []; window._accountingLegacyLoadError = 'entries-cache-unreadable'; }
+  // Historical records retain their exact fields. Repair is an explicit staged command.
   // Always sort by actual start time, newest first
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   // Validate schema — warns to console for any malformed entries without crashing
@@ -410,7 +417,20 @@ function bindAccountLocalState(room) {
   if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   try { plans = JSON.parse(read('ta3-plans') || '{}'); } catch { plans={}; }
   if (!plans || typeof plans !== 'object' || Array.isArray(plans)) plans = {};
-  try { const raw = JSON.parse(read('ta3-focus-redemptions') || '[]'); focusRedemptions = Array.isArray(raw) ? raw : []; } catch { focusRedemptions = []; }
+  try {
+    const raw = JSON.parse(read('ta3-focus-redemptions') || '[]');
+    if (!Array.isArray(raw)) throw Error('Unreadable redemption cache');
+    focusRedemptions = raw;
+  } catch { focusRedemptions = []; window._accountingLegacyLoadError = 'redemption-cache-unreadable'; }
+  for (const base of [TIMER_STORAGE_KEY, AWAY_STORAGE_KEY, BREAK_STORAGE_KEY]) {
+    try {
+      const raw = read(base), value = raw == null ? null : JSON.parse(raw);
+      if (raw != null && (!value || typeof value !== 'object' || Array.isArray(value))) throw Error('Unreadable timer cache');
+    }
+    catch { window._accountingLegacyLoadError = 'timer-cache-unreadable'; }
+  }
+  const heartbeat = read('ta3-heartbeat-ts');
+  if (heartbeat != null && (!Number.isSafeInteger(Number(heartbeat)) || Number(heartbeat) <= 0)) window._accountingLegacyLoadError = 'heartbeat-cache-unreadable';
   const readMap = base => { try { const raw = JSON.parse(read(base) || '{}'); return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}; } catch { return {}; } };
   reviews = readMap('ta3-reviews');
   weeklyReviews = readMap('ta3-weekly-reviews');
@@ -419,7 +439,23 @@ function bindAccountLocalState(room) {
   pendingPlanRemoteByDate.clear();
   pendingFenceRemoteByDate.clear();
   if (typeof lastUndoAction !== 'undefined') lastUndoAction = null;
-  restoreTimerAwayState(_localStateOwner);
+  // An acknowledged Undo record is per account: the status shows only the bound account's own.
+  if (typeof globalThis.renderTimeAckStatus === 'function') globalThis.renderTimeAckStatus();
+  let unified = false;
+  if (room && typeof restoreUnifiedAccounting === 'function') {
+    try { unified = restoreUnifiedAccounting(); }
+    catch (error) { console.warn('[accounting] retained unreadable account state', error.message); }
+  }
+  if (!unified && !window._accountingLegacyLoadError) restoreTimerAwayState(_localStateOwner);
+  else if (unified) {
+    restoreHeartbeatRecoveryForAccount();
+    if (running && !window._timerRecoveryState && !accountingPendingStop()) _startHeartbeat();
+    const restoreBoundFocus = () => {
+      if (room === roomCode && room === _localStateOwner && typeof restoreFocusSession === 'function') restoreFocusSession();
+    };
+    if (document.readyState === 'complete') restoreBoundFocus();
+    else window.addEventListener('load', restoreBoundFocus, { once: true });
+  }
 }
 
 /** A live account change (sign-in as another account, sign-out): rebind, then recompute
@@ -748,7 +784,8 @@ function remoteTimerSyncStamp(data) {
 
 function isStaleRemoteTimerState(data) {
   const remoteStamp = remoteTimerSyncStamp(data);
-  const localStamp = currentTimerSyncStamp();
+  const localStamp = _restoredTimerSync && !isLocalFocusTimerActive()
+    ? _restoredTimerSync.baseline : currentTimerSyncStamp();
   return !!(remoteStamp && localStamp && remoteStamp < localStamp);
 }
 
@@ -1055,15 +1092,16 @@ function persist() {
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   // Entries, settings, reviews, plans and focus redemptions go to the owning account's slot only (none when signed out).
-  setAccountLocal('ta3-entries', JSON.stringify(entries));
+  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-entries', JSON.stringify(entries));
   setAccountLocal('ta3-settings', JSON.stringify(settings));
   setAccountLocal('ta3-reviews', JSON.stringify(reviews));
   setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
-  setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
   setAccountLocal('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   setAccountLocal('ta3-lv', Date.now()); // local version — used to detect unsynced changes
+  if (window._accountingLegacyLoadError) return;
   if (running && timerStartedAt && timerStateOwnedByCurrentAccount()) {
     setAccountLocal(TIMER_STORAGE_KEY, JSON.stringify({
       timerStartedAt,
@@ -1072,8 +1110,9 @@ function persist() {
       lastTask: lastTaskForRepeat,
       currentTask,
       taskStartTime,
+      trackingStartedAt,
       blockStartTime,
-      timerUpdatedAt: currentTimerSyncStamp(),
+      timerUpdatedAt: _restoredTimerSync?.baseline || currentTimerSyncStamp(),
       ownerDeviceId: timerOwnerDeviceId || null,
       planItemId: currentTaskPlanItemId || null
     }));
@@ -1283,20 +1322,16 @@ function startSync() {
   fbDb.ref('.info/connected').on('value', snap => {
     if (!isCurrentSync()) return;
     const online = snap.val();
+    if (typeof globalThis.timeAckOnConnection === 'function') globalThis.timeAckOnConnection(!!online);
     if (online) {
-      updateSyncPill('connected', 'synced');
+      updateSyncPill('connected', 'connected');
       startSyncReconcileTicker();
       deviceRef.set({
         lastSeen: Date.now(),
         name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
       });
-      syncLocalActiveTimerState();
-      syncLocalActiveAwayState();
-      syncLocalActiveBreakState();
-      // Push any local changes that happened while offline
-      const lv = parseInt(localStorage.getItem(accountLocalKey('ta3-lv', syncRoom)) || '0', 10);
-      const ls = parseInt(localStorage.getItem(accountLocalKey('ta3-last-sync', syncRoom)) || '0', 10);
-      if (lv > ls) syncEntries();
+      // Coherent hydration and immutable staged replay own accounting; SDK cache republish is retired.
+      requestAccountingRefresh();
       syncSettings();
       publishSharedAccountability(); // app/auth session initializes — ensure a current payload exists
       // Durability V1 — retry any coarse-life-evidence push that failed while offline.
@@ -1347,50 +1382,16 @@ function startSync() {
 
   fbDb.ref(`rooms/${roomCode}/timer`).on('value', snap => {
     if (!isCurrentSync()) return;
-    const changed = applyRemoteTimerState(snap.val(), syncRoom);
-    const breakChanged = pendingBreakState ? applyRemoteBreakState(pendingBreakState, syncRoom) : false;
-    if (breakChanged) pendingBreakState = null;
-    if (changed || breakChanged) {
-      if (breakChanged) persist();
-      scheduleRenderToday();
-    }
+    if (typeof _accountingRawTimer !== 'undefined') _accountingRawTimer = cloneUndoValue(snap.val() || null);
+    window._accountingSourcesSeen.add('timer');
+    requestAccountingRefresh();
   });
 
   fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
     if (!isCurrentSync()) return;
-    const data = snap.val();
-    if (!data) return;
-    const remoteEntries = Object.values(data);
-    // Build a Map for O(1) lookup and conflict resolution
-    const localMap = new Map(entries.map(e => [e.id, e]));
-    let changed = false;
-    remoteEntries.forEach(re => {
-      if (!re || !re.id) return;
-      const local = localMap.get(re.id);
-      const resolution = resolveEntrySync(local, re);
-      if (resolution.action === 'add') {
-        const entry = resolution.entry;
-        if (!entry.missed && !entry.deleted) validateEntry(entry);
-        entries.push(entry);
-        localMap.set(re.id, entry);
-        changed = true;
-      } else if (resolution.action === 'replace') {
-        if (!resolution.entry.missed && !resolution.entry.deleted) validateEntry(resolution.entry);
-        entries[entries.indexOf(local)] = resolution.entry;
-        localMap.set(re.id, resolution.entry);
-        changed = true;
-      }
-    });
-    if (changed) {
-      entries.sort((a,b) => b.ts - a.ts);
-      setAccountLocal('ta3-last-sync', Date.now());
-      persist();
-      scheduleRenderToday();
-      if (document.getElementById('view-week').classList.contains('active')) renderWeek();
-      publishSharedAccountability(); // a cross-device entry may newly link to today's plan
-    } else {
-      setAccountLocal('ta3-last-sync', Date.now());
-    }
+    if (typeof _accountingRawEntries !== 'undefined') _accountingRawEntries = cloneUndoValue(snap.val() || {});
+    window._accountingSourcesSeen.add('entries');
+    requestAccountingRefresh();
   });
 
   fbDb.ref(`rooms/${roomCode}/intention`).on('value', snap => {
@@ -1491,26 +1492,9 @@ function startSync() {
     if (changed) { setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews)); }
   });
 
-  fbDb.ref(`rooms/${roomCode}/focusRedemptions`).on('value', snap => {
+  fbDb.ref(`rooms/${roomCode}/focusRedemptions`).on('value', () => {
     if (!isCurrentSync()) return;
-    const val = snap.val();
-    if (!val) return;
-    let changed = false;
-    Object.values(val).forEach(item => {
-      if (!item || !item.id) return;
-      const local = focusRedemptions.find(r => r.id === item.id);
-      if (!local) {
-        if (!item.deleted) focusRedemptions.push(item);
-        changed = true;
-      } else if ((item.updatedAt || item.createdAt || 0) > (local.updatedAt || local.createdAt || 0)) {
-        Object.assign(local, item);
-        changed = true;
-      }
-    });
-    if (changed) {
-      setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
-      renderToday();
-    }
+    requestAccountingRefresh();
   });
 
   fbDb.ref(`rooms/${roomCode}/devices`).on('value', snap => {
@@ -1520,21 +1504,16 @@ function startSync() {
 
   fbDb.ref(`rooms/${roomCode}/breakState`).on('value', snap => {
     if (!isCurrentSync()) return;
-    const data = snap.val();
-    if (!data) return;
-    const changed = applyRemoteBreakState(data, syncRoom);
-    if (!changed && data.active && data.ownerRoom === syncRoom && _timerStateOwner !== syncRoom) {
-      pendingBreakState = data;
-      return;
-    }
-    pendingBreakState = null;
-    if (changed) { persist(); scheduleRenderToday(); }
+    if (typeof _accountingRawBreak !== 'undefined') _accountingRawBreak = cloneUndoValue(snap.val() || null);
+    window._accountingSourcesSeen.add('breakState');
+    requestAccountingRefresh();
   });
 
   fbDb.ref(`rooms/${roomCode}/awayState`).on('value', snap => {
     if (!isCurrentSync()) return;
-    const changed = applyRemoteAwayState(snap.val(), syncRoom);
-    if (changed) scheduleRenderToday();
+    if (typeof _accountingRawAway !== 'undefined') _accountingRawAway = cloneUndoValue(snap.val() || null);
+    window._accountingSourcesSeen.add('awayState');
+    requestAccountingRefresh();
   });
 
   // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
@@ -1598,87 +1577,56 @@ function startSync() {
   watchPairCode();
 
   startSyncDetailAgeTicker();
-  updateSyncPill('connected', 'synced');
-  Promise.all([syncEntries(), syncFocusRedemptions()]).then(results => {
-    if (!results.some(Boolean) || !isCurrentSync()) return;
+  updateSyncPill('connected', 'connected');
+  requestAccountingRefresh().then(confirmed => {
+    if (!confirmed || !isCurrentSync() || accountingHasPending()) return;
     setAccountLocal('ta3-last-sync', Date.now());
     showToast('Synced ✓');
   });
 }
 
 async function forceSyncNow() {
-  const ref = ownedRoomRef();
-  if (!ref) {
-    showToast('Sign in to sync first');
-    return false;
-  }
+  const ref = ownedRoomRef(), generation = _syncGeneration;
+  if (!ref) { showToast('Sign in to sync first'); return false; }
+  const current = () => ownedRoomRef() === ref && generation === _syncGeneration;
   const btn = document.getElementById('sync-now-btn');
   if (btn) btn.disabled = true;
   updateSyncPill('syncing', 'syncing...');
   try {
-    const [timerSnap, awaySnap, breakSnap, settingsSnap, templatesSnap, templateStampSnap] = await Promise.all([
-      ref.child('timer').once('value'),
-      ref.child('awayState').once('value'),
-      ref.child('breakState').once('value'),
-      ref.child('settings').once('value'),
-      ref.child('templates').once('value'),
-      ref.child('templatesSavedAt').once('value')
+    const [confirmed, settingsSnap, templatesSnap, stampSnap] = await Promise.all([
+      syncAccountingCompatibility('forceSyncNow'), ref.child('settings').once('value'),
+      ref.child('templates').once('value'), ref.child('templatesSavedAt').once('value')
     ]);
-    // These snapshots are the initiating account's: never apply them to another's state.
-    if (ownedRoomRef() !== ref) return false;
-    const timerChanged = applyRemoteTimerState(timerSnap.val(), ref.key);
-    const awayChanged = applyRemoteAwayState(awaySnap.val(), ref.key);
-    const breakChanged = applyRemoteBreakState(breakSnap.val(), ref.key);
+    if (!current()) return false;
     const settingsChanged = applyRemoteSettings(settingsSnap.val());
-    const templatesChanged = applyRemoteTemplates(templatesSnap.val(), templateStampSnap.val());
-    await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings(), syncTemplates()]);
-    if (ownedRoomRef() !== ref) return false;
-    setAccountLocal('ta3-last-sync', Date.now());
-    if (timerChanged || awayChanged || breakChanged || settingsChanged || templatesChanged) {
-      persist();
-      scheduleRenderToday();
+    const templatesChanged = applyRemoteTemplates(templatesSnap.val(), stampSnap.val());
+    await Promise.all([syncSettings(), syncTemplates()]);
+    if (!current()) return false;
+    if (settingsChanged || templatesChanged) { persist(); scheduleRenderToday(); renderSettings(); }
+    if (!confirmed || accountingHasPending()) {
+      updateSyncPill('syncing', 'accounting pending'); showToast('Sync checked; original accounting work remains pending'); return false;
     }
-    if (settingsChanged || templatesChanged) renderSettings();
-    updateSyncPill('connected', 'synced');
-    showToast('Sync checked');
-    return true;
+    setAccountLocal('ta3-last-sync', Date.now());
+    updateSyncPill('connected', 'synced'); showToast('Sync checked'); return true;
   } catch (err) {
-    notifySyncWriteFailed(err);
-    updateSyncPill('syncing', 'sync retry needed');
+    if (current()) { notifySyncWriteFailed(err); updateSyncPill('syncing', 'sync retry needed'); }
     return false;
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  } finally { if (current() && btn) btn.disabled = false; }
 }
 
 async function reconcileRemoteActiveState() {
-  const currentRef = ownedRoomRef();
-  if (!currentRef || _syncReconcileInFlight) return false;
-  _syncReconcileInFlight = true;
-  const ref = currentRef;
+  const ref = ownedRoomRef(), generation = _syncGeneration;
+  if (!ref || _syncReconcileInFlight && _syncReconcileInFlight.generation === generation) return false;
+  const flight = { generation }; _syncReconcileInFlight = flight;
   try {
-    const [timerSnap, awaySnap, breakSnap] = await Promise.all([
-      ref.child('timer').once('value'),
-      ref.child('awayState').once('value'),
-      ref.child('breakState').once('value')
-    ]);
-    // Read for the initiating room: after a switch it must not stamp the new account's last-sync marker.
-    if (ownedRoomRef() !== ref) return false;
-    const timerChanged = applyRemoteTimerState(timerSnap.val(), ref.key);
-    const awayChanged = applyRemoteAwayState(awaySnap.val(), ref.key);
-    const breakChanged = applyRemoteBreakState(breakSnap.val(), ref.key);
-    setAccountLocal('ta3-last-sync', Date.now());
-    if (timerChanged || awayChanged || breakChanged) {
-      persist();
-      scheduleRenderToday();
-    }
-    return timerChanged || awayChanged || breakChanged;
+    const confirmed = await requestAccountingRefresh();
+    if (ownedRoomRef() !== ref || generation !== _syncGeneration) return false;
+    if (confirmed && !accountingHasPending()) setAccountLocal('ta3-last-sync', Date.now());
+    return confirmed;
   } catch (err) {
-    notifySyncWriteFailed(err);
+    if (ownedRoomRef() === ref && generation === _syncGeneration) notifySyncWriteFailed(err);
     return false;
-  } finally {
-    _syncReconcileInFlight = false;
-  }
+  } finally { if (_syncReconcileInFlight === flight) _syncReconcileInFlight = false; }
 }
 
 function syncDeviceLabel(deviceId, fallback) {
@@ -1750,37 +1698,45 @@ function isLocalFocusTimerActive() {
     && timerOwnerDeviceId === syncedDeviceId;
 }
 
+let _accountingRefreshTask = null;
+let _accountingRefreshAgain = false;
+function requestAccountingRefresh() {
+  _accountingRefreshAgain = true;
+  if (_accountingRefreshTask) return _accountingRefreshTask;
+  const owner = _localStateOwner, generation = _syncGeneration;
+  _accountingRefreshTask = Promise.resolve().then(async () => {
+    let result = false;
+    do {
+      _accountingRefreshAgain = false;
+      if (owner !== _localStateOwner || generation !== _syncGeneration) { _accountingRefreshAgain = true; break; }
+      if (typeof globalThis.hydrateAccounting !== 'function') throw Error('Accounting coordinator unavailable');
+      const pending = accountingHasPending();
+      result = await globalThis.hydrateAccounting();
+      // An echo/new generation arriving during a command still requires its own coherent read.
+      if (pending && !accountingHasPending()) _accountingRefreshAgain = true;
+    } while (_accountingRefreshAgain);
+    return result;
+  }).catch(error => {
+    console.warn('[accounting] confirmed refresh retained', error.message);
+    return false;
+  }).finally(() => {
+    _accountingRefreshTask = null;
+    if (typeof renderTimeAckStatus === 'function') renderTimeAckStatus();
+    if (_accountingRefreshAgain) requestAccountingRefresh();
+  });
+  return _accountingRefreshTask;
+}
+
 function syncLocalActiveTimerState() {
-  if (!ownedRoomRef() || !timerStateOwnedByCurrentAccount()) return false;
-  if (isLocalFocusTimerActive() && typeof syncFocusTimerState === 'function') {
-    syncFocusTimerState();
-    return true;
-  }
-  if (running && timerOwnerDeviceId === syncedDeviceId) {
-    syncTimerState();
-    return true;
-  }
-  return false;
+  if (!ownedRoomRef()) return false;
+  return requestAccountingRefresh();
 }
 
 function syncAwayState({ active = awayActive, label = awayLabel, startedAt = awayStartTime, ownerRoom = _awayStateOwner } = {}) {
-  const ref = ownedRoomRef();
-  if (!ref || !ownerRoom || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
-  const now = Date.now();
-  const payload = {
-    active: !!active,
-    startedBy: syncedDeviceId,
-    updatedAt: now,
-    deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC',
-    ownerRoom
-  };
-  if (active) {
-    payload.label = label;
-    payload.startedAt = startedAt;
-  }
-  rememberAwaySyncStamp(now);
-  ref.update({ awayState: payload });
-  return true;
+  const requested = { active, label, startedAt, ownerRoom };
+  const matches = active === awayActive && (!active || label === awayLabel && startedAt === awayStartTime && ownerRoom === _awayStateOwner);
+  return typeof syncAccountingCompatibility === 'function'
+    ? syncAccountingCompatibility('syncAwayState', requested, matches) : Promise.resolve(false);
 }
 
 function syncLocalActiveAwayState() {
@@ -1788,29 +1744,11 @@ function syncLocalActiveAwayState() {
   return syncAwayState();
 }
 
-function syncBreakState({
-  active = breakActive,
-  startedAt = breakStartTs,
-  endsAt = breakEndsAt,
-  ownerRoom = _breakStateOwner
-} = {}) {
-  const ref = ownedRoomRef();
-  if (!ref || !ownerRoom || ownerRoom !== _breakStateOwner || ownerRoom !== _timerStateOwner
-    || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
-  const payload = {
-    active: !!active,
-    startedBy: _breakStartedBy || syncedDeviceId,
-    updatedAt: Date.now(),
-    ownerRoom
-  };
-  if (active) {
-    if (!startedAt || !endsAt) return false;
-    payload.startedAt = startedAt;
-    payload.endsAt = endsAt;
-    payload.durationMin = Math.max(1, Math.round((endsAt - startedAt) / 60000));
-  }
-  ref.update({ breakState: payload });
-  return true;
+function syncBreakState({ active = breakActive, startedAt = breakStartTs, endsAt = breakEndsAt, ownerRoom = _breakStateOwner } = {}) {
+  const requested = { active, startedAt, endsAt, ownerRoom };
+  const matches = active === breakActive && (!active || startedAt === breakStartTs && endsAt === breakEndsAt && ownerRoom === _breakStateOwner);
+  return typeof syncAccountingCompatibility === 'function'
+    ? syncAccountingCompatibility('syncBreakState', requested, matches) : Promise.resolve(false);
 }
 
 function syncLocalActiveBreakState() {
@@ -1819,335 +1757,34 @@ function syncLocalActiveBreakState() {
 }
 
 function applyRemoteBreakState(data, sourceRoom = _localStateOwner) {
-  if (!data || !sourceRoom || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
-  if (!data.ownerRoom || data.ownerRoom !== sourceRoom) return false;
-
-  if (data.active) {
-    if (!data.startedAt || !data.endsAt || _timerStateOwner !== sourceRoom) return false;
-    const changed = !breakActive || _breakStateOwner !== sourceRoom
-      || breakStartTs !== data.startedAt || breakEndsAt !== data.endsAt;
-    if (!changed) return false;
-    if (!claimBreakStateOwnership(sourceRoom, data.startedBy)) return false;
-    running = false;
-    clearInterval(ticker);
-    ticker = null;
-    breakStartTs = data.startedAt;
-    breakEndsAt = data.endsAt;
-    breakActive = true;
-    showBreakRuntime(`${data.durationMin || '?'}-min break · synced`);
-    startBreakRuntimeTicker(sourceRoom);
-    return true;
-  }
-
-  if (breakActive && _breakStateOwner === sourceRoom) {
-    clearBreakRuntime(sourceRoom, { removeScoped: true, release: true });
-    return true;
-  }
-  return false;
+  if (!data || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
+  return requestAccountingRefresh();
 }
 
 function applyRemoteTimerState(data, sourceRoom = _localStateOwner) {
-  if (!data) return false;
-  if (!sourceRoom || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
-  if (data.ownerRoom && data.ownerRoom !== sourceRoom) return false;
-
-  // Reload-restore reconciliation: a Focus session reconstructed from
-  // localStorage (restoreFocusSession() in focus-mode.js) sets this
-  // in-memory-only flag so its restored ownership claim is provisional for
-  // exactly one incoming snapshot, instead of permanently outranking a
-  // takeover that legitimately completed while this device was closed. A
-  // freshly-started local Focus (this flag never set) falls straight
-  // through to the untouched pre-existing ownership check below.
-  const reconciling = typeof restoredFocusAwaitingSyncReconciliation !== 'undefined'
-    && restoredFocusAwaitingSyncReconciliation;
-  const conflictingOwner = isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId && !data.takeover;
-  // Reconciliation only answers "did a Focus takeover happen while this
-  // device was away?" — a conflicting snapshot that isn't itself a Focus
-  // snapshot (e.g. another device's ordinary ping/interval timer) can't
-  // answer that question either way, so it must not be allowed to win the
-  // restored Focus session, and must not consume the window pending a real
-  // Focus takeover snapshot.
-  const conflictingFocusOwner = conflictingOwner && data.mode === 'focus';
-  const nonFocusConflictDuringWindow = reconciling && conflictingOwner && !conflictingFocusOwner;
-  // A same-owner snapshot (most commonly restoreFocusSession()'s own
-  // outbound syncFocusTimerState() push echoing straight back through the
-  // already-attached listener) is not an ownership-reconciliation signal at
-  // all — it isn't from another device, so it can't confirm or refute the
-  // "did a takeover happen while this device was away?" question the window
-  // exists to answer. Treating it as "the first snapshot" would close the
-  // window before a real conflicting snapshot ever gets a chance to be
-  // evaluated. Missing updatedBy is grouped in defensively for the same
-  // reason: it doesn't identify a different device either.
-  const sameOwnerEcho = reconciling && !conflictingOwner
-    && (!data.updatedBy || data.updatedBy === syncedDeviceId);
-  let reconciledRemoteWins = false;
-
-  if (conflictingFocusOwner && reconciling) {
-    // Consumed exactly once, whichever way it resolves.
-    restoredFocusAwaitingSyncReconciliation = false;
-    // Reuse the same recency signal isStaleRemoteTimerState() is built on
-    // (remoteTimerSyncStamp), but compare against the local recency stamp
-    // as it stood BEFORE this restore's own outbound push could touch it
-    // (currentTimerSyncStamp() would be contaminated by that push). A zero
-    // baseline means this device has no prior recorded sync history at all
-    // (never actually synced) — that proves nothing about the remote being
-    // newer, so it stays conservative and keeps local, same as always.
-    reconciledRemoteWins = restoredFocusBaselineSyncStamp > 0
-      && remoteTimerSyncStamp(data) > restoredFocusBaselineSyncStamp;
-    restoredFocusBaselineSyncStamp = 0;
-  } else if (reconciling && !sameOwnerEcho && !nonFocusConflictDuringWindow) {
-    // Non-conflicting for a reason other than a same-owner echo — e.g. an
-    // explicit different-owner takeover snapshot (data.takeover, excluded
-    // from conflictingOwner above by design so it always applies), or local
-    // Focus somehow isn't active after all. Nothing to reconcile against;
-    // the window closes having seen no conflict.
-    restoredFocusAwaitingSyncReconciliation = false;
-    restoredFocusBaselineSyncStamp = 0;
-  }
-  // else: sameOwnerEcho, or a non-Focus conflicting snapshot, while
-  // reconciling — leave the flag/baseline untouched (a genuine Focus
-  // takeover snapshot may still arrive) and fall through to the ordinary
-  // conflictingOwner-ignore handling below exactly as it already runs
-  // outside of any reconciliation window.
-
-  if (conflictingOwner && !reconciledRemoteWins) {
-    fbTimerReceived = true;
-    updateTimerSyncDetail(data, 'ignored remote timer; focus owned here');
-    syncLocalActiveTimerState();
-    return false;
-  }
-  if (!reconciledRemoteWins && isStaleRemoteTimerState(data)) {
-    fbTimerReceived = true;
-    updateTimerSyncDetail(data, 'ignored stale timer');
-    return false;
-  }
-  if (reconciledRemoteWins && typeof clearPersistedFocusSession === 'function') {
-    // The remote takeover wins: drop A's persisted local claim so a later
-    // reload can't resurrect it (device A restoring the same stale record).
-    clearPersistedFocusSession();
-  }
-  if ('ownerDeviceId' in data) timerOwnerDeviceId = data.ownerDeviceId || null;
-  if (data.intervalSecs) {
-    totalSecs = data.intervalSecs;
-    settings.intervalMin = data.intervalSecs / 60;
-  }
-
-  if (data.running && data.startedAt) {
-    _timerStateOwner = sourceRoom;
-    const isFocusTimer = data.mode === 'focus';
-    const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
-    timerStartedAt = data.startedAt;
-    remaining = Math.max(0, totalSecs - elapsed);
-
-    const remoteTask = data.lastTask || currentTask || lastTaskForRepeat || 'Work';
-    const remoteTaskStart = data.taskStartTime || data.blockStartTime || data.startedAt;
-    currentTask = remoteTask;
-    lastTaskForRepeat = remoteTask;
-    taskStartTime = remoteTaskStart;
-    blockStartTime = data.blockStartTime || remoteTaskStart;
-    if (awayActive) {
-      clearInterval(awayElapsedTicker);
-      awayElapsedTicker = null;
-      awayActive = false;
-      awayStartTime = null;
-      awayLabel = 'Away';
-    }
-    if (breakActive) {
-      clearBreakRuntime(sourceRoom, { removeScoped: true, release: true });
-    }
-
-    const nameEl = document.getElementById('hero-task-name');
-    if (nameEl) nameEl.textContent = remoteTask;
-    if (isFocusTimer) {
-      syncedFocusTimer = {
-        running: true,
-        task: remoteTask,
-        focusPhase: data.focusPhase || 'work',
-        startedAt: data.startedAt,
-        intervalSecs: totalSecs,
-        ownerDeviceId: data.ownerDeviceId || data.updatedBy || null,
-        updatedAt: data.updatedAt || Date.now(),
-        deviceName: data.deviceName || null
-      };
-      if (typeof syncFocusOverlayFromRemote === 'function') syncFocusOverlayFromRemote();
-    } else {
-      syncedFocusTimer = null;
-    }
-
-    if (!running) {
-      running = true;
-      const intervalEl = document.getElementById('interval-input');
-      if (intervalEl) intervalEl.value = settings.intervalMin;
-      document.getElementById('main-btn').textContent = 'Break';
-      showHeroState('active');
-      document.getElementById('activity-hero').classList.add('tracking');
-      if (!ticker) {
-        ticker = setInterval(() => {
-          remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-          updateLiveCost();
-          remaining <= 0 ? doPing() : updateRing();
-        }, 1000);
-      }
-    }
-    document.getElementById('timer-status').textContent = isFocusTimer
-      ? `Focus synced · ${remoteTask}`
-      : `Synced · pinging every ${settings.intervalMin} min`;
-    updateTimerTaskLabel();
-    rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
-    updateTimerSyncDetail(data, `${isFocusTimer ? 'focus' : 'active'}: ${remoteTask}`);
-    fbTimerReceived = true;
-    updateRing();
-    persist();
-    scheduleRenderToday();
-    return true;
-  }
-
-  if (!data.running) {
-    fbTimerReceived = true;
-    if (data.stopped) {
-      const hadTimer = running || !!taskStartTime || !!timerStartedAt || !!currentTask;
-      rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
-      if (data.mode === 'focus') {
-        syncedFocusTimer = null;
-        if (typeof clearSyncedFocusOverlay === 'function') clearSyncedFocusOverlay();
-      }
-      if (hadTimer) resetTimer();
-      updateTimerSyncDetail(data, 'timer stopped');
-      return hadTimer;
-    }
-
-    if (data.ownerRoom === sourceRoom) {
-      _timerStateOwner = sourceRoom;
-      timerOwnerDeviceId = data.ownerDeviceId || data.updatedBy || null;
-      if (data.lastTask) {
-        currentTask = data.lastTask;
-        lastTaskForRepeat = data.lastTask;
-      }
-    }
-
-    if (data.pausedRemaining != null) remaining = data.pausedRemaining;
-    if (running) {
-      running = false;
-      clearInterval(ticker);
-      ticker = null;
-      persist();
-      document.getElementById('main-btn').textContent = 'Resume';
-      document.getElementById('timer-status').textContent = 'Paused (synced)';
-      updateTimerTaskLabel();
-      rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
-      updateTimerSyncDetail(data, 'timer paused');
-      updateRing();
-      return true;
-    }
-    rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
-    updateTimerSyncDetail(data, 'timer idle');
-  }
-  updateRing();
-  return false;
+  if (!data || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
+  return requestAccountingRefresh();
 }
 
 function applyRemoteAwayState(data, sourceRoom = _localStateOwner) {
-  if (!data) return false;
-  if (!sourceRoom || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
-  if (data.ownerRoom && data.ownerRoom !== sourceRoom) return false;
-  if (isStaleRemoteAwayState(data)) {
-    updateTimerSyncDetail({
-      updatedAt: data.updatedAt || data.startedAt || Date.now(),
-      updatedBy: data.startedBy,
-      deviceName: data.deviceName
-    }, 'ignored stale away', 'away');
-    return false;
-  }
-  if (data.startedBy === syncedDeviceId && awayActive && awayStateOwnedByCurrentAccount()) {
-    if (data.updatedAt || data.startedAt) rememberAwaySyncStamp(remoteAwaySyncStamp(data));
-    return false;
-  }
-  if (data.active && data.label) {
-    _awayStateOwner = sourceRoom;
-    const startedAt = data.startedAt || Date.now();
-    const changed = !awayActive || awayLabel !== data.label || awayStartTime !== startedAt;
-    if (!changed) return false;
-
-    rememberAwaySyncStamp(remoteAwaySyncStamp(data) || Date.now());
-    const mirroredTimer = running && (!timerOwnerDeviceId || timerOwnerDeviceId !== syncedDeviceId);
-    if (mirroredTimer) {
-      running = false;
-      clearInterval(ticker);
-      ticker = null;
-      if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
-      if (typeof cancelNativePing === 'function') cancelNativePing();
-      timerStartedAt = null;
-      taskStartTime = null;
-      blockStartTime = null;
-      timerOwnerDeviceId = null;
-      currentTask = '';
-      totalSecs = settings.intervalMin * 60;
-      remaining = totalSecs;
-      const mainBtn = document.getElementById('main-btn');
-      if (mainBtn) { mainBtn.textContent = 'Start'; mainBtn.disabled = false; }
-      const switchBtn = document.getElementById('switch-btn');
-      if (switchBtn) switchBtn.style.display = 'none';
-      const breakBtn = document.getElementById('break-btn');
-      if (breakBtn) breakBtn.style.display = 'none';
-      updateTimerTaskLabel();
-    }
-    awayActive = true;
-    awayStartTime = startedAt;
-    awayLabel = data.label;
-    showHeroState('away');
-    const labelEl = document.getElementById('hero-away-label');
-    if (labelEl) labelEl.textContent = data.label;
-    clearInterval(awayElapsedTicker);
-    const renderElapsed = () => {
-      const s = Math.floor((Date.now() - awayStartTime) / 1000);
-      const el = document.getElementById('hero-away-elapsed');
-      if (el) el.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
-    };
-    renderElapsed();
-    awayElapsedTicker = setInterval(renderElapsed, 1000);
-    const statusEl = document.getElementById('timer-status');
-    if (statusEl) statusEl.textContent = `Away · ${data.label} · synced`;
-    updateTimerSyncDetail({
-      updatedAt: data.updatedAt || Date.now(),
-      updatedBy: data.startedBy,
-      deviceName: data.deviceName
-    }, `away: ${data.label}`, 'away');
-    return true;
-  }
-  if (!data.active && awayActive) {
-    if (_awayStateOwner !== sourceRoom) return false;
-    // Remote ended away — clear local away UI. The device ending away owns the entry log.
-    rememberAwaySyncStamp(remoteAwaySyncStamp(data) || Date.now());
-    clearInterval(awayElapsedTicker);
-    awayElapsedTicker = null;
-    awayActive = false;
-    awayStartTime = null;
-    awayLabel = 'Away';
-    _awayStateOwner = null;
-    showHeroState('idle');
-    updateTimerSyncDetail({
-      updatedAt: data.updatedAt || Date.now(),
-      updatedBy: data.startedBy,
-      deviceName: data.deviceName
-    }, 'away ended', 'away');
-    return true;
-  }
-  return false;
+  if (!data || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
+  return requestAccountingRefresh();
 }
 
-function syncTimerState(extra = {}) {
-  const ownerRoom = extra.ownerRoom || _timerStateOwner;
-  const ref = ownedRoomRef();
-  if (!ref || !ownerRoom || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
-  const now = Date.now();
-  rememberTimerSyncStamp(now);
+/** The timer node syncTimerState() publishes for `extra` right now. An acknowledged Undo freezes
+ *  its proposed cursor publication with the same builder, so no timer field is computed twice. */
+function buildTimerPublication(extra = {}, ownerRoom = extra.ownerRoom || _timerStateOwner,
+  frame = { running, totalSecs, remaining, currentTask, lastTaskForRepeat, taskStartTime, blockStartTime,
+    timerStartedAt, trackingStartedAt, timerOwnerDeviceId }, now = Date.now()) {
+  const { running, totalSecs, remaining, currentTask, lastTaskForRepeat, taskStartTime, blockStartTime,
+    timerStartedAt, trackingStartedAt, timerOwnerDeviceId } = frame;
   const isStopped = !!extra.stopped;
   const hasExplicitRunning = Object.prototype.hasOwnProperty.call(extra, 'running');
   const isRunning = isStopped ? false : (hasExplicitRunning ? !!extra.running : running);
   const intervalSecs = extra.intervalSecs || totalSecs;
   const startedAt = Object.prototype.hasOwnProperty.call(extra, 'startedAt')
     ? extra.startedAt
-    : (isRunning ? Date.now() - (intervalSecs - remaining) * 1000 : null);
+    : (isRunning ? now - (intervalSecs - remaining) * 1000 : null);
   const taskAnchor = extra.taskStartTime || taskStartTime || blockStartTime || timerStartedAt || startedAt || now;
   const blockAnchor = extra.blockStartTime || blockStartTime || taskStartTime || timerStartedAt || startedAt || now;
   const lastTask = Object.prototype.hasOwnProperty.call(extra, 'lastTask')
@@ -2160,6 +1797,7 @@ function syncTimerState(extra = {}) {
     intervalSecs,
     startedAt: isRunning ? startedAt : null,
     taskStartTime: isRunning ? taskAnchor : null,
+    trackingStartedAt: isRunning ? trackingStartedAt : null,
     blockStartTime: isRunning ? blockAnchor : null,
     pausedRemaining: isRunning || isStopped ? null : remaining,
     ownerDeviceId: isStopped ? null : (extra.ownerDeviceId || timerOwnerDeviceId || null),
@@ -2171,13 +1809,13 @@ function syncTimerState(extra = {}) {
     deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
   };
   timer.ownerRoom = ownerRoom;
-  ref.update({
-    timer
-  });
-  updateTimerSyncDetail(timer, extra.stateLabel || (timer.running
-    ? `${timer.mode === 'focus' ? 'focus' : 'active'}: ${timer.lastTask || 'Work'}`
-    : timer.stopped ? 'timer stopped' : 'timer paused'));
-  return true;
+  return timer;
+}
+
+function syncTimerState(extra = {}) {
+  const matches = Object.keys(extra).every(key => key === 'stateLabel' || key === 'ownerRoom' && extra[key] === roomCode);
+  return typeof syncAccountingCompatibility === 'function'
+    ? syncAccountingCompatibility('syncTimerState', cloneUndoValue(extra), matches) : Promise.resolve(false);
 }
 
 function resolveEntrySync(local, remote, nowTs = Date.now()) {
@@ -2208,28 +1846,13 @@ function notifySyncWriteFailed(err) {
 }
 
 function syncEntries() {
-  // Only the joined room's own entries, into that room — checked right before the write.
-  const ref = ownedRoomRef();
-  if (!ref) return Promise.resolve(false);
-  const updates = {};
-  entries.forEach(e => { updates[`entries/e_${e.id}`] = e; });
-  return ref.update(updates)
-    .then(() => { publishPublicStats(); return true; })
-    .catch(err => { notifySyncWriteFailed(err); return false; });
+  return typeof syncAccountingCompatibility === 'function'
+    ? syncAccountingCompatibility('syncEntries') : Promise.resolve(false);
 }
 
 function syncFocusRedemptions() {
-  // Only the joined room's own focus redemptions, into that room — checked right before the write.
-  const ref = ownedRoomRef();
-  if (!ref) return Promise.resolve(false);
-  const updates = {};
-  focusRedemptions.forEach(item => {
-    if (item && item.id) updates[`focusRedemptions/r_${item.id}`] = item;
-  });
-  if (!Object.keys(updates).length) return Promise.resolve(false);
-  return ref.update(updates)
-    .then(() => true)
-    .catch(err => { notifySyncWriteFailed(err); return false; });
+  return typeof syncAccountingCompatibility === 'function'
+    ? syncAccountingCompatibility('syncFocusRedemptions') : Promise.resolve(false);
 }
 
 function publishPublicStats() {
@@ -2888,6 +2511,17 @@ function tryAutoConnect() {
 // ── Entry schema validation ──────────────────────────────────────────────────
 const VALID_ENERGY = new Set(['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste','admin','distraction','break','away']);
 const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
+
+// Ordinary entry IDs remain positive safe integers; chronology stays in tsStart/ts.
+function newEntryId(existingEntries = entries) {
+  let id;
+  do {
+    const words = crypto.getRandomValues(new Uint32Array(2));
+    // 21 high bits + 32 low bits give an exactly representable 53-bit identity.
+    id = (words[0] & 0x1fffff) * 0x100000000 + words[1];
+  } while (!id || existingEntries.some(entry => entry.id === id));
+  return id;
+}
 
 // Warns on creation, account load and remote changes without altering stored records.
 // Never throws — validation is defensive only; a malformed entry is better than a crash.

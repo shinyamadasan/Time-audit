@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
 
 const storage = readFileSync(new URL('./storage.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const index = readFileSync(new URL('./index.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// Historical listener/source-write assertions retain their original expectations on pinned source.
+// Current coordinator/SDK behavior is qualified separately in accounting-staged-effects.spec.js.
+const historicalListener = readFileSync(new URL('./accounting-hazards/baseline-entry-validation-listener.js.txt', import.meta.url), 'utf8');
+const historicalSync = readFileSync(new URL('./accounting-hazards/baseline-storage-sync-entries.js.txt', import.meta.url), 'utf8');
 const NOW = Date.parse('2026-10-24T12:00:00Z');
 const clone = value => JSON.parse(JSON.stringify(value));
 
@@ -12,7 +17,7 @@ function fn(source, name) {
   const start = source.indexOf('function ' + name + '(');
   const end = source.indexOf('\n}', start);
   assert.ok(start >= 0 && end > start, 'source function missing: ' + name);
-  return source.slice(start, end + 2);
+  return source.slice(source.slice(start - 6, start) === 'async ' ? start - 6 : start, end + 2);
 }
 
 function entry(extra = {}) {
@@ -30,6 +35,7 @@ function harness() {
   const elements = new Map();
   const noop = () => {};
   const context = vm.createContext({
+    crypto: webcrypto,
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : [now])); }
       static now() { return now; }
@@ -62,7 +68,8 @@ function harness() {
     _dateKeyPlusDays: (date, days) => new Date(Date.parse(date + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10),
     activityGroupKey: text => text.toLowerCase(), canonicalizeActivityInput: text => text,
     getActivityColor: noop, getEntriesOverlappingRange: () => [],
-    taskStartTime: null, rememberCreatedUndo: noop, showUndoToast: noop, fmtDur: String,
+    taskStartTime: null, trackingStartedAt: null, _restoredTimerSync: null,
+    rememberCreatedUndo: noop, showUndoToast: noop, fmtDur: String,
     COMMON_LOG_OPTIONS: [], getViewingDateKey: () => '2026-10-24',
     learnWastePattern: noop, resetRetroBar: noop, checkBudget: noop, showToast: noop,
     breakStateOwnerRoom: () => context.roomCode, timerStateOwnerRoom: () => context.roomCode,
@@ -71,6 +78,29 @@ function harness() {
     breakTicker: null, ticker: null, currentTask: 'Synthetic task', lastTaskForRepeat: '',
     releaseBreakStateOwnership: noop, playAlert: noop, syncedDeviceId: 'fixture-device',
   });
+  context.window = context;
+  context.accountingPendingStop = () => false;
+  context.timeAckBlocks = () => false;
+  context._startHeartbeat = noop;
+  context.cloneUndoValue = clone;
+  // This domain fixture acknowledges produced facts. It does not qualify transport or rules.
+  context.stageAccountingChange = async (_name, reduce) => {
+    const draft = { entries: clone(context.entries), focusRedemptions: [], lastUndoAction: context.lastUndoAction };
+    if (reduce(draft, now) === false) return false;
+    const previous = context.entries;
+    Object.assign(context, draft);
+    const changed = draft.entries.filter(row => !previous.some(old => JSON.stringify(old) === JSON.stringify(row)));
+    if (changed.length) writes.push({ room: context.roomCode, changes: Object.fromEntries(changed.map(row => ['entries/e_' + row.id, clone(row)])) });
+    context.persist(); return true;
+  };
+  context.stageAccountingObservation = async (name, facts) => {
+    const row = facts.entry;
+    if (row && !context.entries.some(item => item.id === row.id)) {
+      context.entries.push(clone(row)); writes.push({ room: context.roomCode, changes: { ['entries/e_' + row.id]: clone(row) } });
+    }
+    if (name === 'break-end') { context.breakActive = false; context.running = true; }
+    context.persist(); return true;
+  };
   const begin = storage.indexOf('// ── Entry schema validation');
   const end = storage.indexOf('// ── Goal helpers', begin);
   assert.ok(begin >= 0 && end > begin);
@@ -78,7 +108,7 @@ function harness() {
   for (const name of ['accountLocalKey', 'setAccountLocal', 'removeAccountLocal', 'bindAccountLocalState', 'persist', 'resolveEntrySync', 'syncEntries']) {
     vm.runInContext(fn(storage, name), context);
   }
-  for (const name of ['autoTemplateEntryId', 'templateSkippedOnDate', 'templateCoverageDuration', 'templateSlotCovered', 'autoLogDueTemplates', 'endBreak', 'quickRetroLog']) {
+  for (const name of ['autoTemplateEntryId', 'templateSkippedOnDate', 'templateCoverageDuration', 'templateSlotCovered', 'autoLogDueTemplates', 'applyAutoTemplateEntries', 'endBreak', 'quickRetroLog']) {
     vm.runInContext(fn(index, name), context);
   }
   return {
@@ -90,38 +120,38 @@ function harness() {
       if (rows) values.set('ta3-entries:' + room, JSON.stringify(rows));
       context.bindAccountLocalState(room);
     },
-    listen() {
+    listen({ current = false } = {}) {
       const generation = context._syncGeneration;
       const room = context.roomCode;
       context.isCurrentSync = () => context.roomCode === room && context._syncGeneration === generation;
-      const start = storage.indexOf("  fbDb.ref(" + String.fromCharCode(96) + 'rooms/${roomCode}/entries');
-      const end = storage.indexOf("  fbDb.ref(" + String.fromCharCode(96) + 'rooms/${roomCode}/intention', start);
-      assert.ok(start >= 0 && end > start, 'entry listener source anchors missing');
-      vm.runInContext('(function(isCurrentSync) {' + storage.slice(start, end) + '})(isCurrentSync);', context);
+      const start = storage.indexOf('  fbDb.ref(`rooms/${roomCode}/entries`)');
+      const end = storage.indexOf('  fbDb.ref(`rooms/${roomCode}/intention`', start);
+      assert.ok(start >= 0 && end > start);
+      vm.runInContext('(function(isCurrentSync) {' + (current ? storage.slice(start, end) : historicalListener) + '})(isCurrentSync);', context);
       const callback = callbacks.at(-1);
       return value => callback({ val: () => clone(value) });
     },
   };
 }
 
-test('actual scheduled auto-log producer keeps its deterministic ID and does not falsely warn or repeat writes', () => {
+test('actual scheduled auto-log producer keeps its deterministic ID and does not falsely warn or repeat writes', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.settings.templates = [{ id: 'schedule/fixture', activity: 'Synthetic scheduled work', energy: 'deep',
     enabled: true, autoLog: true, days: [6] }];
   h.context.templateSlotRange = (_tpl, day) => ({ tsStart: Date.parse(day + 'T01:00:00Z'), tsEnd: Date.parse(day + 'T11:00:00Z') });
-  assert.equal(h.context.autoLogDueTemplates({ notify: false }), true);
+  assert.equal(await h.context.autoLogDueTemplates({ notify: false }), true);
   const [row] = h.rows();
   assert.equal(row.id, 'tpllog_schedule_fixture_2026-10-24');
   assert.equal(row.blockIntervalMin, 600);
   assert.equal(h.warnings.length, 0);
   assert.equal(h.writes.length, 1);
-  assert.equal(h.context.autoLogDueTemplates({ notify: false }), false);
+  assert.equal(await h.context.autoLogDueTemplates({ notify: false }), false);
   assert.equal(h.writes.length, 1);
   assert.equal(h.rows().length, 1);
 });
 
-test('scheduled IDs survive history edits without needing current templates, markers or matching dates', () => {
+test('scheduled IDs survive history edits without needing current templates, markers or matching dates', async () => {
   const h = harness();
   const row = entry({ id: 'tpllog_old_template_2026-10-23', date: '2026-10-24' });
   h.context.validateEntry(row);
@@ -131,7 +161,7 @@ test('scheduled IDs survive history edits without needing current templates, mar
 
 for (const id of [0, -1, NaN, Infinity, null, {}, '', '123', 'tpl_hint_2026-10-24', 'unknown',
   'tpllog_a.b_2026-10-24', 'tpllog_a_2026-10-24\n', 'tpllog_a_2026-10-24/other']) {
-  test('malformed or unsupported ID remains diagnostic: ' + String(id), () => {
+  test('malformed or unsupported ID remains diagnostic: ' + String(id), async () => {
     const h = harness();
     h.context.validateEntry(entry({ id }));
     assert.match(h.warnings[0]?.message || '', /id invalid/);
@@ -139,14 +169,14 @@ for (const id of [0, -1, NaN, Infinity, null, {}, '', '123', 'tpl_hint_2026-10-2
   });
 }
 
-test('other malformed fields remain diagnostic even with a legitimate scheduled ID', () => {
+test('other malformed fields remain diagnostic even with a legitimate scheduled ID', async () => {
   const h = harness();
   h.context.validateEntry(entry({ id: 'tpllog_fixture_2026-10-24', ts: 0, blockIntervalMin: 0, activity: '', energy: 'unknown', date: 'invalid' }));
   assert.match(h.warnings[0].message, /ts invalid; blockIntervalMin < 1; activity missing; energy "unknown" not recognised; date "invalid" not YYYY-MM-DD/);
   assert.doesNotMatch(h.warnings[0].message, /id invalid/);
 });
 
-test('repeated account loads report real zero-minute history without changing its ID, interval or duration or syncing it', () => {
+test('repeated account loads report real zero-minute history without changing its ID, interval or duration or syncing it', async () => {
   const h = harness();
   const row = entry({ tsStart: NOW - 5400, blockIntervalMin: 0, energy: 'recovery', category: 'recovery', originalLabel: 'recovery' });
   h.bind('uid_A', [row]);
@@ -158,7 +188,7 @@ test('repeated account loads report real zero-minute history without changing it
   assert.equal(h.writes.length, 0);
 });
 
-test('stable remote replay converges without revalidating unchanged rows or causing entry writes', () => {
+test('historical listener (73739e9): stable remote replay converges without revalidating unchanged rows or causing entry writes', async () => {
   const h = harness();
   h.bind('uid_A', []);
   const deliver = h.listen();
@@ -177,7 +207,7 @@ test('stable remote replay converges without revalidating unchanged rows or caus
   assert.equal(h.rows()[0].id, NOW + 2);
 });
 
-test('unchanged malformed remote rows missing both timestamps can revalidate via the existing version fallback, without writing Firebase', () => {
+test('historical listener (73739e9): unchanged malformed remote rows missing both timestamps can revalidate via the existing version fallback, without writing Firebase', async () => {
   const h = harness();
   h.bind('uid_A', []);
   const deliver = h.listen();
@@ -189,11 +219,12 @@ test('unchanged malformed remote rows missing both timestamps can revalidate via
   assert.equal(h.rows()[0].blockIntervalMin, 0);
 });
 
-test('explicit sync sends existing rows unchanged; its echo and validation do not schedule another sync', async () => {
+test('historical listener (73739e9): explicit sync sends existing rows unchanged; its echo and validation do not schedule another sync', async () => {
   const h = harness();
   const rows = [entry({ id: 'tpllog_fixture_2026-10-24' }), entry({ id: NOW + 1, blockIntervalMin: 0 })];
   h.bind('uid_A', rows);
   const deliver = h.listen();
+  vm.runInContext(historicalSync, h.context); // exact021d1ee legacy writer; not current staged publication
   await h.context.syncEntries();
   assert.equal(h.writes.length, 1);
   assert.deepEqual(Object.values(h.writes[0].changes), h.rows());
@@ -202,12 +233,12 @@ test('explicit sync sends existing rows unchanged; its echo and validation do no
   assert.deepEqual(h.rows(), rows);
 });
 
-test('actual early-break producer keeps the owner sample 5.4-second interval as a valid one-minute record (TASK-026)', () => {
+test('actual early-break producer keeps the owner sample 5.4-second interval as a valid one-minute record (TASK-026)', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.breakActive = true;
   h.context.breakStartTs = NOW - 5400;
-  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.equal(await h.context.endBreak('uid_A'), true);
   const [row] = h.rows();
   assert.equal(row.ts - row.tsStart, 5400);
   assert.equal(row.blockIntervalMin, 1);
@@ -218,13 +249,13 @@ test('actual early-break producer keeps the owner sample 5.4-second interval as 
   assert.equal(h.writes.length, 1, 'one explicit producer sync, not a validation loop');
 });
 
-test('actual quick-retro 23:00-00:00 no longer creates an empty second fragment (TASK-026)', () => {
+test('actual quick-retro 23:00-00:00 no longer creates an empty second fragment (TASK-026)', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.document.getElementById('retro-task').value = 'Synthetic past work';
   h.context.document.getElementById('retro-qstart').value = '23:00';
   h.context.document.getElementById('retro-qend').value = '00:00';
-  h.context.quickRetroLog();
+  await h.context.quickRetroLog();
   assert.deepEqual(h.rows().map(row => row.blockIntervalMin), [60]);
   assert.ok(h.rows().every(row => row.ts > row.tsStart));
   assert.equal(h.warnings.length, 0);
@@ -249,37 +280,37 @@ function fillRetroModal(h, start, end) {
   h.context.document.getElementById('retro-end').value = end;
 }
 
-test('TASK-026 a normal break keeps its rounded duration and exact interval', () => {
+test('TASK-026 a normal break keeps its rounded duration and exact interval', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.breakActive = true;
   h.context.breakStartTs = NOW - 25 * 60_000;
-  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.equal(await h.context.endBreak('uid_A'), true);
   const [row] = h.rows();
   assert.equal(row.blockIntervalMin, 25);
   assert.equal(row.ts - row.tsStart, 25 * 60_000);
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 a clock-skewed break with no positive interval stores no entry but still resumes the timer', () => {
+test('TASK-026 a clock-skewed break with no positive interval stores no entry but still resumes the timer', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.breakActive = true;
   h.context.breakStartTs = NOW + 2000;
-  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.equal(await h.context.endBreak('uid_A'), true);
   assert.deepEqual(h.rows(), []);
   assert.equal(h.context.breakActive, false);
   assert.equal(h.context.running, true);
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 quick retro ending exactly at midnight is one start-day record, not an empty fragment', () => {
+test('TASK-026 quick retro ending exactly at midnight is one start-day record, not an empty fragment', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.document.getElementById('retro-task').value = 'Synthetic past work';
   h.context.document.getElementById('retro-qstart').value = '23:00';
   h.context.document.getElementById('retro-qend').value = '00:00';
-  h.context.quickRetroLog();
+  await h.context.quickRetroLog();
   const rows = h.rows();
   assert.equal(rows.length, 1);
   assert.equal(rows[0].blockIntervalMin, 60);
@@ -289,25 +320,25 @@ test('TASK-026 quick retro ending exactly at midnight is one start-day record, n
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 quick retro that genuinely crosses midnight still splits by date', () => {
+test('TASK-026 quick retro that genuinely crosses midnight still splits by date', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.context.document.getElementById('retro-task').value = 'Synthetic past work';
   h.context.document.getElementById('retro-qstart').value = '23:30';
   h.context.document.getElementById('retro-qend').value = '00:15';
-  h.context.quickRetroLog();
+  await h.context.quickRetroLog();
   const rows = h.rows().sort((a, b) => a.tsStart - b.tsStart);
   assert.deepEqual(rows.map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 30], ['2026-10-25', 15]]);
   assert.equal(rows[0].ts, rows[1].tsStart);
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 a positive sub-minute midnight fragment is kept with exact timestamps and one minute', () => {
+test('TASK-026 a positive sub-minute midnight fragment is kept with exact timestamps and one minute', async () => {
   const h = harness();
   h.bind('uid_A', []);
   h.setNow(Date.parse('2026-10-25T00:00:10Z'));
   h.context.document.getElementById('retro-task').value = 'Synthetic past work';
-  h.context.quickRetroLog();
+  await h.context.quickRetroLog();
   const rows = h.rows().sort((a, b) => a.tsStart - b.tsStart);
   assert.deepEqual(rows.map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 30], ['2026-10-25', 1]]);
   assert.equal(rows[1].ts - rows[1].tsStart, 10_000);
@@ -315,20 +346,20 @@ test('TASK-026 a positive sub-minute midnight fragment is kept with exact timest
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 retro modal ending exactly at midnight is one record, still splits a real crossing', () => {
+test('TASK-026 retro modal ending exactly at midnight is one record, still splits a real crossing', async () => {
   const h = retroHarness();
   h.bind('uid_A', []);
   fillRetroModal(h, '23:00', '00:00');
-  h.context.saveRetroEntry();
+  await h.context.saveRetroEntry();
   assert.deepEqual(h.rows().map(row => [row.date, row.blockIntervalMin]), [['2026-10-24', 60]]);
   fillRetroModal(h, '23:45', '00:30');
-  h.context.saveRetroEntry();
+  await h.context.saveRetroEntry();
   assert.deepEqual(h.rows().map(row => row.blockIntervalMin).sort((a, b) => a - b), [15, 30, 60]);
   assert.ok(h.rows().every(row => row.ts > row.tsStart));
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 editing a block to end exactly at midnight keeps its ID and creates no fragment', () => {
+test('TASK-026 editing a block to end exactly at midnight keeps its ID and creates no fragment', async () => {
   const h = retroHarness();
   const original = entry({ id: 1_700_000_000_000, tsStart: Date.parse('2026-10-24T22:00:00Z'),
     ts: Date.parse('2026-10-24T22:30:00Z'), blockIntervalMin: 30, retro: true });
@@ -336,7 +367,7 @@ test('TASK-026 editing a block to end exactly at midnight keeps its ID and creat
   h.context.editingEntryId = original.id;
   h.context.editingEntryBase = { startDate: new Date(original.tsStart), crossesMidnight: false };
   fillRetroModal(h, '23:00', '00:00');
-  h.context.saveRetroEntry();
+  await h.context.saveRetroEntry();
   const rows = h.rows();
   assert.equal(rows.length, 1);
   assert.equal(rows[0].id, original.id);
@@ -344,7 +375,7 @@ test('TASK-026 editing a block to end exactly at midnight keeps its ID and creat
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 merged-block edit ending exactly at midnight replaces its sub-entries with one record', () => {
+test('TASK-026 merged-block edit ending exactly at midnight replaces its sub-entries with one record', async () => {
   const h = retroHarness();
   const a = entry({ id: 1_700_000_000_001, tsStart: Date.parse('2026-10-24T22:00:00Z'), ts: Date.parse('2026-10-24T22:30:00Z'), blockIntervalMin: 30 });
   const b = entry({ id: 1_700_000_000_002, tsStart: Date.parse('2026-10-24T22:30:00Z'), ts: Date.parse('2026-10-24T23:00:00Z'), blockIntervalMin: 30 });
@@ -353,12 +384,12 @@ test('TASK-026 merged-block edit ending exactly at midnight replaces its sub-ent
   h.context.editingMergedIds = [a.id, b.id];
   h.context.editingEntryBase = { startDate: new Date(a.tsStart), crossesMidnight: false };
   fillRetroModal(h, '22:00', '00:00');
-  h.context.saveRetroEntry();
+  await h.context.saveRetroEntry();
   assert.deepEqual(h.rows().map(row => [row.id, row.blockIntervalMin]), [[a.id, 120]]);
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 editing a scheduled auto-log to end exactly at midnight keeps its tpllog ID and markers', () => {
+test('TASK-026 editing a scheduled auto-log to end exactly at midnight keeps its tpllog ID and markers', async () => {
   const h = retroHarness();
   const original = entry({ id: 'tpllog_fixture_2026-10-24', tsStart: Date.parse('2026-10-24T22:00:00Z'),
     ts: Date.parse('2026-10-24T23:00:00Z'), blockIntervalMin: 60, autoLogged: true,
@@ -367,7 +398,7 @@ test('TASK-026 editing a scheduled auto-log to end exactly at midnight keeps its
   h.context.editingEntryId = original.id;
   h.context.editingEntryBase = { startDate: new Date(original.tsStart), crossesMidnight: false };
   fillRetroModal(h, '22:00', '00:00');
-  h.context.saveRetroEntry();
+  await h.context.saveRetroEntry();
   const rows = h.rows();
   assert.equal(rows.length, 1);
   assert.equal(rows[0].id, original.id);
@@ -376,7 +407,7 @@ test('TASK-026 editing a scheduled auto-log to end exactly at midnight keeps its
   assert.equal(h.warnings.length, 0);
 });
 
-test('TASK-026 a break with no positive interval offers no undo for a record that does not exist', () => {
+test('TASK-026 a break with no positive interval offers no undo for a record that does not exist', async () => {
   const h = harness();
   const calls = [];
   Object.assign(h.context, { rememberCreatedUndo: (...args) => calls.push(['undo', ...args]),
@@ -384,7 +415,19 @@ test('TASK-026 a break with no positive interval offers no undo for a record tha
   h.bind('uid_A', []);
   h.context.breakActive = true;
   h.context.breakStartTs = NOW;
-  assert.equal(h.context.endBreak('uid_A'), true);
+  assert.equal(await h.context.endBreak('uid_A'), true);
   assert.deepEqual(h.rows(), []);
   assert.deepEqual(calls, [['toast', 'Break over']]);
+});
+test('current staged listener retains raw source and requests coherent accounting without publishing compatibility entries', async () => {
+  const h = harness(); h.bind('uid_A', []);
+  const raw = { e_sample: entry() }; let reads = 0;
+  h.context._accountingRawEntries = {};
+  h.context.requestAccountingRefresh = () => { reads++; return Promise.resolve(false); };
+  h.context.syncAccountingCompatibility = name => { assert.equal(name, 'syncEntries'); return Promise.resolve(false); };
+  h.listen({ current: true })(raw);
+  assert.deepEqual(clone(h.context._accountingRawEntries), raw);
+  assert.equal(reads, 1); assert.equal(h.context._accountingSourcesSeen.has('entries'), true);
+  assert.deepEqual(h.rows(), []); assert.equal(await h.context.syncEntries(), false);
+  assert.equal(h.writes.length, 0);
 });

@@ -23,3 +23,6 @@ scripts/life-ledger-sync-worker.config.json
 
 # fence-source-mutation.test.js writes (and removes) deliberately broken copies of modules next to the sources.
 .mutant-*.js
+
+# TASK-039 packaged verification artifacts (scripts/build-release-artifacts.mjs).
+.release-artifacts/

@@ -119,6 +119,13 @@ is recorded here for visibility, not as an approval.)*
 
 ## Known Issues & Debt
 
+### Open from TASK-039 diagnostics (November 1, 2026)
+
+- **Autofill clear can blank a prefilled form (low severity, not fixed).** The one-time clear 800ms
+  after load (`index.html:13970`) blanks unfocused activity inputs. A prefilled edit form opened
+  before it fires goes blank and Save refuses; nothing is written, so the user only retypes.
+  Smallest correction when approved: skip inputs inside an open overlay.
+  Evidence: `accounting-hazards/evidence/intermittent-diagnostics-20261101/` (B2, B6).
 ### Deferred from Phase 11.7 (audited, not actioned -- kept scope to high-confidence changes)
 
 - **Gated-pipeline dormant layers.** `PLAN.md`, `planning/BUILD_QUEUE.md`, `planning/DONE.md`,

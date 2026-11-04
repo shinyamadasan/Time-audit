@@ -41,8 +41,15 @@ jobs:
       - name: Bundle Conversational Read Worker without deploying
         run: npm run check:bundle --prefix workers/chronasense-conversational-bridge
 
+      - name: Set up Java (real-SDK browser tests)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Run smoke tests
-        run: npm run test:smoke
+        # Real-SDK browser cases need the same pinned emulator as the separate fence job.
+        run: npm run provision:rtdb-emulator && npm run test:smoke
 
   # Required gate: firebase.rules.json is part of the production correctness boundary for the Brain Dump
   # promotion fence, so the REAL Realtime Database emulator suites must run on every change. Nothing here may be

@@ -26,6 +26,53 @@ import { brainDumpPlanItemId, normalizeCapture } from './brain-dump-model.js';
 import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
+
+for (const type of ['do-today', 'schedule']) {
+  test(`TASK-031 existing ${type}: edited and reopened remote text cannot be reverted by a stale device`, async () => {
+    const room=makeRoom(),a=makeDevice({room,deviceId:'stale-a',now:T0+100}),b=makeDevice({room,deviceId:'editor-b',now:T0+50});
+    const {record}=a.repository.create({text:'Original source text',now:T0});
+    a.repository.triage(record.id,{important:true,urgent:true,now:T0+1});await a.bridge.syncCapture(record.id);await b.pull(record.id);
+    assert.equal(b.repository.archive(record.id,{now:T0+20}).ok,true);await b.bridge.syncCapture(record.id);
+    assert.equal(b.repository.editHandled(record.id,{text:'Edited through existing handled workflow',now:T0+30}).ok,true);await b.bridge.syncCapture(record.id);
+    assert.equal(b.repository.reopen(record.id,{now:T0+40}).ok,true);await b.bridge.syncCapture(record.id);
+    const before=room.raw()[record.id],authority=makeFakePlanAuthority();
+    const result=await promoteCaptureToPlan({repository:a.repository,planAuthority:authority,claimPromotionRemote:a.claimPromotionRemote,id:record.id,type,dateKey:'2026-10-02',now:T0+100,deviceId:'stale-a'});
+    assert.equal(result.reason,'source-changed');assert.equal(result.ok,false);assert.equal(authority.calls.addItem,0);
+    assert.deepEqual(room.raw()[record.id],before);assert.equal(a.repository.read(record.id).text,before.text);assert.equal(a.repository.read(record.id).reopenCount,1);
+  });
+  test(`TASK-031 existing ${type}: stale classification cannot overwrite a newer remote answer`, async () => {
+    const room = makeRoom();
+    const a = makeDevice({room,deviceId:'stale-a',now:T0+100});
+    const b = makeDevice({room,deviceId:'remote-b',now:T0+50});
+    const {record} = a.repository.create({text:'Existing workflow capture',now:T0});
+    a.repository.triage(record.id,{important:true,urgent:true,now:T0+1});
+    await a.bridge.syncCapture(record.id);await b.pull(record.id);
+    b.repository.triage(record.id,{important:true,urgent:false,now:T0+50});
+    await b.bridge.syncCapture(record.id);
+    const before=room.raw()[record.id],authority=makeFakePlanAuthority();
+    const result=await promoteCaptureToPlan({repository:a.repository,planAuthority:authority,claimPromotionRemote:a.claimPromotionRemote,id:record.id,type,dateKey:'2026-10-02',now:T0+100,deviceId:'stale-a'});
+    assert.equal(result.ok,false);assert.equal(result.reason,'source-changed');
+    assert.deepEqual(room.raw()[record.id],before,'remote classification and provenance remain exact');
+    assert.equal(authority.calls.addItem,0);assert.equal(a.repository.read(record.id).urgent,false);
+    const retry=await promoteCaptureToPlan({repository:a.repository,planAuthority:authority,claimPromotionRemote:a.claimPromotionRemote,id:record.id,type,dateKey:'2026-10-02',now:T0+101,deviceId:'stale-a'});
+    assert.equal(retry.ok,true);assert.equal(authority.calls.addItem,1);
+  });
+  test(`TASK-031 existing ${type}: unsynced newer local triage is retained on conflict`, async () => {
+    const room=makeRoom(),a=makeDevice({room,deviceId:'local-a',now:T0+100});
+    const {record}=a.repository.create({text:'Local edit not pushed yet',now:T0});
+    a.repository.triage(record.id,{important:true,urgent:true,now:T0+1});await a.bridge.syncCapture(record.id);
+    const remoteBefore=room.raw()[record.id];
+    a.repository.triage(record.id,{important:true,urgent:false,now:T0+90});
+    const localBefore=a.repository.read(record.id),authority=makeFakePlanAuthority();
+    const result=await promoteCaptureToPlan({repository:a.repository,planAuthority:authority,claimPromotionRemote:a.claimPromotionRemote,id:record.id,type,dateKey:'2026-10-02',now:T0+100,deviceId:'local-a'});
+    assert.equal(result.ok,false);assert.equal(result.reason,'source-changed');
+    assert.deepEqual(room.raw()[record.id],remoteBefore);assert.deepEqual(a.repository.read(record.id),localBefore);
+    assert.equal(authority.calls.addItem,0);
+    await a.bridge.syncCapture(record.id);
+    const retry=await promoteCaptureToPlan({repository:a.repository,planAuthority:authority,claimPromotionRemote:a.claimPromotionRemote,id:record.id,type,dateKey:'2026-10-02',now:T0+101,deviceId:'local-a'});
+    assert.equal(retry.ok,true);assert.equal(authority.calls.addItem,1);assert.equal(room.raw()[record.id].urgent,false);
+  });
+}
 const memory = () => {
   const map = new Map();
   return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) };

@@ -83,6 +83,7 @@ async function openApp(page, { plans = {}, entries = [], deviceId = 'device-test
   }
   await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
+  await page.locator('[data-pt-fold="unfinished"]>summary').click();
 }
 
 test('completed items show as read-only context; unfinished items get a reason box and carry control', async ({ page }) => {
@@ -131,7 +132,8 @@ test('recording a reason persists on today\'s item without touching preparation 
   expect(todayPlan.items.find(i => i.id === 'open-1').reconciliationReason).toBe('Got pulled into an incident call');
   expect(todayPlan.preparation).toBeUndefined();
   // Reconciliation must never itself mark tomorrow "prepared".
-  await expect(page.locator('#plan-tomorrow-readiness')).toContainText('not prepared');
+  await expect(page.locator('#plan-tomorrow-readiness')).toHaveAttribute('data-ready','false');
+  expect(await page.evaluate(()=>PlanAuthority.preparation(PlanAuthority.upcoming()))).toBeNull();
 });
 
 test('carry forward adds a brand-new, independently identified tomorrow item and leaves today untouched', async ({ page }) => {
@@ -139,7 +141,7 @@ test('carry forward adds a brand-new, independently identified tomorrow item and
   await page.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: 'Carry to tomorrow' }).click();
   await expect(page.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: '✓ Carrying to tomorrow' })).toBeVisible();
   await expect(page.locator('.pt-oneoff .pt-oneoff-task', { hasText: 'Write follow-up' })).toHaveCount(1); // shows up in tomorrow's actual list too
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const tomorrowItems = plans[TARGET].items.filter(i => !i.deleted);
@@ -170,7 +172,7 @@ test('two priorities with identical titles remain independent after carry-forwar
     }
   });
   await page.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: 'Carry to tomorrow' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const tomorrowItems = plans[TARGET].items.filter(i => !i.deleted);
   expect(tomorrowItems.map(i => i.task)).toEqual(['Write follow-up', 'Write follow-up']);
@@ -181,7 +183,7 @@ test('reconciliation never blocks confirming tomorrow — no reason, no carry, s
   await openApp(page, { plans: { [TODAY]: { items: [planItem('open-1', 'Write follow-up')] } } });
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Something for tomorrow');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 });
 
@@ -197,10 +199,11 @@ test('carry / un-carry / re-carry survives confirm and reopen with no duplicate 
   await expect(carryButton()).toHaveText('✓ Carrying to tomorrow');
   await expect(page.locator('.pt-oneoff')).toHaveCount(1); // never more than one, even mid-session
 
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click(); // 5. confirm tomorrow
+  await page.getByRole('button', { name: 'Save plan' }).click(); // 5. confirm tomorrow
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
   await page.evaluate(() => openPlanTomorrow()); // 6. reopen again
+  await page.locator('[data-pt-fold="unfinished"]>summary').click();
   await expect(carryButton()).toHaveText('✓ Carrying to tomorrow'); // recognized via deterministic id, not session state
   await expect(page.locator('.pt-oneoff')).toHaveCount(1);
 
@@ -226,8 +229,8 @@ test('two independent devices carrying the same source item converge to one acti
     // Neither device has observed the other's action — each carries purely from its own local state.
     await pageA.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: 'Carry to tomorrow' }).click();
     await pageB.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: 'Carry to tomorrow' }).click();
-    await pageA.getByRole('button', { name: 'Tomorrow is ready' }).click();
-    await pageB.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await pageA.getByRole('button', { name: 'Save plan' }).click();
+    await pageB.getByRole('button', { name: 'Save plan' }).click();
 
     const candidateA = await pageA.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
     const candidateB = await pageB.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
@@ -266,7 +269,7 @@ test('classification failure renders a neutral abstention, never a fabricated em
   // Plan Tomorrow itself remains fully usable and confirmable despite the reconciliation failure.
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Ship the fix');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Save plan' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   const plan = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(plan.items.filter(i => !i.deleted).map(i => i.task)).toEqual(['Ship the fix']);

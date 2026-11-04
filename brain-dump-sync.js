@@ -255,6 +255,9 @@ export function createBrainDumpSyncBridge(deps = {}) {
     // the record is already PROMOTED with exactly our intent and the claim
     // cleared. That is our own win, finished cooperatively, not a competing actor.
     if (promotedTo(finalRecord, promotion)) return { ok: true, record: finalRecord };
+    if (finalRecord && (finalRecord.status === 'untriaged' || finalRecord.status === 'triaged') && !finalRecord.promotionClaim) {
+      return { ok: false, reason: 'source-changed', record: finalRecord };
+    }
     // Lost: either refused by arbitratePromotionClaim (remote already settled,
     // or a competing claim's tie-break beat ours), or something else finished
     // first with a different intent.
@@ -270,7 +273,7 @@ export function createBrainDumpSyncBridge(deps = {}) {
    *  @param {string} id
    *  @param {{type:'do-today'|'schedule', store:string, targetId:string, planItemId:string,
    *           when?:string, durationMinutes?:number}} promotion
-   *  @returns {Promise<{ok:true, record:object} | {ok:false, reason:'offline'|'pending'|'already-claimed'|'already-disposed'|'not-found'|'invalid-input', record?:object}>} */
+   *  @returns {Promise<{ok:true, record:object} | {ok:false, reason:'offline'|'pending'|'source-changed'|'already-claimed'|'already-disposed'|'not-found'|'invalid-input', record?:object}>} */
   function claimPromotionRemote(id, promotion) {
     if (!validBrainDumpId(id)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
     const local = repository.read(id);

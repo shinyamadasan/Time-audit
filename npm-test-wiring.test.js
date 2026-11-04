@@ -31,8 +31,14 @@ const OWN_SCRIPT = new Map([
   ['entry-tombstone-rules-emulator.test.js', 'test:rules-emulator'],
   ['task-completion-emulator.test.js', 'test:rules-emulator'],
   ['nudge-rules-emulator.test.js', 'test:rules-emulator'],
+  // TASK-039 acknowledged Undo lifecycle against the same emulator (canonical + gated variant rules).
+  ['time-ack.test.js', 'test:rules-emulator'],
+  // TASK-039 cutover verifier: installed-rules read-back and the staged client/rules matrix.
+  ['scripts/verify-installed-rules.test.js', 'test:rules-emulator'],
   // The same emulator, driven by real Firebase JS SDK connections (ordering/race proof, the real cf43080 client).
   ['brain-dump-fence-sdk.test.js', 'test:fence-sdk'],
+  ['entry-reliability-sdk.test.js', 'test:fence-sdk'],
+  ['online-planner-sdk.test.js', 'test:fence-sdk'],
   // Rebuilds the rules with one named predicate disabled and attacks the real emulator.
   ['firebase-rules-mutation.test.js', 'test:rules-mutation'],
 ]);

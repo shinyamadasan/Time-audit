@@ -1,0 +1,264 @@
+/* Bundled Inter 4.1 license (also shipped in assets/fonts/OFL.txt):
+Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION AND CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+*/
+/* Daily Command Center — scoped to My Day; existing Brain Dump/Eisenhower is unchanged. */
+@font-face{font-family:'Chrona Inter';src:url('./assets/fonts/InterVariable.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
+#view-today,#plan-tomorrow-overlay,#pt-exit,#pt-return,body.view-today .nav{
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;
+  --ui:'Chrona Inter',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --head:var(--ui);--mono:var(--ui);--muted:var(--away);--muted2:var(--away);
+  font-family:var(--ui);font-size:14px;line-height:1.5;font-optical-sizing:auto;
+}
+.command-brand{font-family:var(--ui);font-size:25px;font-weight:700;margin-bottom:18px;color:var(--text)}
+.command-brand span{color:var(--deep)}
+#command-overview{display:grid;gap:var(--space-4);margin-bottom:var(--space-6);align-items:start}
+#command-overview #up-next{margin:0}
+.command-tile{min-width:0;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:var(--space-4);font-family:var(--ui)}
+.command-tile h2{font-family:var(--ui);font-size:15px;display:flex;justify-content:space-between;gap:var(--space-2);margin:0 0 var(--space-3)}
+.command-tile h2 span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.command-tile p{font-size:13px;line-height:1.5;color:var(--muted);margin-bottom:12px}
+.command-tile ol{list-style:none;display:grid;gap:12px}
+.command-tile li{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.command-priority-status{color:var(--deep)}
+#command-next{font-family:var(--ui);font-size:13px;color:var(--muted);padding:12px 0 0;border-top:1px solid var(--border2);overflow-wrap:anywhere}
+#view-today .timeline-section{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:var(--space-4)}
+#view-today #timeline-blocks .tl-row{display:grid;grid-template-columns:58px 16px minmax(0,1fr);gap:8px;align-items:stretch;margin:0;padding:0 0 8px;border:0}
+#view-today #timeline-blocks .tl-time{font-family:var(--ui);font-size:13px;font-weight:500;line-height:1.5;padding-top:17px;width:auto;color:var(--muted);white-space:normal}
+#view-today #timeline-blocks .tl-bar-col{position:relative;width:2px;min-height:100%;margin:0;justify-self:center;background:var(--border3)}
+#view-today #timeline-blocks .tl-bar-col::after{content:'';position:absolute;width:10px;height:10px;top:23px;left:50%;transform:translateX(-50%);border-radius:50%;background:var(--bg2);border:3px solid var(--shallow)}
+#view-today #timeline-blocks .tl-plan-row .tl-bar-col::after{border-color:var(--break)}
+#view-today #timeline-blocks .tl-row:has(.command-card[open]) .tl-bar-col::after{border-color:var(--deep);background:var(--deep)}
+.command-card{min-width:0;background:var(--bg);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden}
+.command-card[open]{border-color:var(--deep)}
+.command-card>summary{display:flex;flex-direction:column;justify-content:center;min-height:68px;padding:13px 42px 13px 16px;position:relative;list-style:none;cursor:pointer;font-family:var(--ui)}
+.command-card>summary,.command-card-body{text-align:left}
+#view-today #timeline-details .command-card>summary{display:block;text-align:left;padding:13px 42px 13px 16px}
+.command-card summary .command-headline,.command-card-body .tl-activity{width:100%;text-align:left;color:var(--text)}
+.command-card>summary::-webkit-details-marker{display:none}
+.command-card>summary::after{content:'⌄';position:absolute;right:16px;top:20px;color:var(--muted);font-size:18px}
+.command-card[open]>summary::after{content:'⌃'}
+.command-card summary .command-headline{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-family:var(--ui);font-size:15px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.command-source{font-family:var(--ui);font-size:13px;line-height:1.5;color:var(--away);margin-top:4px}
+.command-card-body{border-top:1px solid var(--border2);padding:16px;overflow-wrap:anywhere}
+.command-card-body .tl-content{margin:0;padding:0;min-width:0}
+.command-card-body .tl-activity{font-size:15px;line-height:1.45;margin-bottom:8px;white-space:normal}
+.command-card-body .tl-meta{font-family:var(--ui);font-size:13px;line-height:1.5;white-space:normal}
+.command-description{font-family:var(--ui);font-size:14px;line-height:1.5;white-space:pre-wrap;margin-top:14px}
+.command-schedule{font-family:var(--ui);font-size:13px;line-height:1.5;color:var(--muted);margin-top:12px}
+.command-card-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:16px}
+.command-card-actions button{min-height:44px;font-family:var(--ui);font-size:14px}
+.command-card-actions .tl-plan-check{width:auto;min-width:88px;position:relative;transform:none;padding:8px 12px;border:1px solid var(--border2);font-size:12px}
+.command-card-actions .tl-plan-check::before{display:none}
+.command-card-actions .tl-plan-check,.command-card-actions .tl-icon-action{inset:auto;float:none;grid-area:auto;align-self:auto}
+.command-card-actions .tl-icon-action{width:auto;min-width:60px;position:static;padding:8px 12px;border:1px solid var(--border2);font-size:12px}
+.command-delete{color:var(--distraction)!important;border-color:var(--distraction)!important}
+#pc-task-form textarea{width:100%;min-height:80px;resize:vertical;background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:10px;font:16px/1.5 var(--ui)}
+.command-card>summary:focus-visible{outline:2px solid var(--deep);outline-offset:-4px}
+#timeline-anytime .anytime-row{display:block;background:none;border:0;padding:0;margin-bottom:8px}
+#timeline-anytime .command-card{width:100%}
+#view-today .page-header{margin-bottom:24px;gap:16px}
+#view-today #hdr-more-btn{min-width:44px;min-height:44px}
+#view-today .page-title{font:650 24px/1.3 var(--ui);letter-spacing:-.03em;color:var(--text)}
+#view-today h2{font:600 16px/1.4 var(--ui);color:var(--text);text-transform:none;letter-spacing:0}
+#view-today .command-tile h2{margin-bottom:12px}
+#view-today :is(.btn,.today-action-btn,.tl-icon-action,.tl-plan-check){font:550 14px/1.3 var(--ui);letter-spacing:0;min-height:44px;border-radius:10px;padding:10px 14px}
+#view-today .btn.sm{font-size:14px;min-height:44px}
+#view-today :is(.btn.primary,.today-action-btn){font-weight:650}
+#view-today :is(button,summary,input,textarea):focus-visible,#plan-tomorrow-overlay :is(button,summary,input,textarea):focus-visible,#pt-exit button:focus-visible{outline:2px solid var(--deep);outline-offset:3px}
+#view-today .command-card>summary:focus-visible{outline-offset:-4px}
+#view-today :is(input,textarea){font-size:16px}
+#view-today #up-next{padding:var(--space-4);border-color:var(--border3)}
+#view-today #up-next .today-action-kicker{font-size:13px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--deep);margin-bottom:6px}
+#view-today #up-next .today-action-title{font:650 21px/1.3 var(--ui);letter-spacing:-.02em}
+#view-today #up-next .today-action-sub{font-size:13px;line-height:1.5;color:var(--muted)}
+#view-today #up-next .today-action-main{min-width:0}
+#view-today #up-next .today-action-btn{flex-shrink:0}
+#view-today #up-next .today-action-strip{flex-direction:row;align-items:center;gap:12px}
+#view-today #up-next .today-action-btn{align-self:center}
+#view-today .execution-options{gap:var(--space-2);margin:var(--space-3) 0 0}
+#view-today .timeline-section .section-label{margin-bottom:14px;gap:10px;flex-wrap:wrap}
+#view-today #timeline-date-label{font:600 18px/1.4 var(--ui);color:var(--text)}
+#view-today .timeline-section .section-label button{min-width:44px;min-height:44px;font-size:16px}
+#view-today :is(.pc-muted,.pc-row-meta,.pc-notice,#so-far-summary){font-size:13px;line-height:1.5}
+body.view-today .nav-btn{font-family:var(--ui);font-size:12px;min-height:48px}
+body.view-today .nav-log{font-family:var(--ui);min-height:48px}
+@media(min-width:769px){
+  body.view-today .app{max-width:none;width:100%}
+  body.view-today #view-today{padding:var(--space-6) var(--space-8) 110px}
+  #command-overview{grid-template-columns:minmax(300px,1.4fr) minmax(230px,1fr)}
+}
+@media(min-width:1200px){
+  body.view-today{padding-left:210px}
+  body.view-today #view-today{padding:var(--space-8) var(--space-8) 64px}
+  body.view-today .command-brand{position:fixed;left:20px;top:28px;font-size:23px;z-index:60}
+  body.view-today .nav{left:12px;top:92px;bottom:auto;transform:none;max-width:none;width:188px;display:flex;flex-direction:column;align-items:stretch;padding:8px;gap:9px;border-radius:var(--r2);border:1px solid var(--border2)}
+  body.view-today .nav-btn{flex-direction:row;justify-content:flex-start;padding:13px 10px;font-size:12px;gap:14px;min-height:48px}
+  body.view-today .nav-log{min-height:48px}
+  #command-overview{grid-template-columns:minmax(280px,1.5fr) repeat(3,minmax(150px,1fr))}
+}
+@media(max-width:768px){
+  #view-today.active{display:flex;flex-direction:column}
+  #view-today.active>*{order:7}
+  #view-today .command-brand{order:0}
+  #view-today>.page-header{order:1}
+  #command-overview{display:contents}
+  #command-overview #up-next{order:2;margin-bottom:16px}
+  #view-today #planning-continuity-section{order:3}
+  #view-today #timeline-details{order:4}
+  #command-overview #command-priorities{order:5;margin-bottom:14px}
+  #command-overview .command-tile:not(#command-priorities){order:6;margin-bottom:14px}
+  #view-today .timeline-section{padding:var(--space-4) var(--space-3)}
+  #view-today #timeline-blocks .tl-row{grid-template-columns:51px 12px minmax(0,1fr);gap:var(--space-1)}
+  #view-today #timeline-blocks .tl-time{font-size:12px}
+  .command-card>summary{padding:var(--space-3) 32px var(--space-3) var(--space-3)}
+  #view-today #timeline-details .command-card>summary{padding:var(--space-3) 32px var(--space-3) var(--space-3)}
+  .command-card>summary::after{right:10px}
+  .command-card-body{padding:var(--space-3)}
+  .command-card-actions .primary{flex-basis:100%}
+  .command-card-actions .command-delete{flex-basis:100%}
+  .command-tile{padding:var(--space-4)}
+  #view-today .page-title{font-size:21px}
+  #view-today #up-next .today-action-strip{display:flex;gap:var(--space-3);align-items:center}
+  #view-today #up-next .today-action-main{flex:1}
+  #view-today #timeline-details .command-card>summary{padding-right:32px}
+  #view-today .command-card-actions{display:grid;grid-template-columns:1fr 1fr}
+  #view-today .command-card-actions button{padding-inline:8px}
+  #view-today .command-card-actions .primary,#view-today .command-card-actions .command-delete{grid-column:1/-1}
+  body.view-today .nav-btn{font-size:11px;gap:4px;padding-inline:1px;min-width:0;line-height:1.3}
+}
+
+/* TASK-033 visual refinement: one action first, alternatives disclosed. */
+#view-today #up-next{position:relative}
+#view-today .execution-alternatives{margin-top:0}
+#view-today .execution-alternatives>summary{position:absolute;right:var(--space-4);bottom:var(--space-3);width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:0;color:var(--muted);cursor:pointer;list-style:none;border-radius:10px}
+#view-today .execution-alternatives>summary::after{content:'⋯';font:600 20px/1 var(--ui);color:var(--muted)}
+#view-today .execution-alternatives[open]>summary::after{content:'⌃'}
+#view-today .execution-alternatives:has(.execution-options[hidden]){display:none}
+#view-today #up-next[data-state="free"] .execution-alternatives>summary{display:none}
+#view-today #command-next{margin-top:var(--space-3);padding:var(--space-3) 56px 0 0;min-height:44px;font-size:13px;line-height:1.5}
+#view-today #up-next .today-action-strip{margin-bottom:0}
+#view-today #up-next .today-action-title{font-size:20px;max-width:32ch}
+#view-today #up-next .today-action-sub{margin-top:var(--space-2)}
+#view-today .command-tile p{max-width:36ch}
+#nav-more{display:none}
+#nav-more-dialog{--muted:var(--away);width:min(440px,calc(100vw - 32px));margin:auto auto calc(88px + var(--safe-bottom));padding:var(--space-4,16px);border:1px solid var(--border2);border-radius:var(--r2);background:var(--bg2);color:var(--text);font:14px/1.5 'Chrona Inter',sans-serif}
+#nav-more-dialog::backdrop{background:color-mix(in srgb,var(--bg) 72%,transparent)}
+.nav-more-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.nav-more-head h2{font:600 20px/1.4 'Chrona Inter',sans-serif;margin:0}
+.nav-more-items{display:grid;gap:8px}
+#nav-more-dialog button{min-height:44px;font:500 15px/1.5 'Chrona Inter',sans-serif;letter-spacing:0}
+.nav-more-items button{text-align:left;padding:12px 16px;border-color:var(--border2)}
+#nav-more-dialog button:focus-visible,.nav button:focus-visible{outline:2px solid var(--deep);outline-offset:-3px}
+@media(max-width:768px){
+  .nav .nav-secondary{display:none}
+  .nav #nav-more{display:flex}
+  .nav:has(.nav-secondary.active) #nav-more{color:var(--deep);background:var(--deep-dim2)}
+  .nav{padding-inline:8px;gap:4px}
+  .nav .nav-btn,body.view-today .nav .nav-btn{font:500 11px/1.35 'Chrona Inter',sans-serif;min-width:0;min-height:56px;padding:8px 4px;gap:4px}
+  body.view-today #view-today{padding-inline:16px}
+}
+
+#view-today :is(#planning-continuity-section,#needs-you,#so-far,#calendar-plan-section,#operational-plan-section){margin-bottom:var(--space-6)}
+#view-today #needs-you h2{margin-bottom:var(--space-3)}
+
+.nav{--muted:var(--away)}
+#view-today .command-description{max-width:64ch}
+#view-today .command-card summary .command-headline{max-width:72ch}
+
+#nav-more-dialog .nav-more-head button{color:var(--deep)}
+
+#view-today #needs-you h2{display:flex;align-items:center;gap:var(--space-2)}
+#view-today #needs-you-count{font:500 12px/1.5 var(--ui);color:var(--muted)}
+#view-today #sleep-needs-item:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3)}
