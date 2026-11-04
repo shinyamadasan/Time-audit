@@ -50,7 +50,8 @@ function buildAndroid(wwwExport, out) {
   const assets = path.join(android, 'app/src/main/assets/public');
   for (const file of walk(assets)) if (!CAPACITOR_FILES.has(file)) rmSync(path.join(assets, file));
   cpSync(wwwExport, assets, { recursive: true });
-  const gradle = ['assembleDebug', '--offline', '--console=plain'];
+  // Hosted CI starts with an empty Gradle cache, so it may download; local release builds stay offline.
+  const gradle = ['assembleDebug', ...(process.argv.includes('--gradle-online') ? [] : ['--offline']), '--console=plain'];
   const built = process.platform === 'win32' ? spawnSync('cmd', ['/c', '.\\gradlew.bat', ...gradle], { cwd: android, encoding: 'utf8' })
     : spawnSync('./gradlew', gradle, { cwd: android, encoding: 'utf8' });
   writeFileSync(path.join(out, 'gradle.log.txt'), `${built.stdout}${built.stderr}`);
@@ -61,7 +62,8 @@ function buildAndroid(wwwExport, out) {
   const extracted = path.join(out, 'apk-extract');
   rmSync(extracted, { recursive: true, force: true }); mkdirSync(extracted);
   const zip = path.join(out, 'apk-copy.zip'); cpSync(apk, zip);
-  execFileSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${extracted}' -Force`]);
+  if (process.platform === 'win32') execFileSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${extracted}' -Force`]);
+  else execFileSync('unzip', ['-q', '-o', zip, '-d', extracted]);
   rmSync(zip);
   const publicDir = path.join(out, 'android');
   rmSync(publicDir, { recursive: true, force: true });
