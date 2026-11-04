@@ -11,9 +11,11 @@ G-DEPLOY, G-CUTOVER), G7, G8 and final acceptance are complete.
 - Left out: `accounting-hazards/evidence/`, `review-artifacts/`, and the evidence result files in
   `accounting-hazards/` and `unknown-recovery-proof/`. They include device-census metadata and stay in
   local private storage. Documents may still name those paths.
-- No runtime, rules, verifier or test file differs from 1ed7da0. The second commit changes only CI:
-  `.github/workflows/ci.yml`, two report scripts, `scripts/ci-known-failures.json`, Linux and
-  online-Gradle support in `scripts/build-release-artifacts.mjs`, and this file.
+- The first commit changes no runtime, rules, verifier or test file from 1ed7da0. Later commits change
+  only CI: `.github/workflows/ci.yml`, three `scripts/ci-*` files, Linux and online-Gradle support in
+  `scripts/build-release-artifacts.mjs`, this file, and the CI guard in `npm-test-wiring.test.js`.
+  The guard still forbids any soft-failing step; it now requires every fence suite file to run whole,
+  with only the 9 recorded superseded tests allowed to fail.
 
 ## Runtime identity (checked in CI on every run)
 
@@ -39,8 +41,8 @@ Required (all feed the `Required / release gate` job):
 - packaged: builds the web and Android release bytes, checks the hashes above, runs the packaged spec
   (62 tests);
 - worker: Conversational Read Worker tests and bundle;
-- regression: the other 62 browser specs (1,071 tests). Any failure outside the recorded known failures
-  fails CI.
+- regression: the other 62 browser specs (1,071 tests, 4 shards, exact total checked). Any failure
+  outside the recorded known failures fails CI.
 
 Reported, not blocking (`scripts/ci-known-failures.json`):
 

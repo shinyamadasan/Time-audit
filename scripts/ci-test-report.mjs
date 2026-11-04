@@ -3,7 +3,7 @@
 //
 // Reads Playwright JSON reports written by the CI shards.
 //   required <count> <report...>  fails unless exactly <count> tests ran and every one passed (no skip, no flake)
-//   legacy <count> <report...>    requires exactly <count> tests to have run, then compares failures with
+//   legacy <count|any> <report...> requires exactly <count> tests to have run, then compares failures with
 //                                 scripts/ci-known-failures.json; fails on any failure or skip outside that
 //                                 recorded baseline. Known failures are listed, never hidden.
 // A Markdown summary goes to stdout and, in GitHub Actions, to the job summary.
@@ -11,9 +11,10 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 
 const [mode, ...rest] = process.argv.slice(2);
-const expectedCount = Number(rest.shift());
-if (!['required', 'legacy'].includes(mode) || !rest.length || !Number.isInteger(expectedCount)) {
-  console.error('usage: ci-test-report.mjs required|legacy <count> <report.json...>');
+const countArg = rest.shift();
+const expectedCount = mode === 'legacy' && countArg === 'any' ? null : Number(countArg);
+if (!['required', 'legacy'].includes(mode) || !rest.length || (expectedCount !== null && !Number.isInteger(expectedCount))) {
+  console.error('usage: ci-test-report.mjs required <count> <report.json...> | legacy <count|any> <report.json...>');
   process.exit(2);
 }
 
@@ -45,8 +46,9 @@ if (mode === 'required') {
   const known = failed.filter(key => baseline.has(key) && !historyOnly.has(key));
   const unrunnable = failed.filter(key => historyOnly.has(key));
   const nowPassing = passed.filter(key => baseline.has(key));
-  ok = results.size === expectedCount && outside.length === 0 && skipped.length === 0;
-  lines.push(`expected ${expectedCount} tests to run: ${results.size === expectedCount ? 'yes' : 'NO'}`,
+  const countOk = expectedCount === null || results.size === expectedCount;
+  ok = countOk && outside.length === 0 && skipped.length === 0;
+  lines.push(expectedCount === null ? 'test count: checked by the aggregate job' : `expected ${expectedCount} tests to run: ${countOk ? 'yes' : 'NO'}`,
     `failures outside the recorded baseline (blocking): ${outside.length}`, `known baseline failures still failing: ${known.length}`,
     `history-only fixtures failing: ${unrunnable.length} (${record.historyOnly.reason})`, `baseline tests now passing: ${nowPassing.length}`, '');
   const section = (title, keys) => { if (keys.length) lines.push(`### ${title}`, '', ...keys.map(key => `- ${key}`), ''); };

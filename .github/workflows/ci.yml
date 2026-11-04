@@ -31,7 +31,7 @@ env:
     tests/accounting-status-passthrough.spec.js
     tests/accounting-timeout-diagnostics.spec.js
   MANDATORY_COUNT: 482
-  # Every other browser spec (62 files). Failures recorded in scripts/ci-known-failures.json are reported, not blocking.
+  # Every other browser spec (62 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
   WIDER_COUNT: 1071
   # Reviewed release candidate 1ed7da0: packaged web tree, Android bundle tree and Stage B rules.
   RELEASE_WEB_TREE: 1a91a98fe48d472a25d27e5ce65c58c3a6891232423d576c4a3cfdaf1703fb4f
@@ -92,7 +92,7 @@ jobs:
       - name: Entry reliability SDK suite (5 superseded tests reported, not blocking)
         run: node scripts/ci-node-superseded.mjs entry-reliability-sdk.test.js
       - name: Rules mutation suite
-        run: npm run test:rules-mutation
+        run: node --test firebase-rules-mutation.test.js
 
   accounting:
     name: Required / accounting suite (shard ${{ matrix.shard }}/3)
@@ -234,17 +234,14 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npx playwright install --with-deps chromium
       - run: npm run provision:rtdb-emulator
-      - name: Every other browser spec
-        env:
-          PLAYWRIGHT_JSON_OUTPUT_NAME: wider-${{ matrix.shard }}.json
-        # Known failures are expected here; regression-report decides pass or fail from the JSON report.
-        run: |
-          specs=$(ls tests/*.spec.js | grep -v -x -F -f <(tr ' ' '\n' <<< "$MANDATORY_SPECS" | grep .) | grep -v -x tests/accounting-release-artifacts.spec.js)
-          npx playwright test $specs --forbid-only --shard=${{ matrix.shard }}/4 --reporter=list,json || true
-      - uses: actions/upload-artifact@v4
+      - name: Every other browser spec; fails on any failure outside scripts/ci-known-failures.json
+        run: node scripts/ci-run-wider.mjs ${{ matrix.shard }} 4
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: wider-${{ matrix.shard }}
           path: wider-${{ matrix.shard }}.json
+          if-no-files-found: ignore
 
   regression-report:
     name: Required / wider browser suite has no failure outside the recorded baseline

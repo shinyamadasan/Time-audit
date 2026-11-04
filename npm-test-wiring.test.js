@@ -81,14 +81,25 @@ test('the calendar-native modules specifically are wired everywhere: runtime, li
 
 test('CI runs the Firebase fence suites as a required, non-skippable gate', () => {
   const workflow = readFileSync(path.join(HERE, '.github', 'workflows', 'ci.yml'), 'utf8');
-  assert.match(workflow, /^\s+run: npm run test:fence\s*$/m, 'ci.yml must run `npm run test:fence`');
   assert.match(workflow, /uses: actions\/setup-java@v\d+/, 'the emulator is a JVM jar: Java must be provisioned');
+  assert.match(workflow, /^\s+run: npm run provision:rtdb-emulator\s*$/m, 'CI provisions the pinned emulator');
   assert.match(workflow, /^\s+run: npm run check:firebase-rules\s*$/m, 'the rules must be proven to be the builder output');
   assert.doesNotMatch(workflow, /continue-on-error|\|\|\s*true/, 'no soft-failing step anywhere in CI');
   // The fence script provisions the pinned, checksum-verified emulator itself and runs every emulator suite.
   const fence = pkg.scripts['test:fence'];
   assert.match(fence, /^npm run provision:rtdb-emulator && /);
   for (const script of ['test:rules-emulator', 'test:fence-sdk', 'test:rules-mutation']) assert.ok(fence.includes(`npm run ${script}`), `${script} is part of test:fence`);
+  // CI runs every fence suite file whole. Only the superseded tests recorded in ci-known-failures.json may fail,
+  // and only through ci-node-superseded.mjs, which still requires every other test in that file.
+  const superseded = JSON.parse(readFileSync(path.join(HERE, 'scripts', 'ci-known-failures.json'), 'utf8')).superseded;
+  assert.equal(Object.values(superseded).reduce((sum, entry) => sum + entry.tests.length, 0), 9, 'the superseded list stays the 9 recorded tests');
+  const runLines = workflow.split('\n').filter(line => /^\s+run: /.test(line));
+  for (const script of ['test:rules-emulator', 'test:fence-sdk', 'test:rules-mutation']) {
+    for (const file of pkg.scripts[script].match(/[\w./-]+\.test\.js/g)) {
+      const runner = superseded[file] ? `node scripts/ci-node-superseded.mjs ${file}` : 'node --test ';
+      assert.ok(runLines.some(line => line.includes(runner) && line.split(/\s+/).includes(file)), `ci.yml runs ${file} as a required step`);
+    }
+  }
   const provision = readFileSync(path.join(HERE, 'scripts', 'provision-rtdb-emulator.mjs'), 'utf8');
   assert.match(provision, /EMULATOR_VERSION = '4\.11\.2'/);
   assert.match(provision, /EMULATOR_SHA256 = '[0-9a-f]{64}'/);
