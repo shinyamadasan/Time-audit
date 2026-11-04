@@ -7,8 +7,9 @@ import { startEmulator, token } from '../rtdb-emulator-support.js';
 import { behaviour, canonicalHash, precheck, readInstalledRules, stageRules, verify } from './verify-installed-rules.mjs';
 
 const PAIRED = readFileSync(new URL('../firebase.rules.json', import.meta.url), 'utf8');
-// What production serves today: the rules on origin/main (falls back to local main).
-const LIVE = (() => { for (const ref of ['origin/main', 'main']) { try { return execFileSync('git', ['show', `${ref}:firebase.rules.json`]).toString(); } catch {} } throw Error('no main rules'); })();
+// What production serves today: the rules at f73edd4, main's tip before this release. Pinned so the test
+// still means "today's live rules" after this candidate itself lands on main.
+const LIVE = execFileSync('git', ['show', 'f73edd4:firebase.rules.json']).toString();
 const PROBE = 'rules-verifier-probe', PROBE_TOKEN = token(PROBE);
 let emulator;
 test.before(async () => { emulator = await startEmulator(); });

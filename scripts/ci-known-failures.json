@@ -8,7 +8,8 @@
         "canonical newer undo is the only tombstone-to-active path",
         "stale full-object syncEntries replay is rejected and another owner cannot affect the tombstone",
         "valid multipath sync and Clear Today / Clear All tombstone batches are atomic"
-      ]
+      ],
+      "required": 3
     },
     "entry-reliability-sdk.test.js": {
       "reason": "Drives the legacy syncTimerState/syncEntries publication, which the candidate no longer ships. Covered by the required real-SDK accounting suite (FA4, G-series).",
@@ -18,7 +19,8 @@
         "first restored publication cannot replace a newer remote takeover",
         "first restored publication preserves an offline session when remote is genuinely absent",
         "cached old timer cannot overwrite a newer server stop during offline restore publication"
-      ]
+      ],
+      "required": 1
     }
   },
   "historyOnly": {

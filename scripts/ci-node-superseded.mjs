@@ -2,8 +2,8 @@
 // scripts/ci-node-superseded.mjs <file>
 //
 // Runs one whole node:test file that holds superseded tests named in scripts/ci-known-failures.json.
-// Every other test in the file is required to pass. The named tests still run; their results are reported
-// in a separate section and do not decide the outcome. A named test that no longer exists fails the run,
+// Every other test in the file is required to pass, and their count is pinned (`required`). The named tests
+// still run; their results are reported in a separate section and do not decide the outcome. A named test that no longer exists fails the run,
 // so the list cannot silently cover a renamed or new test.
 // A Markdown summary goes to stdout and, in GitHub Actions, to the job summary.
 
@@ -30,9 +30,9 @@ const named = new Set(record.tests);
 const required = [...outcomes].filter(([name]) => !named.has(name));
 const bad = required.filter(([, status]) => status !== 'passed');
 const missing = record.tests.filter(name => !outcomes.has(name));
-const ok = required.length > 0 && bad.length === 0 && missing.length === 0;
+const ok = run.status !== null && required.length === record.required && bad.length === 0 && missing.length === 0;
 
-const lines = [`## ${file}`, '', `required: ${required.length - bad.length}/${required.length} passed: ${ok ? 'PASS' : 'FAIL'}`, '',
+const lines = [`## ${file}`, '', `required: ${required.length - bad.length}/${required.length} passed (expected ${record.required}): ${ok ? 'PASS' : 'FAIL'}`, '',
   ...bad.map(([name, status]) => `- ${status}: ${name}`), ...missing.map(name => `- superseded test not found (renamed?): ${name}`),
   '', `### Superseded, reported only (${record.tests.length})`, '', record.reason, '',
   ...record.tests.map(name => `- ${outcomes.get(name) || 'not run'}: ${name}`)];
