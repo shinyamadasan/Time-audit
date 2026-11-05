@@ -3228,3 +3228,8 @@ commits: c556671 (style.css + www mirror, new tests/accounting-status-passthroug
 tests: passthrough 12/12 (repeat 2), red 4/6 on e7cbb4e (panel intercepts). Mandatory 5 files + F1, start-stamp, passthrough, diagnostics: 478 passed, 4 FA-V1 occlusion-proxy failures, then FA-V1 file 48/48 on 3632f15. Packaged 62/62 on 3632f15 (APK 21ab0f99...). npm test exit 0. Wider review-simplification/plan-linkage/plan timeouts 16 -> 1 (remaining is group E).
 review: independent bounded review APPROVE WITH NOTES (LOW: no :has() fallback on WebView <105; panel text not scrollable/selectable).
 evidence: accounting-hazards/evidence/timeout-groups-20261102/MINIMUM-SAFE-RELEASE-CHECKLIST.md
+### TASK-039 - First-start upgrade fix (November 5, 2026)
+red: new spec reproduced the production queue (legacy-source-needs-resolution, scheduled-log, account-state-owner-unproven) on origin/main c8711f73; stored-conflict case red with the flag-only allowlist.
+green: new spec 8/8 (both accounts where applicable); required accounting suite 490/490 (2 workers, 17.6 min); npm test exit 0 (2,413 tests, 0 failed).
+review: independent fresh-context review APPROVE after two fix rounds (open-session settle, re-plan scope, legacy-time-ack and hydrate keep-server, runtime content check, slot queue check).
+not run locally: wider browser suite, packaged release spec (CI).

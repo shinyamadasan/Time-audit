@@ -315,7 +315,12 @@
         try { validateLocal(clone(operation.proposal.local), operation.owner, clone(operation)); }
         catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message })); }
       }
-      if (operation.phase === 'conflict') return retained(operation);
+      // A conflict found while planning (nothing sealed or sent) is planned again on the next drain, so it clears
+      // once the data no longer conflicts. Intake, device and sealed-proposal conflicts stay held. Conflicts stored by
+      // the first accounting release carry no flag, so they are judged by reason.
+      const heldReasons = ['occurrence-changed', 'source-result-changed', 'captured-owner-device', 'cyclic-command-dependency'];
+      if (operation.phase === 'conflict' && (operation.proposal
+        || !(operation.replannable || operation.replannable === undefined && !heldReasons.includes(operation.reason)))) return retained(operation);
       if (transport.enforcesAccounting !== true) {
         return retained(update(state, operation, { reason: 'accounting-fence-unproven' }));
       }
@@ -325,21 +330,22 @@
       if (!operation.proposal) {
         let proposal;
         try { proposal = await prepare(clone(operation), clone(raw), clone(state.committed), clone(state.history), clone(state.queue)); }
-        catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message })); }
+        catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message, replannable: true })); }
         if (!attached(context)) return { status: 'detached', id: operation.id, retained: true };
         if (proposal?.status === 'wait') return retained(update(state, operation, { reason: proposal.reason }));
-        if (proposal?.status === 'conflict') return retained(update(state, operation, { phase: 'conflict', reason: proposal.reason }));
+        if (proposal?.status === 'conflict') return retained(update(state, operation, { phase: 'conflict', reason: proposal.reason, replannable: true }));
         if (operation.input.confirmedOnly && (operation.input.name !== 'hydrate-accounting' || proposal?.localOnly !== true)) {
           return retained(update(state, operation, { phase: 'conflict', reason: 'confirmed-refresh-must-be-read-only' }));
         }
-        if (['hydrate-accounting', 'native-usage'].includes(operation.input.name) && proposal?.localOnly === true && proposal.projection) {
+        if (['hydrate-accounting', 'native-usage', 'legacy-accounting-caches'].includes(operation.input.name) && proposal?.localOnly === true && proposal.projection) {
           const generation = commitProjection(state, operation, proposal.projection, context, { phase: 'local-applied',
-            authority: operation.input.name === 'native-usage' ? 'retained-native-result-and-coherent-read' : 'coherent-account-read',
+            authority: operation.input.name === 'native-usage' ? 'retained-native-result-and-coherent-read'
+              : operation.input.name === 'legacy-accounting-caches' ? 'legacy-caches-on-server' : 'coherent-account-read',
             settledWrites: clone(proposal.settledWrites || {}), evidence: clone(proposal.evidence || null) });
           return { status: 'applied', id: operation.id, generation };
         }
         try { validProposal(proposal, raw, operation); validateLocal(clone(proposal.local), operation.owner, clone(operation)); }
-        catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message })); }
+        catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message, replannable: true })); }
         update(state, operation, { phase: 'sealed', proposal: clone(proposal), attempts: 0,
           localGeneration: state.generation, reason: null });
       }

@@ -2755,6 +2755,14 @@ function accountingCoordinator() {
     validateProjection: validateAccountingFrame,
     prepare(operation, raw, committed, history, pending) {
       if (window._accountingLegacyLoadError) return { status: 'wait', reason: 'accounting-cache-unreadable' };
+      if (operation.input.name === 'legacy-accounting-caches' && legacyCachesOnServer(operation.input, raw)) {
+        // Every cached record is already on the server and no cached session is running: the server copy wins.
+        const live = captureAccountingFrame(), base = committed?.value || live;
+        const projection = accountingConfirmedFrame(raw, { ...accountingWithPreferences(base, live),
+          ...(committed ? {} : { entries: [], focusRedemptions: [] }), _lastLoggedEntryId: live._lastLoggedEntryId }, operation.owner, !!committed);
+        return { localOnly: true, projection, evidence: null,
+          settledWrites: Object.fromEntries(['timer', 'awayState', 'breakState'].map(path => [path, cloneUndoValue(raw[path] || null)])) };
+      }
       if (operation.input.name === 'legacy-accounting-caches' || operation.input.name === 'legacy-time-ack') return { status: 'conflict', reason: 'legacy-source-needs-resolution' };
       if (timeAckOpenOperation(operation.owner)) return { status: 'wait', reason: 'legacy-undo-unresolved' };
       if (operation.input.name === 'hydrate-accounting') {
@@ -2943,6 +2951,44 @@ function accountingWithPreferences(frame, live) {
     ...(!frame.running && accountingPreferenceDisplay(live) ? { totalSecs: live.totalSecs, remaining: live.remaining } : {}) };
 }
 
+// A previous version's device caches are safe to retire when the server already holds every cached record
+// and no cached timer, away or break session is still open on this device only.
+function legacyCachesOnServer(input, raw) {
+  const parse = value => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return undefined; } };
+  const same = TimeAckCore.same, source = input.source || {};
+  if ('slot' in source) {
+    const state = parse(source.raw);
+    return !!state && typeof state === 'object' && Array.isArray(state.queue) && !state.queue.length;
+  }
+  const unreadable = ['ta3-entries', 'ta3-focus-redemptions'].some(key => source[key] != null && parse(source[key]) === undefined);
+  const entries = [parse(source['ta3-entries']), source.runtime?.frame?.entries, input.frame?.entries];
+  const redemptions = [parse(source['ta3-focus-redemptions']), source.runtime?.frame?.focusRedemptions, input.frame?.focusRedemptions];
+  if (unreadable || [...entries, ...redemptions].some(list => list != null && !Array.isArray(list))) return false;
+  // Old caches may only lag the server; this version's live frame (runtime) must equal it exactly.
+  const exactly = !!source.runtime;
+  for (const entry of entries.flat().filter(Boolean)) {
+    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
+    if (actual.status !== 'found' || exactly && !same(EntryPhysicalKeys.content(actual.record), EntryPhysicalKeys.content(entry))) return false;
+  }
+  for (const item of redemptions.flat().filter(Boolean)) {
+    if (!raw.focusRedemptions?.[`r_${item.id}`]) return false;
+  }
+  // An open cached session may settle only when it is the server's own open session.
+  const timer = parse(source[TIMER_STORAGE_KEY]), away = parse(source[AWAY_STORAGE_KEY]), pause = parse(source[BREAK_STORAGE_KEY]);
+  const frames = [source.runtime?.frame, input.frame].filter(Boolean);
+  if (timer?.running && !(raw.timer?.running && raw.timer.taskStartTime === timer.taskStartTime
+    && raw.timer.ownerDeviceId === timer.ownerDeviceId)) return false;
+  if (away?.active && !(raw.awayState?.active && raw.awayState.startedAt === away.startedAt)) return false;
+  if (pause?.active && !(raw.breakState?.active && raw.breakState.startedAt === pause.startedAt)) return false;
+  if (parse(source['ta3-focus-timer'])?.running) return false;
+  for (const frame of frames) {
+    if (frame.running && !(raw.timer?.running && raw.timer.taskStartTime === frame.taskStartTime
+      && raw.timer.blockStartTime === frame.blockStartTime && raw.timer.ownerDeviceId === frame.timerOwnerDeviceId)) return false;
+    if (frame.awayActive || frame.breakActive) return false;
+  }
+  return true;
+}
+
 function accountingConfirmedFrame(raw, base, owner, established) {
   const same = TimeAckCore.same, result = cloneUndoValue(base);
   const projection = EntryPhysicalKeys.project(raw.entries || {});
@@ -2972,7 +3018,9 @@ function accountingConfirmedFrame(raw, base, owner, established) {
   const timer = raw.timer || null, away = raw.awayState || null, pause = raw.breakState || null;
   for (const state of [timer, away, pause]) {
     if (state) {
-      if (state.ownerRoom !== owner) throw Error('account-state-owner-unproven');
+      // The previous version left inactive states without ownerRoom (e.g. breakState {active:false}); they hold no time.
+      const ownerlessInactive = state.ownerRoom == null && !state.running && !state.active;
+      if (state.ownerRoom !== owner && !ownerlessInactive) throw Error('account-state-owner-unproven');
       TimeAckCore.stamp(state, state, 'hydrate_probe');
     }
   }
@@ -3088,6 +3136,11 @@ function accountingAcceptedUndo(operation) {
 }
 
 function reconcileAccountingServer(raw, operation) {
+  // Keep server version for a previous version's caches, a held read, or a scheduled block that was never sent:
+  // the server copy is the record (P4: device-only data may be discarded).
+  if (['legacy-accounting-caches', 'legacy-time-ack', 'hydrate-accounting'].includes(operation.input.name) || operation.input.name === 'scheduled-log' && !operation.proposal) {
+    return accountingConfirmedFrame(raw, { ...captureAccountingFrame(), entries: [], focusRedemptions: [] }, operation.owner, false);
+  }
   const same = TimeAckCore.same, source = operation.proposal?.local || operation.input;
   if (!source.before || !source.after) throw Error('captured-fact-needs-resolution');
   if (operation.input.observation && (!operation.proposal
@@ -3635,7 +3688,7 @@ function prepareAccountingObservation(operation, raw, committed, history) {
   } else if (operation.input.name === 'scheduled-log') {
     const entry = facts.entry, basis = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
     if (basis.status === 'unknown') return { status: 'conflict', reason: basis.reason };
-    if (basis.status === 'found' && !TimeAckCore.same(EntryPhysicalKeys.content(basis.record), entry)) return { status: 'conflict', reason: 'scheduled-source-changed' };
+    // A block already on the server (logged, edited or deleted there) is the occurrence: keep it as it is.
     if (basis.status === 'absent') {
       after.entries.unshift(cloneUndoValue(entry)); after._lastLoggedEntryId = entry.id;
       rememberCreatedUndo('scheduled block', [entry], [], after, operation.at);
@@ -3844,7 +3897,7 @@ function renderTimeAckStatus(override = null) {
     };
     el.append(text, check);
     let hasCommand = false;
-    try { hasCommand = !focusPaused && !legacy && (_accountingCoordinator?.snapshot().queue.length
+    try { hasCommand = !focusPaused && (_accountingCoordinator?.snapshot().queue.length
       || accountingCapturedCommands(_accountingCoordinator, roomCode).length); } catch { /* keep recovery visible when storage cannot be read */ }
     if (!window._accountingLegacyLoadError && hasCommand) el.append(keep);
     return;

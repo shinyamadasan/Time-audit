@@ -19,7 +19,7 @@ defaults:
     shell: bash
 
 env:
-  # The accounting release suite: 442 mandatory cases plus the F1, start-stamp, pass-through and timeout specs (482).
+  # The accounting release suite: 442 mandatory cases plus the F1, start-stamp, pass-through, timeout and first-start upgrade specs (490).
   MANDATORY_SPECS: >-
     tests/accounting-account-successors.spec.js
     tests/accounting-focus-authority-v1.spec.js
@@ -30,7 +30,8 @@ env:
     tests/accounting-start-stamp.spec.js
     tests/accounting-status-passthrough.spec.js
     tests/accounting-timeout-diagnostics.spec.js
-  MANDATORY_COUNT: 482
+    tests/accounting-first-start-upgrade.spec.js
+  MANDATORY_COUNT: 490
   # Every other browser spec (62 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
   WIDER_COUNT: 1071
   # Reviewed release candidate 1ed7da0: packaged web tree, Android bundle tree and Stage B rules.
@@ -127,7 +128,7 @@ jobs:
           if-no-files-found: ignore
 
   accounting-count:
-    name: Required / accounting suite ran 482 of 482
+    name: Required / accounting suite ran 490 of 490
     needs: accounting
     if: always()
     runs-on: ubuntu-latest

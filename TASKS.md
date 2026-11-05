@@ -2366,6 +2366,36 @@ verification:
   - Affected regressions, npm test, fence suites, parity, complete integrated suite, independent review.
   - Guardian NOT RUN / NOT PASSED. Production NO-GO.
 
+### TASK-039 - First-start upgrade fix (post-cutover forward fix)
+status: codex
+owner: claude
+source: owner-direct
+priority: P0
+depends-on: none (main c8711f73, production rules Stage B)
+files: index.html (accounting bootstrap, scheduled auto-log, retained-operation status); accounting-command.js if the
+  retry change needs it; generated www/; accounting specs and fixtures; CODEMAP.md if structure moves; CHANGELOG.md and
+  TEST_REPORT.md append only; this entry.
+context:
+  Owner messages November 5, 2026: "approve fix task" for the scope Claude proposed after the failed cutover smoke,
+  plus "dont worry about our records too much, just fix it". Claude implements by the owner's instruction.
+  Interactive, solo. Incident: G1-G9-LEDGER.md, "Cutover 2026-11-05 UTC".
+objective:
+  Both accounts can open the released version in a browser that used the old version, and save time.
+acceptance:
+  - Scheduled auto-logging waits for hydration; a scheduled block already on the server counts as logged, never a
+    conflict.
+  - Old-version local caches whose entries are all on the server settle automatically; otherwise a working resolve
+    option is shown.
+  - A retained conflict is re-checked once the data no longer conflicts, instead of staying stuck.
+  - New tests reproduce each defect first (old caches + auto-log templates on a fresh start), then pass.
+  - npm test and the accounting release-artifact suite pass; independent review approves.
+constraints:
+  - No rules change, no database write beyond normal app saves, no record deletion, no unrelated features.
+  - Deploy is a separate owner approval.
+  - STOP if a fix needs any of the above.
+verification:
+  - Red then green specs; npm test; release-artifact suite; independent review.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
