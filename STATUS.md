@@ -5,6 +5,29 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-11-02 — TASK-039 development stopped; release checklist ready
+
+Local checkpoint 3632f15: pending-sync panel no longer blocks taps (CSS only). Start-time and timeout investigations
+closed with no time defect. 442 mandatory + 62 packaged pass. Remaining: G7 owner decision, G8 cutover steps, G9 acceptance,
+Guardian, hosted CI, phone. Production NO-GO.
+Checklist: accounting-hazards/evidence/timeout-groups-20261102/MINIMUM-SAFE-RELEASE-CHECKLIST.md
+
+## 2026-11-02 — TASK-039 F1 fixed locally: refused Undo keeps its button
+
+Commit 6abc40d: transient Undo refusals keep the Undo button with honest copy; persistent blocks show a neutral message.
+442/442 mandatory, 62/62 packaged, new both-account real-SDK spec 20/20. Independent review APPROVE WITH NOTES. Open: G7
+risk decision, G8 writers and cutover, wider suite (classified, not fixed), 9 emulator failures, possible late start stamp
+(check). Guardian NOT RUN / NOT PASSED. Phone not run. Production NO-GO.
+Record: accounting-hazards/evidence/f1-undo-refusal-20261102/F1-CORRECTION.md
+
+## 2026-11-02 — TASK-039 shipped web and Android accounting capability: local candidate only
+
+Packaged web and Android bytes now provide accounting without injected transport. Frozen commit 456acec passed 442/442
+mandatory and 62/62 packaged. Task is blocked on owner decisions and nothing is merged. Open: F1 refused Undo removes the only
+Undo button, G7 risk decision, G8 writers and cutover, 314 of 1,071 wider tests already failing, 9 emulator failures.
+Guardian NOT RUN / NOT PASSED. Phone not run. Production NO-GO.
+Ledger: accounting-hazards/evidence/shipped-capability-20261101/G1-G9-LEDGER.md
+
 ## 2026-10-29 — TASK-038 closed: legacy and calendar rescheduling through ChatGPT live
 
 **TASK-038** is done: merged ce24092 (PR #17), backend chronasenseactionapi-00012-rug and Worker f8630fd7 deployed

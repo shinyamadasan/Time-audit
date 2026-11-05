@@ -157,10 +157,13 @@ test('visible install hides when recovery opens without consuming eligibility', 
   await openApp(page);
   await eligible(page);
   await expect(page.locator('#install-banner')).toBeVisible();
-  await page.evaluate(() => {
-    window._timerRecoveryState = { shutdownTs: Date.now() - 180000, task: 'Recovered task', taskStartTime: Date.now() - 240000, timerExpired: false };
-    showRecoveryModal();
+  await page.evaluate(async () => {
+    await _startTimer('Recovered task');
+    taskStartTime = Date.now() - 240000;
+    localStorage.setItem(accountLocalKey('ta3-heartbeat-ts'), String(Date.now() - 180000));
+    restoreHeartbeatRecoveryForAccount();
   });
+  await expect(page.locator('#recovery-overlay')).toBeVisible();
   await suppressed(page);
   await page.locator('#recovery-overlay').getByRole('button', { name: /Yes, I closed it intentionally/ }).click();
   await expect(page.locator('#install-banner')).toBeVisible();

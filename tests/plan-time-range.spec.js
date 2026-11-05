@@ -103,7 +103,7 @@ test.describe('Quick scheduling', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
     await page.getByRole('button', { name: '1.5h', exact: true }).click();
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00–10:30 AM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('09:00');
     expect(items[0].durationMinutes).toBe(90);
@@ -117,7 +117,7 @@ test.describe('Quick scheduling', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
     await page.locator('.pt-end-input').fill('10:15');
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00–10:15 AM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('09:00');
     expect(items[0].durationMinutes).toBe(75);
@@ -131,7 +131,7 @@ test.describe('Quick scheduling', () => {
     // The rejected edit never touched draft state — the panel stays open, still showing the
     // valid original start, rather than silently closing or fabricating a range.
     await expect(page.locator('.pt-time-input')).toHaveValue('09:00');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('09:00');
     expect('durationMinutes' in items[0]).toBe(false);
@@ -183,7 +183,7 @@ test.describe('Write-time range validation (FIX FIRST)', () => {
     await expect(page.locator('.pt-end-input')).toHaveValue('12:00'); // still open — duration preserved
     await page.locator('#plan-tomorrow-date').click(); // click away to collapse
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:00 AM–12:00 PM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('10:00');
     expect(items[0].durationMinutes).toBe(120);
@@ -198,7 +198,7 @@ test.describe('Write-time range validation (FIX FIRST)', () => {
     // start-only, never a hidden/garbage range, and no "Remove range" control since there is none.
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('11:00 PM');
     await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Remove range for Deep work' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     let items = await storedItems(page);
     expect(items[0].when).toBe('23:00');
     expect('durationMinutes' in items[0]).toBe(false);
@@ -208,7 +208,7 @@ test.describe('Write-time range validation (FIX FIRST)', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
     await page.locator('.pt-time-input').fill('09:00');
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00 AM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     items = await storedItems(page);
     expect(items[0].when).toBe('09:00');
     expect('durationMinutes' in items[0]).toBe(false);
@@ -225,7 +225,7 @@ test.describe('Write-time range validation (FIX FIRST)', () => {
     await expect(page.locator('#plan-tomorrow-error')).toHaveText('End time must be within 12 hours of the start.');
     await page.locator('#plan-tomorrow-date').click(); // let the panel settle/collapse before confirming
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('6:00 AM–6:00 PM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     let items = await storedItems(page);
     expect(items[0].durationMinutes).toBe(720); // the rejected 721 attempt never overwrote the valid 720
 
@@ -235,7 +235,7 @@ test.describe('Write-time range validation (FIX FIRST)', () => {
     await expect(page.locator('#plan-tomorrow-error')).toHaveText('End time must be within 12 hours of the start.');
     await page.locator('#plan-tomorrow-date').click();
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('6:00 AM–6:00 PM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     items = await storedItems(page);
     expect(items[0].when).toBe('06:00');
     expect(items[0].durationMinutes).toBe(720);
@@ -297,7 +297,7 @@ test.describe('Editing states', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
     await page.locator('.pt-time-input').fill('10:00');
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:00–11:00 AM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('10:00');
     expect(items[0].durationMinutes).toBe(60);
@@ -314,7 +314,7 @@ test.describe('Editing states', () => {
     await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '09:00', durationMinutes: 90 })]);
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove range for Deep work' }).click();
     await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00 AM');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items[0].when).toBe('09:00');
     expect('durationMinutes' in items[0]).toBe(false);
@@ -324,7 +324,7 @@ test.describe('Editing states', () => {
     await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '09:00', durationMinutes: 90 })]);
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Deep work' }).click();
     await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Deep work' })).toHaveText('+ Add time');
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe('p1');
@@ -362,7 +362,7 @@ test.describe('Persistence and identity', () => {
     await customRow.getByRole('button', { name: 'Change time for Set via native inputs' }).click();
     await page.locator('.pt-end-input').fill('10:00');
 
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     const quick = items.find(i => i.id === 'quick');
     const custom = items.find(i => i.id === 'custom');
@@ -381,7 +381,7 @@ test.describe('Persistence and identity', () => {
     const first = page.locator('.pt-oneoff').first();
     await first.getByRole('button', { name: 'Change time for Duplicate title' }).click();
     await page.getByRole('button', { name: '1h', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items.map(i => i.id).sort()).toEqual(['p1', 'p2']);
     expect(items.find(i => i.id === 'p1').durationMinutes).toBe(60);
@@ -393,9 +393,9 @@ test.describe('Persistence and identity', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Deep work' }).click();
     await page.getByRole('button', { name: '9 AM', exact: true }).click();
     await page.getByRole('button', { name: '1h', exact: true }).click();
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     await page.evaluate(() => openPlanTomorrow());
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const items = await storedItems(page);
     expect(items).toHaveLength(1);
     expect(items[0].durationMinutes).toBe(60);
@@ -419,7 +419,7 @@ test.describe('Planning Streak and Open Day regression', () => {
     await noPrep();
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Deep work' }).click();
     await noPrep();
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
     expect(preparation).toMatchObject({ lastPreparedMode: 'normal', intentionalBlank: false });
   });
@@ -475,8 +475,9 @@ test.describe('Daily Reconciliation integration', () => {
   test('carry-forward clears both when and durationMinutes — a carried item is always unscheduled', async ({ page }) => {
     await openApp(page, { plans: { [TODAY]: { items: [planItem('open-1', 'Write follow-up', { when: '09:00', durationMinutes: 90 })] } } });
     await page.evaluate(() => openPlanTomorrow());
+    await page.locator('[data-pt-fold="unfinished"]>summary').click();
     await page.locator('[data-pt-reconcile-item="open-1"] [data-pt-action="carry"]').click();
-    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    await page.getByRole('button', { name: 'Save plan' }).click();
     const tomorrow = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
     const carried = tomorrow.items.find(item => !item.deleted);
     expect(carried.task).toBe('Write follow-up');

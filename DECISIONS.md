@@ -1019,3 +1019,15 @@ owner-approved check of her stored legacy history against that rule would tell w
 `mergeDatePlans`; move a fenced Brain Dump item; treat a legacy day as writable after activation.
 
 ---
+
+## 43. Shipped accounting capability is a pinned descriptor plus a behavioural server proof (November 2, 2026, TASK-039)
+
+**Decision:** the coordinator stays unchanged. `accounting-capability.js` pairs a descriptor with one exact `firebase.rules.json` and puts the existing REST transport behind a proof. It reads and sends only while the proof is current. Proof is per page and account, lasts 5 minutes, and is dropped on a refused write.
+
+**Why:** a database marker could activate old clients, and a client cannot hash installed rules. Behaviour is the only thing the client can observe. Until the rules are installed, upgraded clients hold facts and send nothing.
+
+**Known limit:** the proof samples the gates. A ruleset with the sink and both denials but no timer gate would prove. `rulesSha256` is pinned by a test and never compared at runtime, so cutover needs release tooling that verifies the installed hash. Installing the exact rules IS activation.
+
+**Do not:** add a test seam to shipped runtime; treat `proven` as proof of the whole ruleset; install Stage B before writers are quiesced.
+
+---

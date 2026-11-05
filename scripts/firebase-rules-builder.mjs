@@ -34,7 +34,7 @@ const group = expression => `(${expression})`;
 export const PREDICATES = Object.freeze([
   'targetBinding', 'storeBinding', 'originImmutability', 'itemIdBinding', 'revokeMonotonic', 'epochMonotonic', 'tombstoneMonotonic',
   'stableKeyFormat', 'parentOverwriteClosed', 'epochBinding', 'claimIdentity', 'recoveryAbsence', 'finalizePresence', 'claimDeletionClosed',
-  'relocationRefused',
+  'relocationRefused', 'claimSourcePreserved',
   // Action API plan items (TASK-011, DECISIONS #37): a calendar fence child created by the action-scoped token.
   'actionKindBinding', 'actionTargetBinding', 'actionMarkerBinding', 'actionIdMarkerConsistency', 'actionCreateOnly',
   'actionAuthorityRequired', 'actionTombstoneMonotonic', 'actionRelocationRefused', 'actionCaptureKind', 'arrayActionRefused',
@@ -44,6 +44,7 @@ export const PREDICATES = Object.freeze([
   // R1: the move commits only under this action's own short move lock, taken by a conditional PUT on the source's exact
   // content (ETag); while a lock is active no ordinary write can change the source.
   'actionMoveLocked', 'actionMoveLockExclusive', 'actionMoveLockServerTime', 'actionMoveLockRespected',
+  'accountingRevision', 'accountingProtocol', 'accountingCancellation', 'accountingPhysicalBinding', 'accountingMarkerPermanent',
 ]);
 
 const ROOM_REF = "root.child('rooms').child($roomId)";
@@ -111,7 +112,8 @@ export function buildRules({ without = [] } = {}) {
     group(AND([`${NC}.exists()`, sameClaim])),
     group(AND([`!${NC}.exists()`, on('claimDeletionClosed') ? OR([group(finalize), group(recover)]) : 'true'])),
   ]);
-  const newClaim = AND([active(d), active(n), claimShape, on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null]);
+  const newClaim = AND([active(d), active(n), claimShape, on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null,
+    on('claimSourcePreserved') ? sameFields(n, d, ['text', 'important', 'urgent', 'status']) : null]);
   const claimTransition = OR([
     group(AND([`!${DC}.exists()`, OR([`!${NC}.exists()`, group(newClaim)]), on('epochMonotonic') ? `${epoch(n)} === ${epoch(d)}` : null])),
     group(AND([`${DC}.exists()`, withClaim])),
@@ -371,9 +373,42 @@ export function buildRules({ without = [] } = {}) {
       AND(["!newData.child('deleted').exists()", "newData.child('id').val() === data.child('id').val()", "newData.child('undoRestoredAt').isNumber()", "newData.child('updatedAt').isNumber()", "data.child('updatedAt').isNumber()", "newData.child('undoRestoredAt').val() === newData.child('updatedAt').val()", "newData.child('updatedAt').val() > data.child('updatedAt').val()"]),
     ]),
   ]);
+  // TASK-039: every causal sink shares the revision and permanent cancellation fence.
+  // No additional parent write grant is introduced; redemptions move to leaf grants.
+  const nextWrite = "newData.child('_csWrite')", oldWrite = "data.child('_csWrite')";
+  const accountingRevision = on('accountingRevision') ? AND([
+    'newData.exists()', `${nextWrite}.child('v').val() === 1`,
+    `${nextWrite}.child('operationId').isString()`, `${nextWrite}.child('operationId').val().matches(/^[A-Za-z0-9_-]{8,100}$/)`,
+    `(!${oldWrite}.exists() || (${oldWrite}.child('v').val() === 1 && ${oldWrite}.child('revision').isNumber() && ${oldWrite}.child('revision').val() > 0 && ${oldWrite}.child('revision').val() % 1 === 0 && (!${oldWrite}.child('protocol').exists() || ${oldWrite}.child('protocol').val() === 'staged-command-v1')))`,
+    `${nextWrite}.child('baseExists').val() === data.exists()`,
+    `${nextWrite}.child('baseRevision').isNumber()`,
+    `${nextWrite}.child('baseRevision').val() === (${oldWrite}.exists() ? ${oldWrite}.child('revision').val() : 0)`,
+    `${nextWrite}.child('revision').isNumber()`, `${nextWrite}.child('revision').val() % 1 === 0`,
+    `${nextWrite}.child('revision').val() > 0`, `${nextWrite}.child('revision').val() <= 9007199254740991`,
+    `${nextWrite}.child('revision').val() === ${nextWrite}.child('baseRevision').val() + 1`,
+  ].map(group)) : 'true';
+  const accountingCancellation = on('accountingCancellation')
+    ? `!${ROOM_REF}.child('timeAckCancellations').child(${nextWrite}.child('operationId').val()).exists()` : 'true';
+  const accountingWrite = grant => AND([group(grant), group(accountingRevision), group(accountingCancellation),
+    on('accountingProtocol') ? `${nextWrite}.child('protocol').val() === 'staged-command-v1'` : null]);
+  const entryId = "('' + newData.child('id').val())";
+  const counterpart = `($entryId === ${entryId} ? 'e_' + ${entryId} : ${entryId})`;
+  const oldCounterpart = `data.parent().child(${counterpart})`, nextCounterpart = `newData.parent().child(${counterpart})`;
+  const physicalBinding = on('accountingPhysicalBinding') ? AND([
+    `($entryId === ${entryId} || $entryId === 'e_' + ${entryId})`,
+    `(!data.exists() || newData.child('id').val() === data.child('id').val())`,
+    `(data.exists() || !${nextCounterpart}.exists())`,
+    `(!${oldCounterpart}.exists() || (${nextCounterpart}.exists() && ${nextCounterpart}.child('id').val() === newData.child('id').val() && ${nextCounterpart}.child('_csWrite/operationId').val() === ${nextWrite}.child('operationId').val() && ${nextCounterpart}.child('_csWrite/revision').val() === (${oldCounterpart}.child('_csWrite').exists() ? ${oldCounterpart}.child('_csWrite/revision').val() : 0) + 1))`,
+  ].map(group)) : 'true';
+  const causalWrite = { '.write': accountingWrite(OWNER) };
   const roomChildren = {
-    timer: ownerWrite, entries: { $entryId: { '.write': entryWrite } }, intention: ownerWrite, devices: ownerWrite, settings: ownerWrite, templates: ownerWrite, templatesSavedAt: ownerWrite,
-    breakState: ownerWrite, awayState: ownerWrite, reviews: ownerWrite, weeklyReviews: ownerWrite, focusRedemptions: ownerWrite, coarseLifeEvidence: ownerWrite,
+    timer: causalWrite, entries: { $entryId: { '.write': AND([group(accountingWrite(entryWrite)), group(physicalBinding)]) } }, intention: ownerWrite, devices: ownerWrite, settings: ownerWrite, templates: ownerWrite, templatesSavedAt: ownerWrite,
+    breakState: causalWrite, awayState: causalWrite, reviews: ownerWrite, weeklyReviews: ownerWrite,
+    focusRedemptions: { $redemptionId: { '.write': accountingWrite(entryWrite) } }, coarseLifeEvidence: ownerWrite,
+    timeAckCancellations: { $operationId: { '.write': AND([OWNER,
+      "$operationId.matches(/^[A-Za-z0-9_-]{8,100}$/)",
+      on('accountingMarkerPermanent') ? 'newData.val() === true && (!data.exists() || data.val() === true)' : 'true',
+    ]) } },
     dayBoundaryRevisions: ownerWrite, commitments: ownerWrite,
     // No `.write` on brainDump itself: a whole-collection write is never granted, so no parent
     // overwrite can skip a capture's own transition rule (and none can delete one).

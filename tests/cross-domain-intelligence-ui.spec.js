@@ -203,7 +203,11 @@ async function openApp(page, seed = {}) {
 }
 
 async function openNext(page) {
-  await page.locator('#nav-life').click();
+  if (await page.locator('#nav-life').isVisible()) await page.locator('#nav-life').click();
+  else {
+    await page.locator('#nav-more').click();
+    await page.locator('#nav-more-dialog').getByRole('button', { name: 'Life', exact: true }).click();
+  }
   await expect(page.locator('#view-life')).toHaveClass(/active/);
   await page.locator('#life-subnav-next').click();
   await expect(page.locator('#cross-domain-intelligence-root')).toBeVisible();
@@ -218,8 +222,9 @@ test('Life view exposes a third "Next" sub-tab that shows the intelligence view 
   await expect(page.locator('#life-character-sheet-root')).toBeHidden();
   await expect(page.locator('#life-feed-root')).toBeHidden();
   await expect(page.locator('#life-subnav-next')).toHaveAttribute('aria-pressed', 'true');
-  // still exactly 8 bottom-nav items (7 + Brain Dump, added by Brain Dump + Eisenhower V1) — no 9th
-  await expect(page.locator('nav.nav .nav-btn')).toHaveCount(8);
+  // Eight destinations remain; More is the approved additional navigation control.
+  await expect(page.locator('nav.nav .nav-btn:not(#nav-more)')).toHaveCount(8);
+  await expect(page.locator('#nav-more')).toHaveCount(1);
 });
 
 test('empty state: honest "no recommendation yet" plus a Data-not-evaluated list — never a fake verdict', async ({ page }) => {

@@ -1,24 +1,36 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { acknowledgingServer } from './time-ack-test-server.js';
 
 const APP_URL = pathToFileURL(path.resolve('index.html')).href;
 
 const firebaseStub = `
 (() => {
   if (window.firebase) return;
+  // Opt-in (TASK-039 Undo tests): a connected room that keeps the writes it acknowledges.
+  const room = window.__smokeAcknowledgingRoom ? {} : null;
+  const put = (p, value) => {
+    const parts = p.split('/').filter(Boolean); let node = room;
+    for (let i = 0; i < parts.length - 1; i++) { if (!node[parts[i]] || typeof node[parts[i]] !== 'object') node[parts[i]] = {}; node = node[parts[i]]; }
+    if (value == null) delete node[parts.at(-1)]; else node[parts.at(-1)] = JSON.parse(JSON.stringify(value));
+  };
+  if (room) window.__fbTest = {
+    get: p => JSON.parse(JSON.stringify(p.split('/').filter(Boolean).reduce((node, key) => node && node[key], room) ?? null)),
+    remoteWrite: put,
+  };
   const snapshot = value => ({ val: () => value, ref: { remove: () => Promise.resolve() } });
   const makeRef = refPath => ({
     path: refPath,
     child(childPath) { return makeRef(refPath + '/' + childPath); },
     on(eventName, cb) {
-      if (eventName === 'value') setTimeout(() => cb(snapshot(null)), 0);
+      if (eventName === 'value') setTimeout(() => cb(snapshot(room && refPath === '.info/connected' ? true : null)), 0);
       return cb;
     },
     off() {},
     once() { return Promise.resolve(snapshot(null)); },
-    update() { return Promise.resolve(); },
-    set() { return Promise.resolve(); },
+    update(values) { if (room) Object.entries(values || {}).forEach(([key, value]) => put(refPath + '/' + key, value)); return Promise.resolve(); },
+    set(value) { if (room) put(refPath, value); return Promise.resolve(); },
     remove() { return Promise.resolve(); },
     push(value) {
       const pushed = makeRef(refPath + '/pushed');
@@ -135,6 +147,12 @@ async function openApp(page, { entries = [], focusRedemptions = [], plans = {}, 
   // Existing INIT clears unfocused autofill fields after 800ms. Finish startup before opening forms;
   // the separate baseline startup draft-clear race remains, and all form assertions stay unchanged.
   await page.waitForTimeout(850);
+}
+
+/** TASK-039: signed-in Undo is acknowledged by the server; give the stub a connected room that keeps writes. */
+async function acknowledgingRoom(page) {
+  await page.addInitScript(() => { window.__smokeAcknowledgingRoom = true; });
+  await acknowledgingServer(page);
 }
 
 async function clickToastUndo(page) {
@@ -384,6 +402,7 @@ test('active local focus owner rejects remote timer takeover and republishes foc
 });
 
 test('quick retro log can be undone', async ({ page }) => {
+  await acknowledgingRoom(page);
   await openApp(page);
   await openTodayDetails(page);
 
@@ -416,6 +435,7 @@ test('deleted entries can be restored with undo', async ({ page }) => {
     onPlan: true,
     retro: true
   };
+  await acknowledgingRoom(page);
   await openApp(page, { entries: [entry], nowTs });
 
   await openTodayDetails(page);
@@ -934,6 +954,7 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
 
   await openTodayDetails(page);
   await expect(page.locator('#timeline-blocks')).toContainText('Scribe shift');
+  await page.locator('#timeline-blocks .tl-template-row summary').click();
   await page.locator('#timeline-blocks .template-off-btn').click();
   await expect(page.locator('#timeline-blocks')).not.toContainText('Scribe shift');
 
@@ -1372,6 +1393,7 @@ test('mobile normalizes synced recurring templates for settings and today hints'
   await page.evaluate(() => showView('today'));
   await openTodayDetails(page);
   const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await row.locator('summary').click();
   await expect(row).toBeVisible();
   await expect(row).toContainText('template hint');
 });
@@ -1648,6 +1670,7 @@ test('today template rows expose log and off actions without settings clutter', 
 
   await openTodayDetails(page);
   const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await row.locator('summary').click();
   await expect(row.getByRole('button', { name: 'Log it' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Off today' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Edit' })).toHaveCount(0);
@@ -2302,6 +2325,7 @@ test('activity cleanup merges stored name variants with undo', async ({ page }) 
       deleted: true
     }
   ];
+  await acknowledgingRoom(page);
   await openApp(page, { entries, nowTs });
   await page.evaluate(() => showView('settings'));
   await page.locator('summary').filter({ hasText: 'Advanced: Activity Cleanup' }).click();
@@ -2324,10 +2348,11 @@ test('activity cleanup merges stored name variants with undo', async ({ page }) 
   ]);
 
   await clickToastUndo(page);
-  const restored = await page.evaluate(() => entries
+  // Acknowledged Undo (TASK-039) applies after the server confirms.
+  await expect.poll(() => page.evaluate(() => entries
     .sort((a, b) => a.id - b.id)
-    .map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
-  expect(restored).toEqual(entries.map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
+    .map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted }))))
+    .toEqual(entries.map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
 });
 
 test('activity guardrail canonicalizes new timer and retro logs', async ({ page }) => {
@@ -2381,9 +2406,12 @@ test('activity guardrail canonicalizes quick saves', async ({ page }) => {
   };
   await openApp(page, { entries: [seed] });
 
-  const saved = await page.evaluate(() => {
+  const saved = await page.evaluate(async () => {
+    await _startTimer('App Building');
+    taskStartTime = Date.now() - 5 * 60 * 1000;
     blockStartTime = Date.now() - 5 * 60 * 1000;
     totalSecs = 30 * 60;
+    openQuickLog();
     _doQuickSave('app building', 'deep');
     return entries.find(e => e.quickLogged && e.activity === 'App Building')?.activity;
   });

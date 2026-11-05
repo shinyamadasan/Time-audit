@@ -242,8 +242,9 @@ export function normalizePreparation(value, expectedTargetDate) {
   const firstPreparedAt = timestamp(value.firstPreparedAt);
   const lastPreparedAt = timestamp(value.lastPreparedAt);
   const updatedBy = writer(value.updatedBy);
-  const routineInstanceIds = ids(value.routineInstanceIds);
-  const oneOffItemIds = ids(value.oneOffItemIds);
+  // RTDB omits empty arrays on readback; confirmation inputs still require explicit arrays.
+  const routineInstanceIds = ids(value.routineInstanceIds === undefined ? [] : value.routineInstanceIds);
+  const oneOffItemIds = ids(value.oneOffItemIds === undefined ? [] : value.oneOffItemIds);
   if (!firstPreparedAt || !lastPreparedAt || lastPreparedAt < firstPreparedAt || !updatedBy || !routineInstanceIds || !oneOffItemIds || typeof value.intentionalBlank !== 'boolean') return null;
   const normalized = {
     schemaVersion: 1,

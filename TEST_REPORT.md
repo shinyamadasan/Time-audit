@@ -2813,3 +2813,418 @@ production state after G4:
     2026-10-27). The owner's grant was re-issued at 2026-10-28T14:45:10Z, when the owner reconnected the connector
     to clear ChatGPT's cached tool list (the library replaces a user's existing grant); not an agent action.
 result: PASS. Undo optional (owner decision), not exercised for closure.
+
+
+
+## TASK-039 · 2026-10-27 America/Phoenix
+suite: final combined candidate on ce24092; complete Playwright; final npm test/fence/Worker/dry-run; focused/warm/strict repeats; lint/parity/source and preservation; independent review.
+result: full browser1027 passed, 0failed/skipped/expected failures (17.1m); final Node2392 passed /1existing opt-in diagnostic skip /0failed, 2393total, legacy455/455; fence177/177; Worker44/44/dry-run only; focused browser30/30; final portable warm3/3, actual strict red1failure; original strict seven21/21 unchanged; independent86backend +1warm pass; lint0errors/48existing warnings; runtime98/shared/rules parity pass; protected11trees9091hashes unchanged. Coverage not instrumented.
+evidence: review-artifacts/task-039-release-integration/GATE_RESULTS.json and SHA-indexed logs, component/import provenance, browser dependency invariance, independent exact-source/history audit and archive hashes.
+untested: hosted CI/formal repository review/live inventory/old-new client production canaries/deployment remain pending; no production data accessed or modified; no phone retest. Source-known reminder process-termination limitation and legacy fail-closed whole-history fallback retained.
+attempts: warm fixture precision corrected before real red; initial browser run stopped to remove historical Git-object requirement, final self-contained fixture unchanged behavior; remote0d9→ce refresh changed only backend/history so final full backend gates repeated; evidence newline-only/visual output copies restored after archival; Windows long-path verification uses blob IDs with identical assertions.
+
+
+## TASK-039 · hosted CI and local CI repair · 2026-10-28 America/Phoenix
+suite: PR20 hosted run40669652533 at head ddb6c6d/base ce24092; bounded local workflow/reference-render repair.
+result hosted: required testFAIL; browser1019passed/2failed/6notrun (17.5m), no expected failures/retries; Node2386passed/6existing platform-or-opt-in skips/0failed,2392total; legacy455/455; Worker44/44 and dry-run pass; required Firebase fence177/177,no skips.
+result local: Linux34affected cases x3=102/102 actual passes,zero failed/skipped/expected/retried (6.3m); Windows capture3/3,SDK21/21; full npmtest2392passed/1existing opt-in diagnostic skip/0failed,2393total, legacy455/455; parity runtime98/shared/rules and diff checks pass; discovery1027tests/58files.
+evidence: review-artifacts/task-039-release-integration/hosted-repair/CI_REPAIR_REPORT.md, HOSTED_FAILURE.json, LOCAL_RESULTS.json, SOURCE_PROOF.json, compressed actual logs, font metrics and independent D-048 review.
+untested: new hosted run awaits exact-SHA push approval. Claude quota prevented Guardian Gauntlet (NOT RUN/NOT PASSED); no GitHub human approval claimed. No new full1027 browser pass is claimed for this follow-up; app/runtime unchanged, affected files reverified. No production operation or phone retest.
+attempts: original Linux red58.375 vs44 and missing jar retained; hinting-only probe restored reference metrics. Unsupported describe-level launch option corrected to file scope; sandbox child-process/junction setup failures retained separately, never counted as passing.
+
+## TASK-039 · final local release safety STOP · 2026-10-28 America/Phoenix
+suite: npm test --prefix workers/chronasense-conversational-bridge; npm run check:bundle --prefix workers/chronasense-conversational-bridge (dry-run); root runtime/shared/rules parity; node --test release-safety/safety-proof.test.js with real local RTDB emulator/Firebase SDK.
+result: Worker45passed/0failed/0skipped; bundle dry-run PASS/no upload; root/www98-byte-identical/shared/rules parity PASS; final10 safety observation cases passed/0failed/0skipped, no expected-failure/retry masking. Coverage percentage not measured. Previous1027browser/strict-seven/backend/fence evidence reused only for unchanged sources; no new full-suite/hosted result claimed.
+evidence: review-artifacts/task-039-final-local-safety/{RECONCILIATION,SOURCE_HASHES,RESULTS,PRESERVATION,OLD_FIXTURES,SAFETY_OBSERVATIONS,TEST_ONLY_RULE_VARIANTS,PARITY_RESULTS}.json; compressed logs; focused independent review and TASK_039_FINAL_LOCAL_SAFETY.md.
+observations: preparation omission rejected/current save accepted for both accounts with exact time/tombstones; offline old queue rejected; inherited source-change denial/account isolation remain. Actual PlanAuthority edit and pinned old merge give identical full transition SHA2560ea95d1ef9b1032f807fa6bcbdb762ab9007a5243854d8a8ba6bb8209c6bf1a4: presence variant admits both, freeze denies both. Presence guard admits metadata replacement/whole-day deletion; array reindex bypasses slot identity; monotonic entry timestamps admit freshly stamped stale activity. Canonical rules not modified beyond approved PR20 import.
+attempts: initial source hash verification hit Windows revision:path length limit; blob lookup corrected. Initial safety discovery failed missing old model dependency; pinned closure added. Second7pass/2fail from incorrect empty-array wire expectation; fixture pruning corrected. Final10pass is evidence for incompatibility/STOP6, not a passing production guard. All actual failures retained.
+untested: no final-head/a9 hosted CI, Guardian, live source/rollback/canaries or phone testing. No new product/gateway feature, production rules/data operation, merge or push. Status blocked; next contract-design authorization required before any further safety integration.
+
+## TASK-039 · stale-session contract proof · 2026-10-28 America/Phoenix
+suite: node --test --test-concurrency=1 stale-contract/proof.test.js; real cached RTDB emulator4.11.2 and Firebase JS SDK10.12.2, Node24; TZ America/Phoenix.
+result: final26passed/0failed/0skipped/0cancelled/0todo. Both accounts, all three plan stores/fences, no-revision enrollment, before-image mismatch, actual old SDK offline queues/transactions, real retry0→1, account changes, corrections/tombstones/Undo, atomic multi-record moves, action token/lock/source/cutover preservation and strict mutated-rule/unsafe-adapter controls. Coverage percentage not measured.
+evidence: review-artifacts/task-039-stale-contract/{RESULTS,OBSERVATIONS,TEST_ONLY_RULES,PRESERVATION,SOURCE_HASHES}.json, actual compressed logs and TASK_039_STALE_CONTRACT.md.
+attempts: sandbox runner spawn EPERM retained; authorized local run13pass/7fail exposed fixture timestamp/cache assumptions and operational preparation omission; proposed retention/fixture corrections23/23, expanded25/25, final26/26. No production correction silently applied.
+untested: production adapter/persistence/UI/API receipt integration, final hosted head/base CI, Guardian, deployment/canaries and phone testing. No durability or release-readiness claim from isolated memory fixtures. Source-unchanged full suites/strict-seven evidence reused; gateway remains frozen and PR20 unchanged. Production NO-GO.
+
+## TASK-039 · stale-write integration STOP · 2026-10-28 America/Phoenix
+suite: node review-artifacts/task-039-stale-write-integration/independent-review/undo-boundary-proof.mjs; real local RTDB emulator, extracted unchanged undoLastAction/tombstone helpers and syncTimerState, proposed record rules.
+result: 8 strict assertion scenarios/0failed/0skipped across alice+bob; independent reviewer run plus root reproduction. These passes demonstrate the STOP, not integration/release readiness.
+evidence: independent-review/{undo-boundary-proof.mjs,UNDO_BOUNDARY_RESULTS.json,FINDINGS.md} and compressed actual logs; own RESULTS/PRESERVATION/SOURCE_HASHES and report. Function/source hashes bind original production bytes.
+observations: current-base tombstone accepted; stale-base/foreign/duplicate denied. Actual Undo synchronously clears action and rewinds local cursor; independent timer write accepted while entry CAS denied. Atomic entry/timer publication refuses both server changes but does not restore local cursor/action. Fresh-stamped legacy owner timer write remains allowed, foreign writer refused. Subsequent Save not executed; overlap risk labeled inference.
+untested: actual compatible client/rules/API integration, durable pending/conflict/reload/recovery implementation, new full integration gates and strict-seven run, final hosted head/base CI, Guardian, production rollout/canaries and phones. Canonical source unchanged; prior source-bound evidence retained but does not prove the new rejection lifecycle safe. Owner STOP applied; no production change.
+
+## TASK-039 · bounded time-accounting acknowledgement proof · 2026-10-28 America/Phoenix
+suite: node --test --test-concurrency=1 time-ack-proof/proof.test.js; node time-ack-proof/rerun-baseline.mjs; synthetic LOCAL real RTDB emulator and durable filesystem/fresh-process fixtures, extracted unchanged actual Save/Undo/timer functions.
+result: final35passed/0failed/0cancelled/0skipped/0todo; exact pinned original8 scenarios/0failed/0skipped reproduce prior unsafe baseline. Counts have different purposes, not an integrated safety/release PASS. Coverage not measured.
+evidence: review-artifacts/task-039-time-ack/{RESULTS,PRESERVATION,ATTEMPTS,SOURCE_HASHES,EXTRACTED_FUNCTION_HASHES,OBSERVATIONS,TEST_ONLY_RULES,BASELINE_EIGHT_RESULTS}.json; actual compressed logs; exact baseline harness copy; preserved post-checkpoint review records; TASK_039_TIME_ACK_PROOF.md.
+observations: refusal/unknown retain Undo and cursor; acceptance applies once; complete server evidence only; lost replies/reload/fresh process/duplicates/concurrent edits/takeover/account/device/session/multi-entry collision/storage interruption; original timestamps/history/tombstones and actual Save2min/extension12min/restore10min unchanged. Rejected Undo then actual Save does not overlap prior live span.
+attempts: first12pass/13fail from nested server PATCH reply versus flat request paths, conservatively UNKNOWN; corrected25/25, expanded33/33, final35/35. First baseline rerun had checkout-only EOL byte difference; final exact Git blob hash verified. Automatic approval-review usage-limit interruption executed no command; after owner continuation the authorized final pinned rerun completed.
+untested: application-wide integration, actual browser storage/quota/multi-tab/eviction behavior, full Focus/break/away/heartbeat/Stop timer-writer compatibility, pending/UNKNOWN unrestricted offline interaction, full suites/new strict-seven/hosted CI/Guardian/live rollout/phone testing. No new time algorithm or backend architecture. Guardian NOT RUN / NOT PASSED; production NO-GO.
+
+## TASK-039 · time acknowledgement integration · 2026-10-28 America/Phoenix
+suite: e058383 local — npm test, test:fence, full Playwright (2 workers), strict seven x3, focused real-SDK spec, original eight on pristine 5e665bd, lint, parity.
+result: npm 2392 passed/1 existing opt-in skip/0 failed (2393), legacy 455/455; fence 205/205 (incl. 28 new lifecycle emulator cases); full browser 1035 passed/0 failed (25.2m); strict seven 21/21; focused 7/7; original eight 8 scenarios/0 failed, STOP reproduced on old flow; lint 0 errors/48 existing warnings; www 99-file mirror, rules builder, functions/shared, diff --check pass.
+attempts: f422f96 full browser 2 known UTC-midnight daily-routines failures (pass 10/10 rerun, pass on baseline); release-token test failed until governed bump e058383; one life-ledger lock-race flake under concurrent load (3/3 alone).
+untested: hosted CI, Guardian, live writer inventory/rollout fence/canaries, phone testing, gated rules with real clients. Guardian NOT RUN / NOT PASSED; production NO-GO.
+
+## TASK-039 · final UNKNOWN Undo cancellation proof · 2026-10-28 America/Phoenix
+suite: node --test unknown-recovery-proof/recovery.test.js; node --test time-ack.test.js
+  unknown-recovery-proof/recovery.test.js; npx playwright test tests/time-ack-undo.spec.js
+  tests/time-ack-unknown-hazards.spec.js --workers=1; npm test; parity/rules/source/diff checks.
+result: final cancellation proof 29 passed/0 failed/0 skipped; preceding combined run 56 passed
+  (28 original lifecycle + 28 proof cases, before adding the real delay); final real >120s case held
+  original bytes for 125321ms, both synthetic accounts, originals and duplicates refused after cancellation.
+  Browser 11 passed/0 failed (7 unchanged regressions + 4 confirmed hazard reproductions). npm test:
+  2392 passed/0 failed/1 existing opt-in skip (2393), legacy 455/455. Coverage not measured.
+preservation: git diff against 9b0671b confirms index.html/storage.js/time-ack.js/canonical rules/rules
+  builder/www unchanged; 99-file runtime mirror and canonical rules builder pass; new JS parses; diff check passes.
+findings: first-read tab-local hold permits second-tab Save; delayed agreement/realtime channels permit
+  stale original Undo to erase the newer saved record. Intentional recovery auto-extends a held record
+  and stops; late original Undo removes its recovered extra time. Both loss paths reproduced for Alice
+  and Bob. Legacy age-based abandon retires UNKNOWN while its original can still commit (both accounts).
+  Therefore test execution PASS does not imply accounting safety PASS: overall integration verdict BLOCKED.
+attempts: initial unprivileged node test could not spawn a child (EPERM); authorized local Node/Java and
+  Chromium launches succeeded. Earlier 19-, 51-, 55- and 56-case proof expansions passed; final proof29
+  includes the additional real wall-clock delay. Initial isolated hazard run 4/4, combined browser11/11.
+untested: connected app Keep server version/barrier-release integration; all other automatic writer
+  combinations; large-account snapshot sizing; full browser suite/strict-seven repetition/hosted CI;
+  Guardian/live data/rollout/phone. None silently claimed. Guardian NOT RUN / NOT PASSED; production NO-GO.
+evidence: TASK_039_UNKNOWN_RECOVERY.md; unknown-recovery-proof/RESULTS.json; local ignored npm-test.log,
+  emulator-tests.log, browser-tests.log and proof-final.log alongside the proof. Original UNKNOWN is retained.
+next: one bounded LOCAL follow-up approval for preparation/in-flight and automatic/recovery accounting
+  fencing plus cancellation/reconciliation integration; all other stale-write integration remains held.
+
+## TASK-039 · close confirmed accounting hazards · 2026-10-28 America/Phoenix
+suite: npm test; npm run lint; node --test time-ack.test.js accounting-hazards/command-journal.test.js
+  accounting-hazards/external-writer-boundary.test.js accounting-hazards/before-image-probe.test.js;
+  node --test unknown-recovery-proof/recovery.test.js; npx playwright test tests/time-ack-unknown-hazards.spec.js
+  --workers=1; npx playwright test tests/time-ack-undo.spec.js tests/smoke.spec.js
+  tests/calendar-native-plan-identity.spec.js --workers=1; preservation/mirror/rules/diff checks.
+result: npm2392 passed/0 failed/1 existing opt-in skip (2393), legacy455/455; lint0 errors/48 pre-existing warnings;
+  emulator43 passed/0 failed/0 skipped (28 lifecycle,10 journal,4 external-boundary confirmations,1 rule probe);
+  preserved baseline cancellation29/29, real delayed original+duplicates denied after125201ms for both accounts;
+  local browser prevention26/26 and affected actual-runtime browser114/114, no skipped browser cases.
+  Coverage not measured. Counterexample passes demonstrate the STOP; they are not accounting safety passes.
+preservation: 17 unchanged accounting/time/guard functions; original scheduled calculation and publication tail
+  (extracted helper) verified against9b0671b with LF-normalized hashes; storage.js/focus-mode.js/extension/canonical
+  rules and builder frozen. 99-file www parity and canonical rules check pass. No gateway/PR20 changes.
+attempts: intermediate scheduled cases failed while immutable capture/event coalescing were implemented
+  (including a25/26 run); final26/26 on cleaned source. Initial npm failed entry-validation's extracted scheduled
+  producer because its VM omitted applyAutoTemplateEntries; dependency added, focused32/32 and full rerun passed.
+  Working failure logs were overwritten by reruns; failing output remains in the tool transcript, not claimed
+  archived. Final raw logs remain locally and final compressed evidence is committed under accounting-hazards/evidence/.
+findings: original loss scenarios prevented inside connected local boundaries for both accounts. Actual
+  extension writer advances its merge cursor before a refused PUT and retains no complete pending command;
+  actual app sync creates e_ aliases of numeric physical keys and entry-only Undo can leave the numeric source
+  live. Scope STOP under objective5. No automatic alias winner/migration or unknown-base reauthorization.
+untested: full app wiring across all manual/Focus/Away/native/independent writers; automatic completion of
+  arbitrary interrupted ordinary commands; full browser/strict-seven repetition/hosted CI/Guardian/live
+  inventory/canaries/phone. The adapter is not in index.html; no app-wide safety or release PASS is claimed.
+review: independent source review identified required fixes and the compatibility boundary; final exact-source
+  review is recorded with the local commit evidence. Own task remains blocked. Guardian NOT RUN / NOT PASSED;
+  production NO-GO.
+
+## TASK-039 · exact 55aa1cd review repairs · 2026-10-28 America/Phoenix
+suite: final local node emulator matrix and tests/time-ack-unknown-hazards.spec.js --workers=1.
+result: 47 emulator passed/0 failed/0 skipped (28 lifecycle,14 journal,4 boundary confirmations,1 probe);
+  28 browser prevention passed/0 failed/0 skipped. New tests cover an event whose stale second-tab
+  refresh returns after another tab finalized it, repeated receipt handling under the shared lock,
+  and refusal to normalize unknown/malformed prior reserved metadata. Compressed final logs replaced
+  the earlier26/43 evidence. Actual application runtime did not change in these repairs.
+review: 55aa1cd was changes-requested for those two defects; repaired source is sent for exact-commit
+  re-review. All other disclosed scope blockers and NOT RUN gates remain unchanged. Task stays blocked.
+
+## TASK-039 · final independent exact-source review · 2026-10-28 America/Phoenix
+reviewed: fac8dd00d9132171d42c03b103b73e749804811c, clean worktree, independent read-only agent.
+verdict: approve BLOCKED local checkpoint for handoff; zero remaining must-fix within declared artifact
+  scope. Actual-module receipt reproduction now completed/no-op with one body invocation and no conflict;
+  metadata refusal fixed; updated28-browser/47-emulator compressed evidence confirmed. Full integration
+  remains blocked. Record: accounting-hazards/INDEPENDENT_REVIEW.md.
+final evidence commit: documents/review record only; implementation/runtime/test source unchanged,
+  so no repeated suite run is warranted. Prior final verification counts remain applicable.
+Guardian NOT RUN / NOT PASSED; production NO-GO. No push/merge/deploy/live access/phone testing.
+
+## TASK-039 · physical-key / legacy-writer closure · 2026-10-28 America/Phoenix
+base: 021d1eecb963d75fabd09735095e54c1fa6ff4b7; local branch task-039-physical-writer-closure.
+suite: exact focused commands in accounting-hazards/PHYSICAL_RESULTS.json.
+result: focused node88 passed/0 failed/0 skipped; affected entry/time provenance42/42;
+  original strict F-1 through F-7 browser7/7. Local real-SDK accounting prevention27 passed/1 failed:
+  Bob scheduled-proof record absent after resume. Five isolated diagnostic repeats passed, without
+  reproducing or explaining the failure. Temporary diagnostics removed; assertions/source unchanged.
+  This failure remains open and is not relabelled a passing integrity result.
+coverage: both synthetic accounts, real SDK clients/offline alias races, conflicting physical sources,
+  original conditional bytes/ETag, refusals/lost replies, reload, producer killpoints and one-day
+  interrupted recovery, stale shorter capture, account switching and legacy unbound sessions.
+preservation:12 frozen sources, original extension calculations, canonical builder,99-file mirror,
+  syntax and diff whitespace pass. Historical extension counterexamples use exact021d source fixture;
+  new producer has separate prevention regressions. Full writer inventory independently examined.
+untested: full npm/browser suite intentionally not repeated while adapter unwired; Chrome MV3 lifetime,
+  full remaining-writer interruption matrix, live older-writer availability, hosted CI, Guardian and phone.
+verdict: BLOCKED integration; only bounded local primitive/retention proof passes. See
+  TASK_039_PHYSICAL_WRITER_CLOSURE.md and accounting-hazards/WRITER_COMPATIBILITY.md for STOP boundary.
+Guardian NOT RUN / NOT PASSED; production NO-GO. No push/merge/deploy/PR update/live/phone action.
+
+## TASK-039 · physical-writer exact-source review receipt · 2026-10-28 America/Phoenix
+reviewed:40e4ade0d7083a615e4b214938eb70aee6956cff; PASS for bounded stopped checkpoint handoff,
+  no must-fix; full integration BLOCKED. Inventory completeness independently confirmed.
+record:accounting-hazards/PHYSICAL_INDEPENDENT_REVIEW.md. Independent extension10/10; reviewer
+  child-process spawning sandbox-blocked, no independent full-run claim. Existing results and
+  unresolved scheduled browser failure unchanged. Final commit is evidence only; no suite rerun.
+Guardian NOT RUN / NOT PASSED; production NO-GO. No remote/live/phone action.
+
+## TASK-039 · accounting scope decision · 2026-10-29 America/Phoenix
+base:d50a44f1b2d4b14de99efac76f3ac3793cb0c4a5; local branch task-039-accounting-contract.
+suite: exact commands/outcomes in accounting-hazards/scope-decision/RESULTS.json.
+result: instrumented original scheduled tests9 passed/1 failed (Alice reproduced absent server record).
+  Complete original occurrence and immutable command retained UNKNOWN. Automatic replay started
+  inside the still-aborted PATCH window; resumeEvents observes but does not resend UNKNOWN commands.
+  Controlled Alice/Bob tests2/2 pass: force same window, retain original event/command across reload,
+  then deliver exact original synthetic PATCH; one original record and completed receipt, no duplicate.
+  Evidence-saving repeat2/2 pass, not additional safety coverage. No adapter repair/claim of closure.
+historical risk: original Bob trace unavailable; its exact interleaving/durability remains unproved.
+  Five old isolated passes and the current passes do not clear it. Required prevention gates explicit.
+preservation: direct git diff against base shows only authorized design records; app, original tests,
+  Focus/Undo/extension, rules/builder, Functions/Worker/gateway and www unchanged.99-file mirror and
+  canonical rules builder checks pass; diagnostic syntax/diff whitespace pass.
+environment: sandbox worker spawn EPERM; approved local execution used. npx launch cancelled before
+  useful output; installed CLI used. Historical physical-preservation helper spawnSync git EPERM;
+  no helper PASS claimed, direct checkpoint diff provides broader source identity verification.
+self-review/QA: new code is local diagnostic generation only; original assertions unchanged, no runtime
+  dependency or speculative implementation. Contract crosswalk covers every inventory family, G1–G9,
+  scope estimate, both paths, one recommendation and explicit next authorization. Ready as a design
+  artifact only. Generic QA instructions to edit protected planning/docs or pull/push do not apply here.
+untested: npm test and full browser/strict-seven repetition skipped for runtime-identical design scope;
+  coverage percentage not measured. No new independent review, live client census, Guardian, phone,
+  production canary or release gate claim. Broader staged integration is not implemented or verified.
+→ only new design task set to review; earlier blocked tasks preserved. Guardian NOT RUN / NOT PASSED;
+  production NO-GO. No push/merge/deploy/PR update/live data/phone action. STOP after contract.
+
+## TASK-039 · October 29, 2026 — unified accounting partial implementation, BLOCKED
+suite: node --test --test-isolation=none accounting-hazards/staged-effects.test.js
+result: 13 passed, 0 failed; focused coordinator checks, not full G1/G6.
+suite: tests/accounting-staged-effects.spec.js --grep-invert 'G2 boundary' --workers=1
+result: 10 passed, 0 failed (23.2s); actual runtime + SDK + loopback emulator; explicit subset.
+suite: same spec --grep 'G2 boundary' --workers=1 --output=test-results/accounting-boundary --reporter=json
+result: 0 passed, 4 failed, 0 skipped/retried (25.8s). Alice/Bob both lose 30 minutes on ping→Switch and repeat work/include Break on Break→Save. No expected-failure annotations.
+suite: firebase-rules-mutation.test.js, five named accounting predicate controls, in-process Node
+result: 5 passed, 0 failed. Full supported-operation compatibility is not established.
+untested: Full npm test, mandatory Focus/account/rules suites, cancellation/cross-tab/native/legacy/MV3 matrices, packaging/parity and full independent integrated-source review. Stopped at owner's explicit mathematics boundary. No phone, Guardian or production operations. Coverage percentage not measured.
+evidence: TASK_039_ACCOUNTING_INTEGRATION.md; accounting-hazards/integration-boundary-evidence.json (accepted server records and source hashes).
+review: Independent read-only boundary review confirms STOP; no integrated-candidate approval. Guardian NOT RUN / NOT PASSED. Production NO-GO.
+
+## TASK-039 · October 29, 2026 — authorized pending-span correction
+suite: tests/accounting-staged-effects.spec.js, real SDK/loopback emulator, Alice and Bob
+result: Original defect reproduction0 passed4 failed; same assertions after fix4 passed. Expanded boundary matrix22 passed; callers/device/capture6 passed; existing regressions10 passed.
+review repairs: short-Break before6 passed2 failed; PC frontier before0 passed4 failed; repaired12 passed. Clock rollback before0 passed2 failed; after runtime guard an intermediate nested matcher failed (documented); corrected matcher preserves exact time/ID/retention assertions.
+final qualification: full affected matrix50 passed0 failed0 skipped/retried (106.7s), then final affected automatic/scheduled subset8 passed0 failed (20.2s) after no-shrink guard, including2 new cases. 52 distinct cases covered across these runs, not one52-case run. Source versions and statistics in accounting-hazards/pending-span-evidence.json.
+static: three executable inline script blocks parse; firebase.rules.json matches builder; diff whitespace check passes.
+untested: Full project G2/G7 matrices, full npm/Focus/account/rules qualification, cancellation/cross-tab/native/legacy/MV3, packaging/parity and integrated-candidate review. Coordinator13/rule mutation5 earlier checks reused as their source is unchanged.
+status: bounded independent re-review pending; full gates NOT PASSED; Guardian NOT RUN / NOT PASSED; Production NO-GO. Historical Bob event not silently resolved.
+
+TASK-039 bounded exact-source review: APPROVED; reviewer independently ran3 source checks, all pass. Runtime/test blob IDs recorded in consolidated evidence. SDK suite inspected, not rerun by reviewer. Full G2/G7/integrated review still NOT PASSED.
+
+
+## TASK-039 · October29,2026 — local cancellation/hydration bridge
+suite: node --test --test-isolation=none accounting-hazards/staged-effects.test.js
+result:24 passed0 failed, including reproduced captured-device and drain completion-window regressions. Independently rerun24/24.
+suite: tests/accounting-staged-effects.spec.js focused local Firebase SDK/emulator batches
+result:18/18 review repairs; expanded boundary36/36 (86.5s) before final pump cleanup; final affected scheduled/Break/peer6/6 (25.3s) after cleanup. Actual source manifests and intermediate failures retained in integration-runtime-evidence.json.
+known failures: First unchanged Focus integration baseline0 passed2 failed. This writer is not migrated; no expected-failure annotations.
+static: builder parity and diff whitespace checks pass; three executable inline scripts parse. Initial parser attempt incorrectly included importmap JSON; executable-script filter corrected, no product syntax defect.
+untested: Full npm/QA/SELF_REVIEW, full native/Focus/legacy/MV3/authorization matrices, packaging/parity and integrated exact-source review. No full G1-G9 PASS or coverage percentage claimed. Guardian NOT RUN / NOT PASSED; production NO-GO.
+
+
+## TASK-039 · October29,2026 — bounded Focus integration
+suite: node --test --test-isolation=none accounting-hazards/staged-effects.test.js
+result:31 passed0 failed, independently rerun31/31; effect receipt interruption/version/ownership and capture-before-continuation covered.
+suite: real runtime Firebase SDK/emulator Focus subset, Alice/Bob
+result: Initial migration baseline0/2; endpoint integration2/2; lifecycle7/8 then8/8. Timing regression0/4 before repair; repaired lifecycle/timing14/14; pending-Start phase continuation2/2; Learning/peer6/6; pre-review current22/22.
+review repairs: exact before-source controlled0/4, then4/4. Final broader batch26/28 with2 readback-injector errors (fault occurred before write); corrected actual post-write readback2/2 verifies original ID/time/config. These cover28 distinct Focus cases on the same runtime across runs, not one28-pass run.
+harness limits: Initial before-review SDK diagnostics failed on timeout/intentional navigation before meaningful closure; controlled variants handle navigation immediately and assert exact new-cause state. An absent optional planItemId was initially matched as a required undefined property; only that matcher was corrected. All reports retained.
+evidence: TASK_039_ACCOUNTING_INTEGRATION.md; integration-runtime-evidence.json.focusDraft; immutable runtime manifests; verified source-before archive.
+untested: Full npm/F1-F7/original Focus suites, complete G1-G9/native/legacy/MV3 matrices, packaging/parity and full integrated review. No phone or Guardian. Production NO-GO; historical Bob uncertainty remains.
+
+
+## TASK-039 · October29,2026 — bounded native request/result integration
+suite: node --test --test-isolation=none accounting-hazards/staged-effects.test.js
+result:35 passed0 failed, independently rerun35/35. Initial new API tests0/4 before implementation.
+suite: real runtime Firebase SDK/emulator native and boundary subset, Alice/Bob
+result: Final exact-source38/38 (32 native,4 G2 boundary,2 Focus callback),58.3s. Zero skipped or flaky.
+review regressions: Malformed native range/open0/4 before repair,4/4 after; final batch also proves malformed pending request never queries. Independent8 schema probes pass.
+intermediate evidence: Startup2/6 then wired6/6; interruptions4/8, then controlled repaired4/4; owner/Undo/tombstone6/6; request capture4/4; peer ordering2/2; pre-schema review32/32. Two initial lost-ACK failures were invalid expectations because full authoritative postimages legitimately acknowledged the command; controlled tests block readback until reload.
+static: Three executable inline scripts and coordinator parse; diff whitespace check passes.
+evidence: TASK_039_ACCOUNTING_INTEGRATION.md; integration-runtime-evidence.json.nativeDraft; exact manifests/reports and preserved source-before fixture.
+untested: Full npm/QA/SELF_REVIEW, complete legacy/reconnect/unbound/MV3/G1-G9 matrices, package parity and integrated-source review. Native Java source compatibility inspected only; no APK/device/phone test. Guardian NOT RUN / NOT PASSED; production NO-GO; historical Bob uncertainty retained.
+
+## TASK-039 · 2026-10-30 — storage/source milestone
+suite: tests/accounting-staged-effects.spec.js actual SDK/loopback emulator frozen source; staged-effects coordinator; time-ack historical/current compatibility
+result: SDK188 passed,0 failed,0 skipped,0 flaky; coordinator46 passed independently; legacy lifecycle28 historical passed and2 current strict legacy-refusal checks passed. Coverage percentage not measured.
+untested: full npm/original browser families, complete writer/physical/rules inventory, actual MV3, package parity and final integrated review remain; phone/Guardian/production not run. Full G1-G9 NOT PASSED.
+evidence: TASK_039_ACCOUNTING_INTEGRATION.md and integration-runtime-evidence.json.storageDraft.captureLeaseFollowup preserve all failing and passing runs; first full SDK169pass15fail repaired. Historical Bob root cause/safety remains unresolved. Production NO-GO.
+
+
+## TASK-039 · 2026-10-30 — bounded extension milestone, owner-requested thread handoff
+suite: node --test accounting-hazards/extension-integration.test.js accounting-hazards/physical-writer.test.js accounting-hazards/extension-interruption.test.js browser-extension/time-truth-idle.test.js
+result:65 passed0 failed0 skipped,10.4s; includes canonical fault23/23. Original failure baselines and all incremental repairs preserved in consolidated evidence.
+suite: tests/accounting-extension-mv3.spec.js actual unpacked Chromium MV3, loopback RTDB and real app Firebase SDK
+result:2 passed0 failed0 skipped0 flaky,12.2s. Both accounts retain original pending503 command across isolated-browser process kill/profile restart and candidate version1.0→1.1 next-day upgrade. Exact bytes/ETag, original interval and one numeric identity survive app Delete/Undo.
+limits: same candidate code version bump is not historical-code migration; kill occurs after durable503, not every gate boundary. Three earlier browser harness lifecycle timeout runs retained. Independent bounded exact-source review PASS, reports/attachments inspected; no full integrated review.
+untested: full G1-G9 completion, full npm/QA/SELF_REVIEW/original browser families, remaining writer/effect/authorization matrices, old-code upgrade, full killpoints, package parity/exclusions and external census/cutover. Historical Bob unresolved. No phone/Guardian/production; Guardian NOT RUN / NOT PASSED; production NO-GO.
+## TASK-039 · 2026-10-30 — resumed qualification, blocked acceptance conflict
+
+suite: isolated extension/core/physical/historical TimeAck/producer interruption/idle checks
+result:174 passed,0 failed,0 skipped (43.7s). Includes16 abrupt command kill points and38 current canonical extension cases. Historical TimeAck cases are distinguished from current strict-rule proofs.
+suite: actual MV3 historical queue/candidate process-kill/profile upgrade/app SDK Delete Undo
+result:4 passed,0 failed,0 skipped,0 flaky (24.2s). Historical upgrade forces candidate module evaluation with test-specific script URLs under the same extension ID; no claim about untouched installed-store upgrades.
+suite: tests/accounting-staged-effects.spec.js complete frozen SDK run
+result:213 passed,1 failed,0 skipped,0 flaky (508.7s). Bob Focus readback failed awaiting endWorkSession with a DevTools context-destroyed error. The same command Promise is now retained and polled without resubmission.
+suite: targeted C5 offline Start and Focus capture quota/readback qualification
+result:6 passed,0 failed,0 skipped,0 flaky (19.1s). Both-account original Start facts survive45-minute reload and ACK at original T0; all four Focus cases pass. No complete216-case rerun claimed; broad-run source manifest predates the final token-only generation change.
+suite: actual manual/retro-midnight/merged/Delete/clear/metadata/Away writer subset
+result:20 passed,0 failed,0 skipped,0 flaky (56.8s). Initial15/20 failure evidence retained; fixture input setup and Away field expectation corrected without relaxing time/key/ACK/reload assertions.
+suite: native committed projection and notification reliability; actual SDK/provider Start/Stop/init/reload
+result:29 node checks passed;6 SDK cases passed. Independent bounded review PASS; no Android or phone check.
+suite: current rule mutations plus exact historical external counterexamples; current calendar owner audit
+result:47/47 and26/26 pass. No canonical rules/builder changes this run.
+suite: local runtime mirror/package exclusions
+result:101 files byte-identical,0 missing/dev leaks;17 mirror tests pass. Only pure browser-extension/entry-physical-keys.js is exempted from directory exclusion, with negative neighboring/transitive-import controls. Necessary packaging touch follows canonical DECISIONS D-002.
+suite: original required F1–F7 assertions with current honest staged fixture
+result:4 passed,3 failed,0 skipped,0 flaky (17.3s). F4–F7 pass unchanged; F1–F3 fail their explicit successful OFFLINE Start precondition, which contradicts C5 pre-ACK committed-state invariance. F2 also expects a committed offline log. Independent review confirms an acceptance-contract blocker.
+suite: npm test
+result:FAILED. First sandbox EPERM rerun with permission; packaging and stale owner-audit failures repaired and retained. Latest run reaches entry-validation.test.js:0 passed,32 failed due its extractor stripping async from applyAutoTemplateEntries. Later npm commands did not run. This is a fixture migration gap, not32 demonstrated runtime regressions; no full npm PASS.
+untested: complete G1–G9; remaining all-writer mapping/size/quota/authorization/Functions/UNKNOWN matrices; exact complete-candidate browser/account/Focus/QA qualification; installed-store upgrade/census/cutover; Guardian; phone. Historical Bob remains unresolved. Coverage percent N/A. Evidence: accounting-hazards/resume-qualification-evidence.json and evidence/resume-20261030/.
+handoff: TASKS status blocked; no production commit because QA/acceptance fails. Existing HEAD ed7fedca and all changes preserved uncommitted. No push/merge/deployment/production access/phone testing. Guardian NOT RUN / NOT PASSED; production NO-GO.
+## TASK-039 · 2026-10-30 (Phoenix) · O1 blocked checkpoint
+suite: frozen actual-runtime tests/accounting-staged-effects.spec.js, both synthetic SDK/emulator
+  accounts, immutable SOURCE_MANIFEST7685e12d4c5bb16cd3cfbbacf9e471cf48ec0d8ba8b17dabbcdd5cecd2a39cfe
+result:251 passed,9 failed,0 skipped/0 flaky,606.3s. F1-O1/F2-O1/F3-O1 each2/2 pass. Six failures
+  are native request/result readback and Focus AutoStart assertions; three report destroyed browser
+  execution contexts. No infrastructure-only explanation or full-candidate PASS claimed.
+suite: npm test
+result:PASS, exit0; this package's Node command chain is not full browser/QA acceptance. Separate
+  fixture33/33 keeps original assertion values and marks3 historical listener/writer cases explicitly.
+suite: isolated12-file coordinator/extension/interruption/physical/historical/rules matrix
+result:252/252 pass, no skips. Includes prototype/historical controls; not252 current-rule proofs.
+suite: tests/accounting-extension-mv3.spec.js
+result:4/4 pass, no skips/flaky. Synthetic isolated profiles; historical candidate module-URL
+  instrumentation remains disclosed. No real installed-client census or production activation.
+suite: original daily-use F1–F7, unchanged assertions
+result:4 pass3 fail; F1–F3 remain failed, F4–F7 pass. O1 tests are separately versioned, not relabelled.
+suite: tests/accounting-focus-acceptance-boundary.spec.js
+result:0/4, actual SDK/coherent-state evidence of old count/adoption and corrupt-key expectations.
+  Original Focus26 unchanged; one old fixture regression0/1. No claim of full Focus acceptance.
+suite: independent exact-source review
+result:NOT APPROVED. Independent focused96/96; frozen full evidence inspected, not rerun. Actual CSS
+  probe finds transparent/obscured provisional facts; orphaned _startTimer tail also needs cleanup.
+  SELF_REVIEW and full QA NOT PASSED; no production or checkpoint commit made.
+suite: lint, inline parse, governed generation, mirror and rules-builder checks
+result:lint exit0(0 errors/153 warnings);3 executable inline scripts parse; www101 byte parity;
+  canonical local rules match builder. A regex/comment extraction setup error is not source failure.
+untested: full all-writer kill/size/quota, physical/authorization/Action API/Functions compatibility,
+  UNKNOWN/cancellation, cross-tab/cache and historical installed-client/cutover matrices; remaining
+  original Focus/account browser acceptance. New Focus authority decision is outside O1; no test
+  weakening or unsafe implementation crosses it. Historical Bob uncertainty remains unresolved.
+  Guardian NOT RUN / NOT PASSED; phone unrun by owner constraint; production NO-GO.
+evidence: TASK_039_ACCOUNTING_INTEGRATION.md; accounting-hazards/o1-qualification-evidence.json;
+  accounting-hazards/evidence/o1-20261030/. Earlier failures and pre-O1 verified archive retained.
+
+## TASK-039 · 2026-10-31 — Focus authority V1 bounded amendment
+suite: focused native/Focus regressions, real-SDK versioned Focus recovery, frozen full accounting SDK,
+  npm test, static/parity/lint and independent exact-source review.
+result:
+  - Before:12 targeted cases ->5passed/7failed (six assertions and Bob Switch browser-context error).
+  - Native request/result and Focus AutoStart readback/quota after repair:12/12 passed.
+  - Learning/Switch repeated retained-Promise checks:12/12 passed; no operation resubmission/assertion weakening.
+  - Versioned authority focused46/46; invalid reconnect before4passed/2failed, then final affected10/10 passed.
+  - Final frozen real-SDK accounting + Focus authority:308passed/0failed/0skipped/0flaky,600.8s.
+    Includes48 FA-V1 cases and unchanged passing F1-O1–F3-O1 both-account acceptance6/6.
+  - npm test:PASS, exit0 (Node command chain; coverage not measured; not all Playwright browser tests).
+  - Independent final:63 Node +6 invalid-source reconnect checks =69/69 pass; bounded review APPROVED.
+  - Static: all104 frozen hashes match;3 executable inline scripts parse;101 www mirrors byte-identical;
+    rules source unchanged in this amendment/matches builder; lint0errors/160warnings; scoped diff check passes.
+untested:
+  - Full original Focus26 not newly qualified; original file,12 superseded expectations and original failures
+    retained unchanged. FA-V1 replacements are explicitly versioned, not original-suite passes.
+  - Bob original Learning underlying CDP failure unavailable: shared cause inferred. Alice Learning and Bob
+    Switch independently reproduced Promise collection, without navigation/crash. See context-diagnosis.json.
+  - Full G1–G9 matrices, historical Bob uncertainty, installed-writer/cutover census and full app browser
+    acceptance remain open. Guardian NOT RUN / NOT PASSED; phone tests prohibited/unrun; release NO-GO.
+evidence: accounting-hazards/evidence/focus-authority-v1-20261031/qualification.json and adjacent original
+  reports/protocol summaries/source hashes/screenshots; TASK_039_ACCOUNTING_INTEGRATION.md Focus V1 appendix.
+  Early fixture setup failures and later [] retention/session-reconnect defects remain preserved separately.
+  No commit/push/merge/deploy/production access/rule change/phone testing.
+
+## TASK-039 · 2026-11-01 · frozen integrated qualification shards
+suite: deterministic Playwright full-suite enumeration and 21 round-robin shards; one worker;
+  180s per-case timeout; exact title preflight and frozen source-manifest/hash verification per shard.
+result: 442 mandatory cases reported: 440 passed, 2 failed, 0 skipped, 0 timed out, 0 flaky.
+  Sharded run completed; it does not establish the cause of the earlier unsharded no-progress stall.
+  Bob G3 numeric physical-source case failed once in the aggregate, then passed focused exact-manifest
+  repeats 3/3 and 10/10. Alice pending short-Break rename-save failed 2/3 focused repeats with
+  execution-context-destroyed at staging. Neither result was removed from aggregate totals.
+untested: no resource-exhaustion cause established; no independent review of completed aggregate yet.
+  Guardian NOT RUN / NOT PASSED; phone testing unrun. Historical Bob Scheduled uncertainty remains.
+evidence: accounting-hazards/evidence/qualification-shards-20261101/aggregate.json,
+  shard-01.json…shard-21.json, repeat-failures-summary.json, physical-edit-repeat10-summary.json,
+  G1-G9-RECONCILIATION.md. Exact frozen manifest SHA256:
+  6a04def40dfc08c8b88aacb8e42c7557a89c0cda849f83017bf7bcea329e978a.
+
+## TASK-039 · 2026-11-01 · qualification handoff checkpoint
+suite: npm test; frozen-source focused closures; required integrated SDK attempt; static, parity, rules, functions, lint and packaging checks.
+result:
+  - npm test: exit0. Final current accounting/rules Node evidence385/385; current path gates35/35; MV3 lifecycle4/4.
+  - Focused source/capacity/identity/account-switch/harness cases remain as individually reported; capacity and interval4/4.
+  - Required 442-case frozen integrated SDK attempt stalled; interrupted runner exit1; JSON reporter remained empty. No aggregate pass/fail result.
+  - Runtime/verification manifest SHA256 6a04def40dfc08c8b88aacb8e42c7557a89c0cda849f83017bf7bcea329e978a; independent reviewer verified101 runtime and706 verification file hashes, verdict FAIL/PENDING_FULL_SUITE.
+  - `npm run build` reports no build step; static parity101 files; rules/functions checks exit0; lint0 errors /162 warnings.
+untested: full integrated suite completion; historical Bob Scheduled durable snapshot/root cause; installed-writer/pending-queue census and cutover; Guardian and phone.
+evidence: accounting-hazards/evidence/qualification-closure-20261031/final-integrated-sdk-v2-interrupted.json, final-npm-v2.log.gz, final-current-accounting-rules.log.gz, final-mv3.json, final-integrated-source-manifest.json, independent-integrated-final.json, gate-scenarios.json.
+
+### TASK-039 - Intermittent-failure diagnostics (November 1, 2026)
+manifest: 6a04def40dfc08c8b88aacb8e42c7557a89c0cda849f83017bf7bcea329e978a matched 101 runtime and 706 verification files before and after every pass.
+results:
+  - Bob G3: retained trace shows #retro-activity blanked between two evaluates, refusal toast, zero writes. Deterministic B2 reproduced the signature; authoritative data, entry and coordinator state unchanged; the edit then succeeded with all frozen assertions. B6 executed the app defect: an unfocused prefilled form opened before the 800ms clear blanks and refuses.
+  - Alice rename-save: frozen spec failed 4/6, each raw CDP -32000 Promise was collected; no crash, no executionContextDestroyed, no navigation in failing runs. 22 rejections across instrumented passes: same document, exactly one local-applied, recorded time intact through reload. Unretained reaction true 12/12 where read; async awaiting caller continued 4/4 (A15). Trigger below CDP remains unknown; forced GC 0/19.
+  - Proposed test-only patch on copies: G3 18/18, pending-Break 32/32. Repeats are regression checks only, not proof.
+untested: frozen specs are unchanged, so the two aggregate failures remain on record; no integrated rerun; A15 and B6 postdate the independent review.
+evidence: accounting-hazards/evidence/intermittent-diagnostics-20261101/summary.json, independent-review.md, proposed-test-fix.patch, evidence-index.json
+
+### TASK-039 - Generation-2 integrated qualification (November 1, 2026)
+manifest: 8e3b1308f8726adff9af907289ec2db920a0fe0f50004eb8be9fb71ac069c6c7; 101 runtime files unchanged from the prior freeze, 706 verification files, 3 test files changed.
+tests: 442 mandatory integrated cases across 21 shards: 442 passed, 0 failed, 0 timed out, 0 skipped, 0 flaky. Independently recounted from shard reports.
+supersedes: the "no integrated rerun" note in the diagnostics entry above. The 440/442 run stays retained as history.
+blockers: G7 historical uncertainty; G8 census NOT RUN; Guardian NOT RUN / NOT PASSED; phone unrun; production NO-GO.
+evidence: accounting-hazards/evidence/qualification-rerun-20261101/aggregate.json, G1-G9-LEDGER.md, independent-review.md
+
+### TASK-039 - Shipped web and Android accounting capability (November 2, 2026)
+manifest: f309aa74d67da895749a399e5e92894fca0aa130987cec9dcf1977a245a94f32; commit 456acec9c5e3e7bfe90bafc4edc89f8e88195845
+tests: 442 mandatory across 21 shards: 442 passed, 0 failed, 0 flaky. Packaged release spec 62/62. npm test exit 0. Rules mutation 43/43. Parity, rules builder pass. Lint 0 errors.
+failing: test:fence-sdk 5 and test:rules-emulator 4, same failures as b729d47. Wider Playwright suite 314 of 1,071 bad on 629ace0, 318 at b729d47.
+history: integrated passes 439, 440, 441 and 440 of 442 on earlier commits retained in integrated-first-pass through integrated-fourth-pass.
+untested: production, real tokens, CORS, WebView, device, Guardian.
+evidence: accounting-hazards/evidence/shipped-capability-20261101/G1-G9-LEDGER.md, integrated/aggregate.json, release-spec-report-456acec.json
+
+### TASK-039 - F1 refused Undo keeps its button (November 2, 2026)
+commit: 6abc40dc1a49bdf8b6e8aceb645193a88a3563e3
+tests: mandatory 5 files 442/442, 0 flaky (18.0m, 1 worker). Packaged release spec 62/62 on bytes rebuilt from 6abc40d (APK 6db0f121...). accounting-undo-refusal-retry 20/20 with --repeat-each=2; 6/8 refusal cases red on 72995bd runtime; persistent case red on c925e7d. npm test exit 0. Lint 0 errors/162 warnings. www parity pass.
+wider sample (7 safety specs, 153 tests): 108 bad (110 before); no cross-account, duplicate or lost-entry signature.
+not rerun: test:fence-sdk (5 baseline), test:rules-emulator (4 baseline); 22 other wider specs.
+evidence: accounting-hazards/evidence/f1-undo-refusal-20261102/mandatory-442-6abc40d.json, release-manifest-6abc40d.json, wider-sample-6abc40d-failures.txt
+
+### TASK-039 - Start-time truth investigation (November 2, 2026)
+base: 342217f (runtime 6abc40d, unchanged). New tests/accounting-start-stamp.spec.js only.
+tests: 16/16, 32/32 with --repeat-each=2, alice and bob, real SDK + emulator: normal, read- and write-delayed acknowledgement, offline reconnect, offline recovery keep/log, online reload. Invoked = captured = authoritative start in every case.
+finding: no application error. daily-use-reliability's 1.13 s late start is its counting clock (1,051-1,207 Date.now calls during boot; stamp = invocation + 1 call).
+evidence: accounting-hazards/evidence/start-stamp-20261102/START-STAMP-FINDING.md, start-stamp-results.json
+
+### TASK-039 - Timeout assessment (November 2, 2026)
+base: 1ea6fa8, runtime unchanged. New tests/accounting-timeout-diagnostics.spec.js only (8/8, real SDK, both accounts).
+result: 37/37 timeouts reproduced at 30s and grouped. A 13 Learning outcome and C 3 Focus overlay: test-only. B 16: real UI defect (accounting status panel covers Review controls and Save reflection on phone while unconfirmed; no time impact). D 2, E 3: unresolved, low risk.
+evidence: accounting-hazards/evidence/timeout-groups-20261102/TIMEOUT-ASSESSMENT.md
+
+### TASK-039 - Pending-sync panel tap pass-through (November 2, 2026)
+commits: c556671 (style.css + www mirror, new tests/accounting-status-passthrough.spec.js), 3632f15 (FA-V1 occlusion measured with the stack hit-testable; assertion unchanged).
+tests: passthrough 12/12 (repeat 2), red 4/6 on e7cbb4e (panel intercepts). Mandatory 5 files + F1, start-stamp, passthrough, diagnostics: 478 passed, 4 FA-V1 occlusion-proxy failures, then FA-V1 file 48/48 on 3632f15. Packaged 62/62 on 3632f15 (APK 21ab0f99...). npm test exit 0. Wider review-simplification/plan-linkage/plan timeouts 16 -> 1 (remaining is group E).
+review: independent bounded review APPROVE WITH NOTES (LOW: no :has() fallback on WebView <105; panel text not scrollable/selectable).
+evidence: accounting-hazards/evidence/timeout-groups-20261102/MINIMUM-SAFE-RELEASE-CHECKLIST.md

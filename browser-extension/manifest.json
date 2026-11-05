@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chronasense Tracker",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Auto-tracks browser activity and logs it to Chronasense",
   "permissions": ["tabs", "storage", "identity", "alarms", "notifications", "idle"],
   "host_permissions": [

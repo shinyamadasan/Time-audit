@@ -28,6 +28,7 @@ let pomodoroWasPaused = false;
 let activeFocusLearningPlan = null;
 let activeFocusContext = '';
 let activeFocusPlanItemId = null; // Plan Linkage V1 — mirrors activeFocusLearningPlan's lifecycle
+let activeFocusDailyRoutine = null;
 let pendingFocusLearningPlan = null;
 let pendingFocusContext = '';
 let pendingFocusPlanItemId = null;
@@ -35,6 +36,9 @@ let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
 let _lastFocusSyncAt = 0;
 const FOCUS_SYNC_REFRESH_MS = 15000;
 let _hudFocusLinkType = 'none'; // Phase 6B.1: 'daily-routine' | 'learning-plan' | 'none' — truthful source, never fabricated
+let _focusProducer = null;
+let _focusProducerTicker = null;
+const _focusCaptureFailures = new Map();
 
 // ── Music state ──
 let _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
@@ -73,6 +77,7 @@ function clearFocusLearningPlanContext() {
   activeFocusLearningPlan = null;
   activeFocusContext = '';
   activeFocusPlanItemId = null;
+  activeFocusDailyRoutine = null;
   pendingFocusLearningPlan = null;
   pendingFocusContext = '';
   pendingFocusPlanItemId = null;
@@ -94,6 +99,22 @@ function isFocusSessionRunning() {
 // restore — never a second timer.
 // ══════════════════════════════════════════════════════
 const FOCUS_TIMER_STORAGE_KEY = 'ta3-focus-timer';
+const _retainedUnprovenFocusCaches = new Map();
+function retainUnprovenFocusCache(raw) {
+  _retainedUnprovenFocusCaches.set(accountingIdentity().owner, raw);
+}
+function renderFocusRecoveryStatus() {
+  const panel = document.getElementById('focus-recovery-status'), context = accountingIdentity();
+  if (!panel) return;
+  const retained = context && _retainedUnprovenFocusCaches.has(context.owner);
+  const provisional = context && _focusProducer && TimeAckCore.same(_focusProducer.context, context)
+    && !TimeAckCore.same(_focusProducer.frame.focus, captureFocusAccountingFrame());
+  panel.hidden = !context || !retained && !provisional && pomodoroPhase === 'idle';
+  panel.textContent = (provisional ? 'Provisional Focus — captured on this device, awaiting confirmation.'
+    : pomodoroPhase !== 'idle' ? 'Confirmed Focus — restored from authoritative accounting.' : '')
+    + (retained ? ' Retained-unproven Focus data remains unchanged. It has not been activated.' : '');
+}
+
 
 // Theoretical max pomodoros achievable in a single day even at the Focus
 // settings UI's own minimum work(1min)+break(1min) cycle — index.html
@@ -123,37 +144,429 @@ let restoredFocusAwaitingSyncReconciliation = false;
 // own push just bumped to "now".
 let restoredFocusBaselineSyncStamp = 0;
 
+function captureFocusAccountingFrame() {
+  return pomodoroPhase === 'idle' ? null : cloneUndoValue({ v: 1, pomodoroPhase, pomodoroPhaseStartedAt,
+    pomodoroWorkMin, pomodoroBreakMin, pomodoroCount, focusStartTime, activeFocusLearningPlan,
+    activeFocusContext, activeFocusPlanItemId, activeFocusDailyRoutine, hudFocusLinkType: _hudFocusLinkType });
+}
+
+function validateFocusAccountingFrame(focus) {
+  if (focus == null) return;
+  if (focus.v !== 1 || !['work', 'break'].includes(focus.pomodoroPhase)
+    || !Number.isFinite(focus.pomodoroPhaseStartedAt) || focus.pomodoroPhaseStartedAt <= 0
+    || !Number.isFinite(focus.pomodoroWorkMin) || focus.pomodoroWorkMin <= 0
+    || !Number.isFinite(focus.pomodoroBreakMin) || focus.pomodoroBreakMin <= 0
+    || !Number.isSafeInteger(focus.pomodoroCount) || focus.pomodoroCount < 0 || focus.pomodoroCount > FOCUS_MAX_POMODORO_COUNT
+    || focus.focusStartTime !== (focus.pomodoroPhase === 'work' ? focus.pomodoroPhaseStartedAt : null)
+    || typeof focus.activeFocusContext !== 'string' || !['none', 'daily-routine', 'learning-plan'].includes(focus.hudFocusLinkType)) {
+    throw Error('Unreadable Focus accounting checkpoint');
+  }
+}
+
+function applyFocusAccountingFrame(focus) {
+  validateFocusAccountingFrame(focus);
+  const samePhase = focus && focus.pomodoroPhase === pomodoroPhase && focus.pomodoroPhaseStartedAt === pomodoroPhaseStartedAt;
+  const previousRemaining = pomodoroRemaining;
+  if (!focus) {
+    const wasActive = pomodoroPhase !== 'idle';
+    pomodoroPhase = 'idle'; pomodoroPhaseStartedAt = null; focusStartTime = null; pomodoroRemaining = 0;
+    if (wasActive) clearFocusLearningPlanContext();
+    return;
+  }
+  ({ pomodoroPhase, pomodoroPhaseStartedAt, pomodoroWorkMin, pomodoroBreakMin, pomodoroCount,
+    focusStartTime, activeFocusLearningPlan, activeFocusContext, activeFocusPlanItemId, activeFocusDailyRoutine } = cloneUndoValue(focus));
+  _hudFocusLinkType = focus.hudFocusLinkType;
+  pomodoroRemaining = _focusProducer && focusPhaseKey(_focusProducer.frame) === `${currentTask}:${pomodoroPhase}:${pomodoroPhaseStartedAt}`
+    ? _focusProducer.remaining : samePhase ? previousRemaining
+      : Math.max(0, (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60 - Math.floor((Date.now() - pomodoroPhaseStartedAt) / 1000));
+}
+
+function focusCompatibilityCache(frame) {
+  const f = frame.focus;
+  return f ? { pomodoroPhase: f.pomodoroPhase, pomodoroPhaseStartedAt: f.pomodoroPhaseStartedAt,
+    pomodoroWorkMin: f.pomodoroWorkMin, pomodoroBreakMin: f.pomodoroBreakMin, pomodoroCount: f.pomodoroCount,
+    task: frame.currentTask, learningPlan: f.activeFocusLearningPlan, context: f.activeFocusContext,
+    planItemId: f.activeFocusPlanItemId, dailyRoutine: f.activeFocusDailyRoutine,
+    hudFocusLinkType: f.hudFocusLinkType, ownerDeviceId: frame.timerOwnerDeviceId || null } : null;
+}
+
+function hydrateFocusAccountingFrame(raw, frame, owner) {
+  const timer = raw.timer, phase = timer.focusPhase;
+  if (!['work', 'break'].includes(phase) || !Number.isFinite(timer.startedAt) || timer.startedAt <= 0
+    || !Number.isFinite(timer.intervalSecs) || timer.intervalSecs <= 0 || !timer.ownerDeviceId
+    || timer.taskStartTime !== timer.startedAt || timer.blockStartTime !== timer.startedAt) throw Error('focus-source-unproven');
+  const known = frame.focus?.pomodoroPhase === phase && frame.focus.pomodoroPhaseStartedAt === timer.startedAt
+    && frame.currentTask === timer.lastTask ? frame.focus : null;
+  const focus = known || { v: 1, pomodoroPhase: phase, pomodoroPhaseStartedAt: timer.startedAt,
+    pomodoroWorkMin: 25, pomodoroBreakMin: 5, pomodoroCount: 0, focusStartTime: phase === 'work' ? timer.startedAt : null,
+    activeFocusLearningPlan: null, activeFocusContext: '', activeFocusPlanItemId: null, activeFocusDailyRoutine: null, hudFocusLinkType: 'none' };
+  focus[phase === 'work' ? 'pomodoroWorkMin' : 'pomodoroBreakMin'] = timer.intervalSecs / 60;
+  frame.focus = focus; frame.running = false; frame._timerStateOwner = owner;
+  frame.timerOwnerDeviceId = timer.ownerDeviceId; frame.currentTask = timer.lastTask || 'Focus session';
+  frame.lastTaskForRepeat = frame.currentTask; frame.taskStartTime = timer.startedAt; frame.blockStartTime = timer.startedAt;
+  frame.timerStartedAt = timer.startedAt; frame.trackingStartedAt = null;
+  frame.awayActive = false; frame._awayStateOwner = null; frame.breakActive = false; frame._breakStateOwner = null;
+  frame.physicalEntries = cloneUndoValue(raw.entries || {}); frame.serverTimer = cloneUndoValue(timer);
+  frame.serverAway = cloneUndoValue(raw.awayState || null); frame.serverBreak = cloneUndoValue(raw.breakState || null);
+  return frame;
+}
+
+function draftFocusStart(draft, facts, at) {
+  draftStoppedTimer(draft, draft.intervalMin);
+  draft._timerStateOwner = facts.owner; draft.timerOwnerDeviceId = facts.device;
+  draft.currentTask = facts.task; draft.lastTaskForRepeat = facts.task;
+  draft.taskStartTime = at; draft.blockStartTime = at; draft.timerStartedAt = at;
+  draft.focus = { v: 1, pomodoroPhase: 'work', pomodoroPhaseStartedAt: at, focusStartTime: at,
+    pomodoroWorkMin: facts.workMin, pomodoroBreakMin: facts.breakMin, pomodoroCount: facts.count,
+    activeFocusLearningPlan: facts.learningPlan || null, activeFocusContext: facts.context || '',
+    activeFocusPlanItemId: facts.planItemId || null, activeFocusDailyRoutine: facts.dailyRoutine || null,
+    hudFocusLinkType: facts.dailyRoutine ? 'daily-routine' : facts.learningPlan ? 'learning-plan' : 'none' };
+}
+
+function focusEntry(tsStart, tsEnd, frame = captureAccountingFrame()) {
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  if (dur < 1) return null;
+  const entry = { id: tsEnd, ts: tsEnd, tsStart, blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
+    activity: canonicalFocusActivity(frame.currentTask || 'Deep work'), energy: 'deep', onPlan: true, retro: false };
+  if (frame.focus?.activeFocusPlanItemId) entry.planItemId = frame.focus.activeFocusPlanItemId;
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy;
+  return entry;
+}
+
+function draftFocusEntry(draft, entry) {
+  if (!entry) return;
+  const existing = draft.entries.find(item => item.id === entry.id);
+  if (existing && !TimeAckCore.same(EntryPhysicalKeys.content(existing), entry)) throw Error('focus-entry-conflict');
+  if (!existing) draft.entries.unshift(cloneUndoValue(entry));
+  draft.lastTaskForRepeat = entry.activity;
+}
+
+function focusCompletionEffects(focus, entry, full) {
+  if (!entry) return [];
+  const effects = [];
+  if (full && focus.activeFocusDailyRoutine) effects.push({ kind: 'focus-completed', link: focus.activeFocusDailyRoutine, entry });
+  const outcome = learningPlanFocusSessionOutcome(focus.activeFocusLearningPlan, entry, entry.tsStart, entry.ts);
+  if (outcome) effects.push({ kind: 'focus-learning-outcome', outcome, phaseStartedAt: entry.ts });
+  return effects;
+}
+
+function draftFocusWorkEnd(after, facts) {
+  draftFocusEntry(after, facts.entry);
+  after.focus.pomodoroCount++; after.focus.pomodoroPhase = 'break'; after.focus.pomodoroPhaseStartedAt = facts.endedAt;
+  after.focus.focusStartTime = null; after.focus.activeFocusLearningPlan = null;
+  after.focus.activeFocusContext = ''; after.focus.activeFocusPlanItemId = null; after.focus.activeFocusDailyRoutine = null;
+  after.focus.hudFocusLinkType = 'none'; after.taskStartTime = facts.endedAt; after.blockStartTime = facts.endedAt; after.timerStartedAt = facts.endedAt;
+}
+
+function focusPhaseKey(frame) {
+  return frame.focus ? `${frame.currentTask}:${frame.focus.pomodoroPhase}:${frame.focus.pomodoroPhaseStartedAt}` : null;
+}
+
+function stopFocusProducer() {
+  clearInterval(_focusProducerTicker);
+  _focusProducerTicker = null; _focusProducer = null;
+}
+
+function focusCaptureKey(context = accountingIdentity()) {
+  return context ? `${context.owner}:${context.device}` : null;
+}
+
+function focusCaptureIsPaused() {
+  return _focusCaptureFailures.has(focusCaptureKey());
+}
+
+function sendFocusCapture(job) {
+  const current = accountingIdentity();
+  if (!current || !['owner', 'uid', 'device'].every(field => current[field] === job.context[field])) return Promise.resolve(false);
+  const pause = error => {
+    job.failed = true; job.error = error.message; _focusCaptureFailures.set(focusCaptureKey(job.context), job);
+    if (_focusProducer?.context.owner === job.context.owner) {
+      _focusProducer.capturePaused = true;
+      clearInterval(_focusProducerTicker); _focusProducerTicker = null;
+    }
+  };
+  return stageAccountingObservation(job.name, job.facts, { ...job.options, onCaptureFailure: pause,
+    onCaptured(operation, receipt = {}) {
+      if (operation.owner !== job.context.owner || operation.device !== job.context.device || job.failed && (operation.at !== job.options.at
+        || !TimeAckCore.same(operation.input.observation?.facts, job.facts))) {
+        pause(Error('Original Focus event needs resolution')); return;
+      }
+      job.options.onCaptured?.(operation);
+      _focusCaptureFailures.delete(focusCaptureKey(job.context));
+      if (receipt.settled) {
+        const committed = accountingCoordinator().snapshot().committed;
+        if (committed && focusPhaseKey(committed.value) !== focusPhaseKey(_focusProducer?.frame || {})) {
+          adoptFocusProducer(committed.value, { restoreAt: Date.now(), parentId: committed.operationId });
+        }
+      }
+    } });
+}
+
+function captureFocusObservation(name, facts, options) {
+  if (focusCaptureIsPaused()) return Promise.resolve(false);
+  return sendFocusCapture({ name, facts: cloneUndoValue(facts), context: cloneUndoValue(accountingIdentity()),
+    options: { ...options, producerFrame: cloneUndoValue(options.producerFrame) } });
+}
+
+function retryFocusCapture() {
+  const job = _focusCaptureFailures.get(focusCaptureKey());
+  return job ? sendFocusCapture(job) : Promise.resolve(false);
+}
+
+// A captured intent can continue producing only while the confirmed timer is still one of
+// its original causal images. A foreign Stop/takeover is evidence to retain, never a new lease.
+function focusSourceLease(parentId, frame) {
+  const coordinator = accountingCoordinator(), state = coordinator?.snapshot();
+  if (!state?.committed) return true;
+  const current = state.committed.value;
+  if (!parentId || parentId === state.committed.operationId) return !!current.focus
+    && current.timerOwnerDeviceId === syncedDeviceId && TimeAckCore.same(frame.focus, current.focus);
+  const operations = [...state.queue, ...state.history, ...coordinator.captures(roomCode).map(item => item.captured),
+    ...coordinator.failedCaptures(roomCode)];
+  const seen = new Set(), images = [];
+  while (parentId) {
+    if (seen.has(parentId)) return false;
+    seen.add(parentId);
+    const operation = operations.find(item => item.id === parentId);
+    if (!operation || operation.uid !== currentUser.uid || operation.device !== syncedDeviceId) return false;
+    if (operation.aliasOf) { parentId = operation.aliasOf; continue; }
+    if (operation.input.name !== 'hydrate-accounting' && operation.phase !== 'fenced-reconciled') {
+      if (Object.hasOwn(operation.input, 'timerBefore')) images.push(operation.input.timerBefore);
+      if (operation.input.observation?.source) images.push(operation.input.observation.source.timer);
+      const post = operation.proposal?.patch?.timer;
+      if (post?.mode === 'focus' && post.running === true && post.ownerRoom === operation.owner
+        && post.ownerDeviceId === operation.device) images.push(post);
+    }
+    parentId = operation.dependsOn;
+  }
+  return images.some(timer => TimeAckCore.same(current.serverTimer || null, timer || null));
+}
+
+// This private source cursor captures callback facts; it never projects a phase, entry or cache.
+// A continuation is installed only after its predecessor fact's synchronous durable readback.
+function adoptFocusProducer(frame, { remaining = null, restoreAt = null, continuation = false, parentId = null } = {}) {
+  const context = accountingIdentity();
+  try { validateAccountingFrame(frame, context?.owner); }
+  catch { stopFocusProducer(); return; }
+  if (!frame.focus || frame.timerOwnerDeviceId !== syncedDeviceId || !accountingIdentity()
+    || !focusSourceLease(parentId, frame)) { stopFocusProducer(); return; }
+  const phases = continuation && _focusProducer ? new Set(_focusProducer.phases) : new Set();
+  phases.add(focusPhaseKey(frame));
+  const focus = frame.focus, duration = (focus.pomodoroPhase === 'break' ? focus.pomodoroBreakMin : focus.pomodoroWorkMin) * 60;
+  _focusProducer = { context: cloneUndoValue(accountingIdentity()), frame: cloneUndoValue(frame), phases,
+    remaining: remaining ?? (restoreAt == null ? duration : Math.max(0, duration - Math.floor((restoreAt - focus.pomodoroPhaseStartedAt) / 1000))),
+    waitingLearning: false, restoreAt, parentId };
+  if (!_focusProducerTicker) {
+    _focusProducerTicker = setInterval(tickPomodoro, 1000);
+  }
+}
+
+function tickFocusProducer() {
+  const producer = _focusProducer;
+  if (!producer || !TimeAckCore.same(producer.context, accountingIdentity())
+    || !focusSourceLease(producer.parentId, producer.frame)) { stopFocusProducer(); return; }
+  if (window._accountingLegacyLoadError || focusCaptureIsPaused() || producer.waitingLearning || accountingPendingStop()) return;
+  producer.remaining = Math.max(0, producer.remaining - 1);
+  if (focusPhaseKey(producer.frame) === `${currentTask}:${pomodoroPhase}:${pomodoroPhaseStartedAt}`) pomodoroRemaining = producer.remaining;
+  if (producer.remaining <= 0) {
+    if (producer.frame.focus.pomodoroPhase === 'work') endWorkSession({ producer });
+    else endPomodoroBreak({ producer });
+  }
+}
+
+function capturedFocusFrame(operation, base) {
+  const input = operation.input, result = cloneUndoValue(base);
+  if (input.name.startsWith('focus-') && input.after) return focusSourceLease(operation.id, { ...result, ...input.after })
+    ? { ...result, ...cloneUndoValue(input.after) } : result;
+  const facts = input.observation?.facts;
+  if (!facts || !result.focus || result.focus.pomodoroPhase !== facts.phase
+    || result.focus.pomodoroPhaseStartedAt !== facts.phaseStartedAt) return result;
+  if (input.name === 'focus-end-work') draftFocusWorkEnd(result, facts);
+  else if (input.name === 'focus-end-break' && facts.next) draftFocusStart(result, facts.next, operation.at);
+  else if (['focus-end-break', 'focus-learning-finish'].includes(input.name)) { result.focus = null; draftStoppedTimer(result, result.intervalMin); }
+  return result;
+}
+
+function restoreFocusProducer(state, coordinator, at) {
+  let frame = cloneUndoValue(state.committed.value);
+  let parentId = state.committed.operationId;
+  const operations = [...state.queue, ...coordinator.captures(roomCode).map(item => item.captured)]
+    .filter(operation => operation.input.name !== 'hydrate-accounting');
+  const resolved = new Set(state.history.map(operation => operation.id)), pending = [...operations];
+  while (pending.length) {
+    const index = pending.findIndex(operation => !operation.dependsOn || resolved.has(operation.dependsOn));
+    if (index < 0) { stopFocusProducer(); return; }
+    const operation = pending.splice(index, 1)[0];
+    if (operation.uid !== currentUser.uid || operation.device !== syncedDeviceId || operation.phase === 'cancelling') { stopFocusProducer(); return; }
+    frame = capturedFocusFrame(operation, frame); resolved.add(operation.id); parentId = operation.id;
+  }
+  adoptFocusProducer(frame, { restoreAt: at, parentId });
+  const producer = _focusProducer;
+  if (producer && state.effects?.some(effect => effect.kind === 'focus-learning-outcome'
+    && effect.phaseStartedAt === producer.frame.focus.pomodoroPhaseStartedAt)) producer.waitingLearning = true;
+  if (!producer || producer.remaining > 0) return;
+  if (producer.waitingLearning) return;
+  if (producer.frame.focus.pomodoroPhase === 'work') endWorkSession({ producer, at, restoring: true });
+  // Original restore completes both already elapsed phases at this same invocation, never at ACK.
+  const next = _focusProducer;
+  if (next && !next.waitingLearning && next.frame.focus.pomodoroPhase === 'break') {
+    const duration = next.frame.focus.pomodoroBreakMin * 60;
+    next.remaining = Math.max(0, duration - Math.floor((at - next.frame.focus.pomodoroPhaseStartedAt) / 1000));
+    if (next.remaining <= 0) endPomodoroBreak({ producer: next, at });
+  }
+}
+
+function prepareFocusAccountingObservation(operation, raw, before) {
+  const facts = operation.input.observation.facts, focus = before.focus;
+  if (!focus || raw.timer?.ownerDeviceId !== operation.device || raw.timer?.ownerRoom !== operation.owner
+    || focus.pomodoroPhase !== facts.phase || focus.pomodoroPhaseStartedAt !== facts.phaseStartedAt) {
+    return { status: 'conflict', reason: 'focus-session-changed' };
+  }
+  const after = cloneUndoValue(before);
+  let effects = [];
+  if (operation.input.name === 'focus-end-work') {
+    effects = focusCompletionEffects(focus, facts.entry, true);
+    draftFocusWorkEnd(after, facts);
+  } else if (operation.input.name === 'focus-end-break' && facts.next) draftFocusStart(after, facts.next, operation.at);
+  else if (['focus-end-break', 'focus-learning-finish'].includes(operation.input.name)) {
+    after.focus = null; draftStoppedTimer(after, after.intervalMin);
+  } else return { status: 'conflict', reason: 'unsupported-focus-observation' };
+  return buildAccountingInput(operation.input.name, before, after, { timer: true, at: operation.at, effects,
+    extra: after.focus ? {} : { stopped: true, mode: 'focus', lastTask: null } });
+}
+
+let _focusEffectDelivery = null;
+function runFocusAccountingEffects() {
+  if (_focusEffectDelivery) return _focusEffectDelivery;
+  const coordinator = accountingCoordinator();
+  if (!coordinator || !coordinator.snapshot().effects?.length) return Promise.resolve(true);
+  const source = cloneUndoValue(accountingIdentity());
+  _focusEffectDelivery = coordinator.runEffects((effect, committed) => {
+    if (effect.kind === 'focus-started') {
+      if (committed.focus?.pomodoroPhaseStartedAt !== effect.startedAt) return { superseded: true };
+      if (typeof globalThis.onDailyRoutineFocusStarted !== 'function') return false;
+      return globalThis.onDailyRoutineFocusStarted(effect.link, effect.startedAt);
+    }
+    if (effect.kind === 'focus-completed') {
+      if (typeof globalThis.onDailyRoutineFocusCompleted !== 'function') return false;
+      return globalThis.onDailyRoutineFocusCompleted(effect.entry, effect.entry.tsStart, effect.entry.ts, effect.link);
+    }
+    if (effect.kind === 'focus-learning-outcome') {
+      if (typeof globalThis.onLearningPlanFocusSessionEnded !== 'function') return false;
+      const handled = globalThis.onLearningPlanFocusSessionEnded(effect.outcome) !== false;
+      if (!TimeAckCore.same(source, accountingIdentity())) return false;
+      if (handled && committed.focus?.pomodoroPhase === 'break'
+        && committed.focus.pomodoroPhaseStartedAt === effect.phaseStartedAt) {
+        // Capture synchronously while delivering the effect; do not await the account lock recursively.
+        const eventKey = `focus-learning-finish:${effect.operationId}`;
+        let captured = [...coordinator.snapshot().history, ...coordinator.snapshot().queue, ...coordinator.captures(source.owner).map(item => item.captured)]
+          .some(operation => operation.eventKey === eventKey);
+        stageAccountingObservation('focus-learning-finish', { phase: 'break', phaseStartedAt: effect.phaseStartedAt,
+          completionEffect: effect.id, handled: true }, { at: effect.at, eventKey, predecessor: effect.operationId,
+          onCaptured() { captured = true; stopFocusProducer(); } });
+        if (!captured) return false;
+      }
+      return { handled };
+    }
+    return false;
+  }).then(result => {
+    if (!TimeAckCore.same(source, accountingIdentity())) return false;
+    const state = coordinator.snapshot(), producer = _focusProducer;
+    if (producer?.waitingLearning) {
+      const receipt = Object.values(state.effectReceipts || {}).find(item => item.outcome?.handled === false
+        && state.history.find(operation => operation.id === item.operationId)?.proposal?.effects?.some(effect =>
+          effect.kind === 'focus-learning-outcome' && effect.phaseStartedAt === producer.frame.focus.pomodoroPhaseStartedAt));
+      if (receipt) {
+        producer.waitingLearning = false;
+        if (producer.restoreAt != null) {
+          producer.remaining = Math.max(0, producer.frame.focus.pomodoroBreakMin * 60
+            - Math.floor((producer.restoreAt - producer.frame.focus.pomodoroPhaseStartedAt) / 1000));
+          if (producer.remaining <= 0) endPomodoroBreak({ producer, at: producer.restoreAt });
+        }
+      }
+    }
+    if (!result.retained) requestAccountingRefresh();
+    return !result.retained;
+  }).catch(error => {
+    console.warn('[accounting] Focus effect retained', error.message); return false;
+  }).finally(() => { _focusEffectDelivery = null; renderTimeAckStatus(); });
+  return _focusEffectDelivery;
+}
+
+function materializeFocusAccountingFrame(focus, previous, receipt) {
+  if (!focus) {
+    if (_focusProducer && !focusSourceLease(_focusProducer.parentId, _focusProducer.frame)) stopFocusProducer();
+    if (previous) {
+      stopFocusProducer(); clearInterval(pomodoroTimer); pomodoroTimer = null;
+      _stopHeartbeat(); pushHudFocusEnded();
+      if (receipt?.effectName === 'focus-end-break') {
+        _exitBreakMusic(); playAlertSound();
+        document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
+        document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
+        document.getElementById('focus-settings-row').style.display = 'flex';
+        document.getElementById('focus-task-input').style.display = 'block';
+        document.getElementById('focus-intention-text').style.display = 'none';
+        const button = document.getElementById('focus-start-btn');
+        button.textContent = 'Start next session'; button.onclick = startPomodoro; button.style.display = 'block';
+        setPomodoroCountdown(pomodoroWorkMin * 60);
+      } else {
+        stopFocusMusic(); focusModeOn = false;
+        document.getElementById('focus-overlay')?.classList.remove('open');
+      }
+    }
+    persistFocusSession(); queueMicrotask(runFocusAccountingEffects); return false;
+  }
+  const frame = captureAccountingFrame();
+  if (timerOwnerDeviceId === syncedDeviceId) {
+    if (accountingPendingStop()) stopFocusProducer();
+    else if (!_focusProducer || !TimeAckCore.same(_focusProducer.context, accountingIdentity()) || !_focusProducer.phases.has(focusPhaseKey(frame))) {
+      adoptFocusProducer(frame, { restoreAt: Date.now() });
+    }
+  } else {
+    stopFocusProducer();
+    pomodoroRemaining = Math.max(0, (focus.pomodoroPhase === 'break' ? focus.pomodoroBreakMin : focus.pomodoroWorkMin) * 60
+      - Math.floor((Date.now() - focus.pomodoroPhaseStartedAt) / 1000));
+  }
+  focusModeOn = true;
+  document.getElementById('focus-overlay')?.classList.add('open');
+  const input = document.getElementById('focus-task-input'); input.value = currentTask; input.style.display = 'none';
+  const intentionEl = document.getElementById('focus-intention-text'); intentionEl.textContent = currentTask; intentionEl.style.display = 'block';
+  document.getElementById('focus-settings-row').style.display = 'none';
+  document.getElementById('focus-phase-label').textContent = focus.pomodoroPhase === 'work' ? 'FOCUS' : 'BREAK ☕';
+  document.getElementById('focus-phase-sub').textContent = focus.pomodoroPhase === 'work'
+    ? focusPhaseSubText(pomodoroWorkMin) : `take a breather · ${pomodoroBreakMin} min`;
+  const button = document.getElementById('focus-start-btn');
+  button.textContent = 'Skip break'; button.onclick = skipBreak;
+  button.style.display = focus.pomodoroPhase === 'break' && timerOwnerDeviceId === syncedDeviceId ? 'block' : 'none';
+  if (receipt?.effectName === 'focus-end-work') { _enterBreakMusic(); playAlertSound(); }
+  renderPomoDots(); updateFocusDeepBar(); setPomodoroCountdown(pomodoroRemaining); pushHudFocusState();
+  persistFocusSession(); queueMicrotask(runFocusAccountingEffects);
+  clearInterval(pomodoroTimer); pomodoroTimer = setInterval(renderFocusCountdown, 1000);
+  return true;
+}
+
 function persistFocusSession() {
-  if (pomodoroPhase === 'idle') { clearPersistedFocusSession(); return; }
-  if (typeof timerStateOwnedByCurrentAccount !== 'function' || !timerStateOwnedByCurrentAccount()) return;
-  try {
-    setAccountLocal(FOCUS_TIMER_STORAGE_KEY, JSON.stringify({
-      pomodoroPhase,
-      pomodoroPhaseStartedAt,
-      pomodoroWorkMin,
-      pomodoroBreakMin,
-      pomodoroCount,
-      task: currentTask,
-      learningPlan: cloneFocusLearningPlanMetadata(activeFocusLearningPlan),
-      context: activeFocusContext,
-      planItemId: activeFocusPlanItemId,
-      hudFocusLinkType: _hudFocusLinkType,
-      ownerDeviceId: timerOwnerDeviceId || null
-    }));
-  } catch {}
+  if (window._accountingLegacyLoadError || !accountingIdentity()) return false;
+  const frame = accountingCoordinator()?.snapshot().committed?.value;
+  if (!frame || !TimeAckCore.same(frame.focus, captureFocusAccountingFrame())) return false;
+  if (_retainedUnprovenFocusCaches.has(accountingIdentity().owner)) return false;
+  const saved = focusCompatibilityCache(frame);
+  if (saved) setAccountLocal(FOCUS_TIMER_STORAGE_KEY, JSON.stringify(saved));
+  else removeAccountLocal(FOCUS_TIMER_STORAGE_KEY);
+  return true;
 }
 
 function clearPersistedFocusSession() {
-  try { removeAccountLocal(FOCUS_TIMER_STORAGE_KEY); } catch {}
-  // Focus ending/exiting locally means there is nothing left to reconcile —
-  // never let this leak into a later, unrelated session.
+  if (!persistFocusSession()) return false;
   restoredFocusAwaitingSyncReconciliation = false;
   restoredFocusBaselineSyncStamp = 0;
+  return true;
 }
 
-/** Account switching detaches Focus from the active UI/runtime without ending or logging it. The
- *  previous account's scoped record and remote timer remain intact for later reconciliation. */
+/** Account detach changes runtime only; the original owner's envelope/cache remains intact. */
+
 function detachFocusSessionForAccountSwitch() {
+  stopFocusProducer();
   if (pomodoroPhase === 'idle' && !focusModeOn) return;
   clearInterval(pomodoroTimer);
   pomodoroTimer = null;
@@ -178,112 +591,24 @@ function detachFocusSessionForAccountSwitch() {
 // same endWorkSession()/endPomodoroBreak() the running tab would have
 // called, once, instead of inventing a parallel recovery path.
 function restoreFocusSession() {
-  if (pomodoroPhase !== 'idle') return false; // never clobber an already-active session
-  const ownerRoom = globalThis.getChronaSenseRoomCode?.() || '';
-  if (!ownerRoom || typeof accountLocalKey !== 'function') return false;
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(accountLocalKey(FOCUS_TIMER_STORAGE_KEY, ownerRoom)) || 'null'); }
-  catch { clearPersistedFocusSession(); return false; }
-  if (!saved || typeof saved !== 'object') return false;
-
-  const validPhase = saved.pomodoroPhase === 'work' || saved.pomodoroPhase === 'break';
-  const validStart = Number.isFinite(saved.pomodoroPhaseStartedAt) && saved.pomodoroPhaseStartedAt > 0
-    && saved.pomodoroPhaseStartedAt <= Date.now() + FOCUS_MAX_FUTURE_SKEW_MS;
-  const validWorkMin = Number.isFinite(saved.pomodoroWorkMin) && saved.pomodoroWorkMin > 0;
-  const validBreakMin = Number.isFinite(saved.pomodoroBreakMin) && saved.pomodoroBreakMin > 0;
-  if (!validPhase || !validStart || !validWorkMin || !validBreakMin) {
-    clearPersistedFocusSession(); // corrupt/incomplete — fail safe, never fabricate a session
-    return false;
-  }
-  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership(ownerRoom)) return false;
-
-  // Capture the pre-restore local sync recency stamp BEFORE anything below
-  // (including the syncFocusTimerState() push later in this function) can
-  // touch it — this is the reconciliation baseline. See the declaration
-  // comment above and applyRemoteTimerState() in storage.js.
-  restoredFocusBaselineSyncStamp = typeof currentTimerSyncStamp === 'function' ? currentTimerSyncStamp() : 0;
-  restoredFocusAwaitingSyncReconciliation = true;
-
-  pomodoroPhase = saved.pomodoroPhase;
-  pomodoroPhaseStartedAt = saved.pomodoroPhaseStartedAt;
-  focusStartTime = pomodoroPhase === 'work' ? pomodoroPhaseStartedAt : null;
-  pomodoroWorkMin = saved.pomodoroWorkMin;
-  pomodoroBreakMin = saved.pomodoroBreakMin;
-  pomodoroCount = Number.isFinite(saved.pomodoroCount)
-    ? Math.min(Math.max(0, Math.floor(saved.pomodoroCount)), FOCUS_MAX_POMODORO_COUNT) : 0;
-  currentTask = String(saved.task || currentTask || '').trim();
-  lastTaskForRepeat = currentTask || lastTaskForRepeat;
-  activeFocusLearningPlan = cloneFocusLearningPlanMetadata(saved.learningPlan);
-  activeFocusContext = String(saved.context || '').trim();
-  activeFocusPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
-  _hudFocusLinkType = ['daily-routine', 'learning-plan', 'none'].includes(saved.hudFocusLinkType)
-    ? saved.hudFocusLinkType : 'none';
-  timerOwnerDeviceId = saved.ownerDeviceId || timerOwnerDeviceId;
-  focusModeOn = true;
-
-  const taskInput = document.getElementById('focus-task-input');
-  if (taskInput) { taskInput.value = currentTask; taskInput.style.display = 'none'; }
-  const intentionEl = document.getElementById('focus-intention-text');
-  if (intentionEl) { intentionEl.textContent = getFocusTaskLabel(); intentionEl.style.display = 'block'; }
-  document.getElementById('focus-settings-row').style.display = 'none';
-  document.getElementById('focus-start-btn').style.display = 'none';
-  document.getElementById('focus-overlay')?.classList.add('open');
-  renderPomoDots();
-  updateFocusDeepBar();
-
-  const phaseSecs = (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60;
-  const elapsedSecs = Math.max(0, Math.floor((Date.now() - pomodoroPhaseStartedAt) / 1000));
-
-  if (elapsedSecs >= phaseSecs) {
-    // The phase's planned end already passed while the app was closed or
-    // reloaded. Apply the exact same one-time transition the running tab
-    // would have applied — never a duplicate, never a bespoke shortcut.
-    if (pomodoroPhase === 'work') {
-      document.getElementById('focus-phase-label').textContent = 'FOCUS';
-      document.getElementById('focus-phase-sub').textContent = focusPhaseSubText(pomodoroWorkMin);
-      endWorkSession();
-      // endWorkSession() concluded the work phase at its planned endpoint, not
-      // the reopen time. If it then entered a break whose own planned window
-      // also fully elapsed while the app was closed, conclude that too — the
-      // same one-time endPomodoroBreak() a running tab would have applied. If
-      // the break is still legitimately in progress, re-derive its real
-      // remaining from the wall clock rather than the full fresh countdown
-      // endWorkSession() optimistically set.
-      if (pomodoroPhase === 'break' && Number.isFinite(pomodoroPhaseStartedAt)) {
-        const breakSecs = pomodoroBreakMin * 60;
-        const breakElapsedSecs = Math.max(0, Math.floor((Date.now() - pomodoroPhaseStartedAt) / 1000));
-        if (breakElapsedSecs >= breakSecs) {
-          clearInterval(pomodoroTimer);
-          endPomodoroBreak();
-        } else {
-          pomodoroRemaining = breakSecs - breakElapsedSecs;
-          setPomodoroCountdown(pomodoroRemaining);
-        }
-      }
-    } else {
-      document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
-      document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
-      endPomodoroBreak();
+  const at = Date.now();
+  const coordinator = accountingCoordinator(), committed = coordinator?.snapshot().committed;
+  if (committed) {
+    try { retainUnconfirmedCompatibilityCaches(coordinator); validateFocusAccountingFrame(committed.value.focus); }
+    catch (error) {
+      stopFocusProducer();
+      if (!error.accountingStorageRead) window._accountingLegacyLoadError = 'focus-cache-unreadable';
+      console.warn('[accounting] Focus cache retained', error.message); return false;
     }
-    return true;
+    applyFocusAccountingFrame(committed.value.focus);
+    restoreFocusProducer(coordinator.snapshot(), coordinator, at);
+    materializeFocusAccountingFrame(committed.value.focus, null, { ...committed, effectName: 'focus-restored' });
+    requestAccountingRefresh();
+    return !!committed.value.focus;
   }
-
-  pomodoroRemaining = phaseSecs - elapsedSecs;
-  if (pomodoroPhase === 'work') {
-    document.getElementById('focus-phase-label').textContent = 'FOCUS';
-    document.getElementById('focus-phase-sub').textContent = focusPhaseSubText(pomodoroWorkMin);
-  } else {
-    document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
-    document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
-    const btn = document.getElementById('focus-start-btn');
-    if (btn) { btn.textContent = 'Skip break'; btn.onclick = skipBreak; btn.style.display = 'block'; }
-  }
-  setPomodoroCountdown(pomodoroRemaining);
-  clearInterval(pomodoroTimer);
-  pomodoroTimer = setInterval(tickPomodoro, 1000);
-  syncFocusTimerState(pomodoroPhaseStartedAt);
-  pushHudFocusState(pomodoroPhaseStartedAt);
-  return true;
+  // A legacy per-key Focus cache is evidence, not independent publication authority.
+  requestAccountingRefresh();
+  return false;
 }
 
 function focusContextText(metadata) {
@@ -324,21 +649,9 @@ function notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd) {
 }
 
 function finishLearningPlanFocusSession() {
-  const ownerRoom = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null;
-  pomodoroPhase = 'idle';
-  pomodoroPhaseStartedAt = null;
-  pomodoroRemaining = 0;
-  clearPersistedFocusSession();
-  stopFocusMusic();
-  focusModeOn = false;
-  document.getElementById('focus-overlay')?.classList.remove('open');
-  if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
-  syncTimerState({ stopped: true, lastTask: null, mode: 'focus', ownerRoom });
-  if (typeof releaseTimerStateOwnership === 'function') releaseTimerStateOwnership(ownerRoom);
-  timerOwnerDeviceId = null;
-  currentTask = '';
-  pushHudFocusEnded();
-  renderToday();
+  if (pomodoroPhase !== 'break' || timerOwnerDeviceId !== syncedDeviceId) return Promise.resolve(false);
+  return stageAccountingObservation('focus-learning-finish', { phase: 'break', phaseStartedAt: pomodoroPhaseStartedAt },
+    { eventKey: `focus-learning-finish:${timerStateOwnerRoom()}:${pomodoroPhaseStartedAt}`, onCaptured: stopFocusProducer });
 }
 
 // Audio served from GitHub Pages — not bundled in APK (keeps APK ~12MB)
@@ -438,27 +751,15 @@ function setPomodoroCountdown(secs) {
     `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function syncFocusTimerState(startedAt = pomodoroPhaseStartedAt || focusStartTime || Date.now()) {
-  if (typeof syncTimerState !== 'function' || pomodoroPhase === 'idle') return;
-  const phaseSecs = (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60;
-  _lastFocusSyncAt = Date.now();
-  syncTimerState({
-    running: true,
-    mode: 'focus',
-    focusPhase: pomodoroPhase,
-    lastTask: getFocusTaskLabel(),
-    intervalSecs: phaseSecs,
-    startedAt,
-    taskStartTime: startedAt,
-    blockStartTime: startedAt,
-    ownerDeviceId: timerOwnerDeviceId || syncedDeviceId
-  });
+function syncFocusTimerState() {
+  // Shared timer publication belongs to the phase command; refresh only reads confirmed state.
+  return requestAccountingRefresh();
 }
 
 function refreshFocusTimerSync(force = false) {
-  if (pomodoroPhase === 'idle') return false;
   if (!force && Date.now() - _lastFocusSyncAt < FOCUS_SYNC_REFRESH_MS) return false;
-  syncFocusTimerState();
+  _lastFocusSyncAt = Date.now();
+  requestAccountingRefresh(); runFocusAccountingEffects();
   return true;
 }
 
@@ -559,115 +860,41 @@ function clearSyncedFocusOverlay() {
   return true;
 }
 
-function takeOverSyncedFocusTimer() {
-  if (!syncedFocusTimer || !syncedFocusTimer.running) return false;
-  // An explicit local takeover is a fresh ownership decision made by this
-  // device right now — it supersedes any still-pending post-restore
-  // reconciliation rather than waiting on it.
-  restoredFocusAwaitingSyncReconciliation = false;
-  const phase = syncedFocusTimer.focusPhase === 'break' ? 'break' : 'work';
-  const intervalSecs = Math.max(1, Number(syncedFocusTimer.intervalSecs || totalSecs || 1500));
-  const elapsed = Math.max(0, Math.floor((Date.now() - syncedFocusTimer.startedAt) / 1000));
-  const remainingSecs = Math.max(0, intervalSecs - elapsed);
-  const task = syncedFocusTimer.task || currentTask || 'Focus session';
-
-  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership()) return false;
-  timerOwnerDeviceId = syncedDeviceId;
-  currentTask = task;
-  lastTaskForRepeat = task;
-  totalSecs = intervalSecs;
-  remaining = remainingSecs;
-  timerStartedAt = syncedFocusTimer.startedAt;
-  taskStartTime = taskStartTime || syncedFocusTimer.startedAt;
-  blockStartTime = blockStartTime || taskStartTime || syncedFocusTimer.startedAt;
-  pomodoroPhase = phase;
-  pomodoroPhaseStartedAt = syncedFocusTimer.startedAt;
-  pomodoroRemaining = remainingSecs;
-  focusStartTime = phase === 'work' ? syncedFocusTimer.startedAt : null;
-  if (phase === 'break') pomodoroBreakMin = Math.max(1, Math.round(intervalSecs / 60));
-  else pomodoroWorkMin = Math.max(1, Math.round(intervalSecs / 60));
-
-  if (!document.getElementById('focus-overlay')?.classList.contains('open')) return true;
-  focusModeOn = true;
-  const taskInput = document.getElementById('focus-task-input');
-  if (taskInput) taskInput.style.display = 'none';
-  const intentionEl = document.getElementById('focus-intention-text');
-  if (intentionEl) {
-    intentionEl.textContent = task;
-    intentionEl.style.display = 'block';
-  }
-  document.getElementById('focus-phase-label').textContent = phase === 'break' ? 'BREAK' : 'FOCUS';
-  document.getElementById('focus-phase-sub').textContent = `owned here · ${phase} session`;
-  document.getElementById('focus-settings-row').style.display = 'none';
-  document.getElementById('focus-start-btn').style.display = 'none';
-  setPomodoroCountdown(remainingSecs);
-  renderPomoDots();
-  updateFocusDeepBar();
-  clearInterval(pomodoroTimer);
-  pomodoroTimer = setInterval(tickPomodoro, 1000);
-  pushHudFocusState(syncedFocusTimer.startedAt);
-  persistFocusSession();
-  return true;
+async function takeOverSyncedFocusTimer() {
+  if (!captureFocusAccountingFrame() || timeAckBlocks('Taking over Focus')) return false;
+  return stageAccountingChange('focus-takeover', draft => {
+    draft.timerOwnerDeviceId = syncedDeviceId;
+  }, { timer: true, extra: { takeover: true }, onCaptured(operation) {
+    adoptFocusProducer({ ...captureAccountingFrame(), ...operation.input.after }, { restoreAt: operation.at, parentId: operation.id });
+  } });
 }
 
-function startPomodoro(options = {}) {
-  if (pomodoroPhase !== 'idle') return false;
-  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership()) {
-    showToast('Sign in before starting Focus');
-    return false;
-  }
-  pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
-  pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
-
+async function startPomodoro(options = {}) {
+  if (pomodoroPhase !== 'idle' || timeAckBlocks('Starting Focus')) return false;
+  const owner = accountingIdentity();
+  if (!owner) { showToast('Sign in before starting Focus'); return false; }
   const taskInput = document.getElementById('focus-task-input');
-  if (options.task) taskInput.value = options.task;
-  const focusTask = canonicalFocusActivity(taskInput.value.trim());
-  if (!focusTask) {
-    taskInput.classList.add('focus-task-error');
-    taskInput.placeholder = 'Name your focus session first';
-    taskInput.focus();
+  const task = canonicalFocusActivity(options.task || taskInput.value.trim());
+  if (!task) {
+    taskInput.classList.add('focus-task-error'); taskInput.placeholder = 'Name your focus session first'; taskInput.focus();
     setTimeout(() => { taskInput.classList.remove('focus-task-error'); taskInput.placeholder = 'What are you focusing on?'; }, 2000);
     return false;
   }
-  activeFocusLearningPlan = cloneFocusLearningPlanMetadata(options.learningPlan || pendingFocusLearningPlan);
-  activeFocusContext = String(options.context || pendingFocusContext || focusContextText(activeFocusLearningPlan) || '').trim();
-  const launchPlanItemId = typeof options.planItemId === 'string' && options.planItemId ? options.planItemId : pendingFocusPlanItemId;
-  activeFocusPlanItemId = launchPlanItemId || null;
-  pendingFocusLearningPlan = null;
-  pendingFocusContext = '';
-  pendingFocusPlanItemId = null;
-  const startedAt = Date.now();
-  if (options.dailyRoutine && typeof globalThis.onDailyRoutineFocusStarted === 'function' &&
-      globalThis.onDailyRoutineFocusStarted(options.dailyRoutine, startedAt) === false) return false;
-  _hudFocusLinkType = options.dailyRoutine ? 'daily-routine' : (activeFocusLearningPlan ? 'learning-plan' : 'none');
-  pomodoroPhase = 'work';
-  pomodoroRemaining = pomodoroWorkMin * 60;
-  focusStartTime = startedAt;
-  pomodoroPhaseStartedAt = focusStartTime;
-  taskInput.style.display = 'none';
-  const intentionEl = document.getElementById('focus-intention-text');
-  intentionEl.textContent = focusTask;
-  intentionEl.style.display = 'block';
-  currentTask = focusTask;
-  lastTaskForRepeat = focusTask;
-  timerOwnerDeviceId = syncedDeviceId;
-
-  if (running) {
-    pomodoroWasPaused = true;
-    clearInterval(ticker); ticker = null;
-  }
-
-  document.getElementById('focus-phase-label').textContent = 'FOCUS';
-  document.getElementById('focus-phase-sub').textContent = focusPhaseSubText(pomodoroWorkMin);
-  document.getElementById('focus-settings-row').style.display = 'none';
-  document.getElementById('focus-start-btn').style.display = 'none';
-
-  clearInterval(pomodoroTimer);
-  pomodoroTimer = setInterval(tickPomodoro, 1000);
-  updateFocusDeepBar();
-  syncFocusTimerState();
-  pushHudFocusState();
-  persistFocusSession();
+  const learningPlan = cloneFocusLearningPlanMetadata(options.learningPlan || pendingFocusLearningPlan);
+  const facts = { owner: owner.owner, device: owner.device, task, count: pomodoroCount,
+    workMin: parseInt(document.getElementById('pomo-work-min').value) || 25,
+    breakMin: parseInt(document.getElementById('pomo-break-min').value) || 5,
+    learningPlan, context: String(options.context || pendingFocusContext || focusContextText(learningPlan) || '').trim(),
+    planItemId: options.planItemId || pendingFocusPlanItemId || null, dailyRoutine: cloneUndoValue(options.dailyRoutine || null) };
+  if (facts.workMin <= 0 || facts.breakMin <= 0) return false;
+  const at = Date.now(), effects = facts.dailyRoutine ? [{ kind: 'focus-started', link: facts.dailyRoutine, startedAt: at }] : [];
+  const accepted = await stageAccountingChange('focus-start', draft => {
+    if (draft.running || draft.awayActive || draft.breakActive || draft.focus) return false;
+    draftFocusStart(draft, facts, at);
+  }, { timer: true, at, effects, onCaptured(operation) { adoptFocusProducer({ ...captureAccountingFrame(), ...operation.input.after }, { parentId: operation.id }); } });
+  if (!accepted) return false;
+  pendingFocusLearningPlan = null; pendingFocusContext = ''; pendingFocusPlanItemId = null;
+  await runFocusAccountingEffects();
   return true;
 }
 
@@ -676,147 +903,65 @@ function getFocusTaskLabel() {
   return (label && label !== '—') ? label : (currentTask || intention || 'Deep work');
 }
 
-function logFocusSession(tsStart, tsEnd = Date.now()) {
-  const dur = Math.round((tsEnd - tsStart) / 60000);
-  if (dur < 1) return null;
-  // Exactly-once completion: a Focus phase that runs to its configured length
-  // has a deterministic end (its planned endpoint), so a repeat restoration, a
-  // second tab, or a page/HUD race all recompute the SAME id. Never append the
-  // same completion twice.
-  const duplicate = entries.find(e => e.id === tsEnd && e.tsStart === tsStart && e.energy === 'deep');
-  if (duplicate) return duplicate;
-  const task = canonicalFocusActivity(getFocusTaskLabel());
-  const entry = {
-    id: tsEnd, ts: tsEnd, tsStart,
-    blockIntervalMin: dur,
-    date: toDateKey(new Date(tsEnd)),
-    activity: task, energy: 'deep',
-    onPlan: true, retro: false
-  };
-  if (activeFocusPlanItemId) entry.planItemId = activeFocusPlanItemId;
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy;
-  getActivityColor(task);
-  entries.push(entry);
-  entries.sort((a, b) => b.ts - a.ts);
-  lastTaskForRepeat = task;
-  persist(); syncEntries();
-  updateFocusDeepBar();
-  return entry;
-}
-
-function saveActiveFocusSession() {
-  if (!focusStartTime) return null;
-  const tsStart = focusStartTime;
-  focusStartTime = null;
-  if (pomodoroPhase !== 'work') return null;
-  const tsEnd = Date.now();
-  const entry = logFocusSession(tsStart, tsEnd);
-  notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
-  return entry;
-}
-
 function tickPomodoro() {
-  pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
-  setPomodoroCountdown(pomodoroRemaining);
-  refreshFocusTimerSync();
-  if (pomodoroPhase === 'work' && pomodoroRemaining === _OUTRO_LEAD_SEC) {
-    _startWorkOutro();
-  }
-  if (pomodoroRemaining <= 0) {
-    pomodoroPhase === 'work' ? endWorkSession() : endPomodoroBreak();
-  }
+  tickFocusProducer();
+  renderFocusCountdown();
 }
 
-function endWorkSession() {
-  clearInterval(pomodoroTimer);
-  pomodoroCount++;
-  renderPomoDots();
-  playAlertSound();
-
-  // A work phase only reaches endWorkSession() by running to its configured
-  // length: from tickPomodoro() at zero, or from restoreFocusSession() when
-  // the planned end already passed while the app was closed. Its truthful end
-  // is therefore the planned endpoint — phase start plus configured work
-  // minutes — never the wall clock at the instant this fires, which on a
-  // delayed restore can be hours after the session stopped being observed.
-  // Early manual exit is a separate path (saveActiveFocusSession()) and still
-  // uses real elapsed time.
-  const plannedEndBase = Number.isFinite(focusStartTime)
-    ? focusStartTime
-    : (Number.isFinite(pomodoroPhaseStartedAt) ? pomodoroPhaseStartedAt : null);
-  const tsEnd = plannedEndBase !== null
-    ? plannedEndBase + pomodoroWorkMin * 60000
-    : Date.now();
-  const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
-  focusStartTime = null;
-  const entry = logFocusSession(tsStart, tsEnd);
-  if (entry && typeof globalThis.onDailyRoutineFocusCompleted === 'function') {
-    globalThis.onDailyRoutineFocusCompleted(entry, tsStart, tsEnd);
-  }
-  const learningPlanOutcomeShown = notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
-  clearFocusLearningPlanContext();
-
-  if (learningPlanOutcomeShown) {
-    finishLearningPlanFocusSession();
-    return;
-  }
-
-  pomodoroPhase = 'break';
-  pomodoroPhaseStartedAt = tsEnd;
-  pomodoroRemaining = pomodoroBreakMin * 60;
-  _enterBreakMusic();
-  document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
-  document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
-
-  const btn = document.getElementById('focus-start-btn');
-  btn.textContent = 'Skip break';
-  btn.onclick = skipBreak;
-  btn.style.display = 'block';
-
-  renderToday();
-  syncFocusTimerState(tsEnd);
-  pushHudFocusState(tsEnd);
-  persistFocusSession();
-  pomodoroTimer = setInterval(tickPomodoro, 1000);
+function renderFocusCountdown() {
+  if (pomodoroPhase === 'idle') return;
+  if (_focusProducer && focusPhaseKey(_focusProducer.frame) === `${currentTask}:${pomodoroPhase}:${pomodoroPhaseStartedAt}`) pomodoroRemaining = _focusProducer.remaining;
+  else if (timerOwnerDeviceId !== syncedDeviceId) pomodoroRemaining = Math.max(0,
+    (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60 - Math.floor((Date.now() - pomodoroPhaseStartedAt) / 1000));
+  setPomodoroCountdown(pomodoroRemaining); refreshFocusTimerSync();
+  if (timerOwnerDeviceId === syncedDeviceId && pomodoroPhase === 'work' && pomodoroRemaining === _OUTRO_LEAD_SEC) _startWorkOutro();
 }
 
-function endPomodoroBreak() {
-  clearInterval(pomodoroTimer);
-  pomodoroPhase = 'idle';
-  pomodoroPhaseStartedAt = null;
-  clearPersistedFocusSession();
-  _exitBreakMusic();
-  playAlertSound();
-  clearFocusLearningPlanContext();
-
-  if (_pomodoroAutoStart) {
-    startPomodoro();
-    return;
-  }
-  pushHudFocusEnded();
-
-  document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
-  document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
-  document.getElementById('focus-settings-row').style.display = 'flex';
-  document.getElementById('focus-task-input').style.display = 'block';
-  document.getElementById('focus-intention-text').style.display = 'none';
-  setPomodoroCountdown(pomodoroWorkMin * 60);
-
-  const btn = document.getElementById('focus-start-btn');
-  btn.textContent = 'Start next session';
-  btn.onclick = startPomodoro;
-  btn.style.display = 'block';
+function endWorkSession({ producer = _focusProducer, at = Date.now(), restoring = false } = {}) {
+  const frame = producer?.frame || captureAccountingFrame(), focus = frame.focus;
+  if (!focus || focus.pomodoroPhase !== 'work' || frame.timerOwnerDeviceId !== syncedDeviceId || accountingPendingStop()) return Promise.resolve(false);
+  const tsStart = Number.isFinite(focus.focusStartTime) ? focus.focusStartTime : focus.pomodoroPhaseStartedAt;
+  const endedAt = tsStart + focus.pomodoroWorkMin * 60000, entry = focusEntry(tsStart, endedAt, frame);
+  const facts = { phase: 'work', phaseStartedAt: focus.pomodoroPhaseStartedAt, endedAt, entry };
+  return captureFocusObservation('focus-end-work', facts, { at, producerFrame: frame, predecessor: producer?.parentId,
+    eventKey: `focus-end-work:${frame._timerStateOwner}:${focus.pomodoroPhaseStartedAt}:${endedAt}`,
+    onCaptured(operation) {
+      const original = operation.input.observation;
+      const next = { ...captureAccountingFrame(), ...cloneUndoValue(original.frame) };
+      draftFocusWorkEnd(next, original.facts);
+      adoptFocusProducer(next, { continuation: true, restoreAt: restoring ? at : null, parentId: operation.id });
+      // Learning's existing completion hook chooses whether a Break exists. Keep that branch held.
+      if (original.facts.entry && original.frame.focus.activeFocusLearningPlan && _focusProducer) _focusProducer.waitingLearning = true;
+    } });
 }
 
-function skipBreak() {
-  clearInterval(pomodoroTimer);
-  _skipBreakMusic();
-  pomodoroPhase = 'idle';
-  pomodoroPhaseStartedAt = null;
-  clearPersistedFocusSession();
-  clearFocusLearningPlanContext();
-  startPomodoro();
+function endPomodoroBreak({ producer = _focusProducer, at = Date.now() } = {}) {
+  const frame = producer?.frame || captureAccountingFrame(), focus = frame.focus;
+  if (!focus || focus.pomodoroPhase !== 'break' || frame.timerOwnerDeviceId !== syncedDeviceId || accountingPendingStop()
+    || producer?.waitingLearning) return Promise.resolve(false);
+  const next = _pomodoroAutoStart ? { owner: frame._timerStateOwner, device: syncedDeviceId, task: frame.currentTask,
+    workMin: parseInt(document.getElementById('pomo-work-min').value) || 25,
+    breakMin: parseInt(document.getElementById('pomo-break-min').value) || 5, count: focus.pomodoroCount } : null;
+  return captureFocusObservation('focus-end-break', { phase: 'break', phaseStartedAt: focus.pomodoroPhaseStartedAt, next },
+    { at, producerFrame: frame, predecessor: producer?.parentId, eventKey: `focus-end-break:${frame._timerStateOwner}:${focus.pomodoroPhaseStartedAt}`,
+      onCaptured(operation) {
+        const original = operation.input.observation;
+        if (original.facts.next) {
+          const after = { ...captureAccountingFrame(), ...cloneUndoValue(original.frame) };
+          draftFocusStart(after, original.facts.next, operation.at);
+          adoptFocusProducer(after, { continuation: true, parentId: operation.id });
+        }
+        else stopFocusProducer();
+      } });
+}
+
+async function skipBreak() {
+  if (pomodoroPhase !== 'break' || timerOwnerDeviceId !== syncedDeviceId || timeAckBlocks('Skipping Focus break')) return false;
+  const facts = { owner: timerStateOwnerRoom(), device: syncedDeviceId, task: currentTask, count: pomodoroCount,
+    workMin: parseInt(document.getElementById('pomo-work-min').value) || 25,
+    breakMin: parseInt(document.getElementById('pomo-break-min').value) || 5 };
+  return stageAccountingChange('focus-skip-break', (draft, at) => draftFocusStart(draft, facts, at), { timer: true,
+    onCaptured(operation) { adoptFocusProducer({ ...captureAccountingFrame(), ...operation.input.after }, { parentId: operation.id }); } });
 }
 
 function playAlertSound() {
@@ -991,36 +1136,37 @@ function resumeFocusMusic() {
 // ENTER / EXIT
 // ══════════════════════════════════════════════════════
 
-function enterFocusMode(options = {}) {
+async function enterFocusMode(options = {}) {
   const launch = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   if (isFocusSessionRunning()) {
     focusModeOn = true;
     document.getElementById('focus-overlay')?.classList.add('open');
     return false;
   }
-  const mirroredRemoteTimer = running && timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId;
-  const ownedSyncedFocus = running && syncedFocusTimer?.running && syncedFocusTimer.ownerDeviceId === syncedDeviceId;
-  if (running && blockStartTime && !mirroredRemoteTimer && !ownedSyncedFocus) {
-    const tsEnd = Date.now();
-    const dur = Math.round((tsEnd - blockStartTime) / 60000);
-    if (dur >= 1) {
-      const task = canonicalFocusActivity(currentTask || intention || 'Work block');
-      const energy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
-      const entry = {
-        id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
-        blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
-        activity: task, energy, onPlan: true, retro: false
-      };
-      if (currentTaskPlanItemId) entry.planItemId = currentTaskPlanItemId;
-      entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
-      getActivityColor(task);
-      entries.push(entry);
-      entries.sort((a, b) => b.ts - a.ts);
-      lastTaskForRepeat = task;
-      persist(); renderToday(); syncEntries();
-      showToast(`Logged: ${task} · ${fmtDur(dur)}`);
-    }
-    resetTimer();
+  if (timeAckBlocks('Starting Focus')) return false;
+  if ((running || breakActive) && timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
+    showToast('Take over the active timer before starting Focus'); return false;
+  }
+  if (running || awayActive || breakActive) {
+    const accepted = await stageAccountingChange('enter-focus', (draft, at) => {
+      if (draft.awayActive) draftAwayEnd(draft, at);
+      if (draft.breakActive) draftBreakEndEntry(draft, at);
+      const start = draft.taskStartTime || draft.blockStartTime;
+      if (draft.running && start) {
+        const duration = Math.round((at - start) / 60000);
+        if (duration >= 1) {
+          const entry = { id: at, ts: at, tsStart: start, blockIntervalMin: duration, date: toDateKey(new Date(at)),
+            activity: canonicalFocusActivity(draft.currentTask || intention || 'Work block'),
+            energy: draft.entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep', onPlan: true, retro: false };
+          if (draft.currentTaskPlanItemId) entry.planItemId = draft.currentTaskPlanItemId;
+          entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+          draft.entries.unshift(entry); draft.lastTaskForRepeat = entry.activity;
+        }
+      }
+      draftStoppedTimer(draft, draft.intervalMin);
+    }, { timer: true, extra: { stopped: true, lastTask: null } });
+    if (!accepted) return false;
+    _stopHeartbeat();
   }
 
   _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
@@ -1066,8 +1212,7 @@ function enterFocusMode(options = {}) {
   setPomodoroCountdown(pomodoroWorkMin * 60);
   renderPomoDots();
   updateFocusDeepBar();
-  if (ownedSyncedFocus) takeOverSyncedFocusTimer();
-  else syncFocusOverlayFromRemote();
+  syncFocusOverlayFromRemote();
   if (launch.autoStart) return startPomodoro({
     dailyRoutine: launch.dailyRoutine,
     task: launchTask,
@@ -1087,52 +1232,28 @@ function exitFocusConfirm() {
   confirmExitFocus();
 }
 
-function confirmExitFocus() {
-  const ownerRoom = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null;
-  clearPersistedFocusSession();
-  const mirroredRemoteFocus = isSyncedFocusMirrorActive();
-  if (mirroredRemoteFocus) {
-    clearInterval(pomodoroTimer);
-    pomodoroTimer = null;
-    pomodoroPhase = 'idle';
-    pomodoroPhaseStartedAt = null;
-    stopFocusMusic();
-    focusModeOn = false;
-    document.getElementById('focus-overlay').classList.remove('open');
-    clearFocusLearningPlanContext();
-    renderToday();
-    return;
+async function confirmExitFocus() {
+  if (timeAckBlocks('Leaving Focus')) return false;
+  if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
+    stopFocusMusic(); focusModeOn = false; document.getElementById('focus-overlay').classList.remove('open');
+    return true;
   }
-  const shouldResumePausedTimer = pomodoroWasPaused && running && !ticker;
-  saveActiveFocusSession();
-  clearInterval(pomodoroTimer);
-  pomodoroPhase = 'idle';
-  pomodoroPhaseStartedAt = null;
-  stopFocusMusic();
-  focusModeOn = false;
-  document.getElementById('focus-overlay').classList.remove('open');
-  if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
-  if (shouldResumePausedTimer) {
-    ticker = setInterval(() => {
-      remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-      updateRing();
-      if (remaining <= 0) doPing();
-    }, 1000);
-    if (typeof _startHeartbeat === 'function') _startHeartbeat();
+  const frame = captureAccountingFrame();
+  if (!frame.focus) {
+    stopFocusMusic(); focusModeOn = false; document.getElementById('focus-overlay').classList.remove('open'); return true;
   }
-  pomodoroWasPaused = false;
-  clearFocusLearningPlanContext();
-  syncTimerState({ stopped: true, lastTask: null, mode: 'focus', ownerRoom });
-  if (typeof releaseTimerStateOwnership === 'function') releaseTimerStateOwnership(ownerRoom);
-  timerOwnerDeviceId = null;
-  currentTask = '';
-  pushHudFocusEnded();
-  renderToday();
+  const at = Date.now(), entry = frame.focus.pomodoroPhase === 'work' && frame.focus.focusStartTime
+    ? focusEntry(frame.focus.focusStartTime, at, frame) : null;
+  const effects = focusCompletionEffects(frame.focus, entry, false);
+  const accepted = await stageAccountingChange('focus-exit', draft => {
+    draftFocusEntry(draft, entry); draft.focus = null; draftStoppedTimer(draft, draft.intervalMin);
+  }, { timer: true, at, effects, extra: { stopped: true, lastTask: null, mode: 'focus' }, onCaptured: stopFocusProducer });
+  if (!accepted) return false;
+  _stopHeartbeat(); await runFocusAccountingEffects();
+  return true;
 }
 
-// ══════════════════════════════════════════════════════
-// FOCUS BLOCKER
-// ══════════════════════════════════════════════════════
+// Focus blocker and suggestions remain UI projections.
 
 function showFocusBlocker(reason) {
   const fbo = document.getElementById('focus-block-overlay');

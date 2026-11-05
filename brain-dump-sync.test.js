@@ -417,6 +417,20 @@ function makeDelayableRoom() {
   };
 }
 
+test('TASK-031 transaction callback rechecks changed source on retry without committing the first proposal', async () => {
+  const repository=createBrainDumpRepository({storage:memory(),getOwner:()=> 'uid_a',now:()=>T0,deviceId:()=> 'a'});
+  const {record}=repository.create({id:'retry031',text:'Initial source'});
+  const remote=triageCapture(record,{important:true,urgent:false,now:T0+2,updatedBy:'b'}).record;
+  let callbacks=0;
+  const ref={child(){return this;},transaction(update){callbacks++;assert.ok(update(wireCopy(record)));callbacks++;
+    assert.equal(update(wireCopy(remote)),undefined,'re-run with changed authority must abort');
+    return Promise.resolve({committed:false,snapshot:{val:()=>wireCopy(remote)}});}};
+  const bridge=createBrainDumpSyncBridge({repository,getRoomRef:()=>ref,getRoomId:()=> 'uid_a',now:()=>T0+3,deviceId:()=> 'a'});
+  const result=await bridge.claimPromotionRemote(record.id,{...PROMO_DO_TODAY,planItemId:brainDumpPlanItemId(record.id)});
+  assert.equal(result.reason,'source-changed');assert.equal(result.ok,false);assert.equal(callbacks,2);
+  assert.equal(repository.read(record.id).promotionClaim,null);assert.equal(repository.read(record.id).urgent,false);
+});
+
 test('A. timeout -> late COMMIT: no Plan Authority before commit; once the late claim lands, onRemoteChange fires with the authoritative claim', async () => {
   const room = makeDelayableRoom();
   const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });

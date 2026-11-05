@@ -156,6 +156,29 @@ test('app update accepts an already prepared plan unchanged', () => {
   assert.deepEqual(normalizePreparation(value, targetDate).routineInstanceIds, ['a', 'b']);
 });
 
+for (const [name, lists] of [
+  ['priority-only', { routineInstanceIds: [], oneOffItemIds: ['one-1'] }],
+  ['routine-only', { routineInstanceIds: ['routine-1'], oneOffItemIds: [] }],
+  ['open day', { routineInstanceIds: [], oneOffItemIds: [], intentionalBlank: true }],
+]) test(`persisted ${name} preparation retains Firebase-omitted empty lists`, () => {
+  const value = prep(lists);
+  const wire = { ...value };
+  for (const key of ['routineInstanceIds', 'oneOffItemIds']) if (wire[key].length === 0) delete wire[key];
+  assert.deepEqual(normalizePreparation(wire, targetDate), normalizePreparation(value, targetDate));
+  assert.deepEqual(mergeDatePlans(null, { preparation: wire }, targetDate), mergeDatePlans(null, { preparation: value }, targetDate));
+});
+
+test('persisted-list defaults do not accept malformed lists or incomplete confirmation inputs', () => {
+  for (const key of ['routineInstanceIds', 'oneOffItemIds']) {
+    for (const value of [null, '', {}, [0], ['']]) assert.equal(normalizePreparation(prep({ [key]: value }), targetDate), null);
+    const input = { targetDate, timezone, now: preparedAt, mode: 'normal', updatedBy: 'device-a',
+      intentionalBlank: false, routineInstanceIds: [], oneOffItemIds: ['one-1'] };
+    delete input[key];
+    assert.throws(() => buildPreparation(null, input), /Invalid preparation confirmation/);
+  }
+  assert.equal(normalizePreparation({ routineInstanceIds: [], oneOffItemIds: [] }, targetDate), null);
+});
+
 function permutations(values) {
   if (values.length < 2) return [values];
   return values.flatMap((value, index) => permutations(values.filter((_, atIndex) => atIndex !== index)).map(rest => [value, ...rest]));

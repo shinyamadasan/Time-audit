@@ -121,6 +121,7 @@ test('one known Start and intentional free-form work with three long priorities'
   await expect(page.locator('#hero-task-input')).toBeHidden();
   await expect(page.locator('#plan-task')).toBeHidden();
   await expect(page.locator('#up-next button:visible').filter({hasText: /^Start$/})).toHaveCount(1);
+  await page.locator('.execution-alternatives>summary').click();
   await page.locator('#choose-work').click();
   await page.locator('#hero-task-input').fill('Free-form work');
   await page.locator('#hero-idle').getByRole('button', {name:'Start',exact:true}).click();
@@ -196,7 +197,9 @@ test('intentional Log time and Timeline retain shortcuts and corrections', async
   for (const name of ['Sleep','Eat','Cooking','Dishes','Hygiene','Walk','Commute','Exercise']) await expect(page.locator('#daily-basics')).toContainText(name);
   await expect(page.locator('#same-as-last-btn')).toBeVisible();
   await expect(page.locator('#timeline-blocks')).toBeVisible();
-  await page.locator('#timeline-blocks .tl-row[data-entry-id]').first().click();
+  const recorded = page.locator('#timeline-blocks .tl-row[data-entry-id]').first();
+  await recorded.locator('summary').click();
+  await recorded.getByRole('button', {name:'Edit recording',exact:true}).click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
 });
 
@@ -221,8 +224,12 @@ test('rendered before/after phone and desktop hierarchy', async ({ page }) => {
         const t = document.getElementById('timeline-details'); if (t) t.open = false;
         const a = document.getElementById('accountability-details'); if (a) a.open = false;
       });
-      measurements[version]=await page.locator('#view-today').evaluate(el=>Math.round(el.getBoundingClientRect().height));
       await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`${version}-${width}.png`),fullPage:true,animations:'disabled'});
+      // Exclude the owner-approved command-center additions from this legacy bloat comparison.
+      // Their full layout is captured above and checked in daily-command-center.spec.js.
+      const comparisonStyle = version === 'after' ? await page.addStyleTag({content:'.command-brand,.command-tile,#command-next{display:none!important}'}) : null;
+      measurements[version]=await page.locator('#view-today').evaluate(el=>Math.round(el.getBoundingClientRect().height));
+      if (comparisonStyle) await comparisonStyle.evaluate(el=>el.remove());
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       if(version==='after') {
         await expect(page.locator('#needs-you')).toBeHidden();

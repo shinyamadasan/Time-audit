@@ -526,6 +526,16 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   z-index:999;font-family:var(--head);white-space:nowrap;pointer-events:none;
   display:flex;align-items:center;gap:10px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* acknowledged Undo (TASK-039): pending / unconfirmed status */
+.time-ack-status{position:fixed;bottom:calc(124px + var(--safe-bottom));left:50%;transform:translateX(-50%);
+  width:min(560px,calc(100vw - 32px));box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);
+  border-left:3px solid var(--admin,#f9c74f);color:var(--text);font-size:12px;line-height:1.4;padding:10px 12px;
+  border-radius:12px;z-index:998;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.time-ack-status[hidden]{display:none}
+.time-ack-status span{flex:1 1 220px}
+/* The pending-sync stack only informs: taps pass through it except on its own buttons. */
+div:has(> #time-ack-status),#time-ack-status,#ordinary-provisional,#focus-recovery-status{pointer-events:none}
+#time-ack-status button{pointer-events:auto}
 .toast.show.has-undo{pointer-events:auto}
 .toast-undo-btn{background:none;border:none;color:var(--deep);font-family:var(--head);font-size:12px;
   font-weight:700;cursor:pointer;padding:0;flex-shrink:0}

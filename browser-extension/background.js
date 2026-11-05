@@ -1,9 +1,12 @@
 import { FIREBASE_CONFIG, TRACKED_SITES, MIN_SESSION_MS, MERGE_WINDOW_MS } from './firebase-config.js';
+import { createPendingWrites, createExtensionTransport } from './pending-writes.js';
 
 // ── State ──
 let activeTab  = null;
 let authToken  = null;
 let uid        = null;
+let extensionDeviceId = null;
+let attachmentGeneration = 0;
 let trackedSites = {};  // loaded from storage, merges defaults + custom
 let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallback to device
 // True only once userTimezone has been set FROM the account's Firebase settings
@@ -12,6 +15,81 @@ let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallbac
 // never used to silently accept a wrong-day assignment as if it were confirmed.
 let userTimezoneConfirmed = false;
 let lastSessionByDomain = {};  // domain → { startTs, endTs } for merge window
+const storageArea = chrome.storage.local;
+const extensionFetch = globalThis.fetch.bind(globalThis);
+const mergeSlot = owner => `ta3-extension-merge:${owner}`;
+let transitions = Promise.resolve();
+let authWrites = Promise.resolve();
+let trackingFault = null;
+function transition(action) {
+  const result = transitions.then(() => {
+    if (trackingFault) throw trackingFault;
+    return action();
+  });
+  transitions = result.catch(error => {
+    trackingFault = error;
+    console.warn('[Chronasense] tracking paused; original state retained', error.message);
+    reportAccountingStatus().catch(() => {});
+  });
+  return result;
+}
+// Credential cache commits never wait for producer/outbox transitions. Auth switches use this
+// same short lock after their source capture, so refresh cannot overwrite a newer attachment.
+function commitAuthentication(action) {
+  const result = authWrites.then(action);
+  authWrites = result.catch(() => {});
+  return result;
+}
+function extensionIdentity() {
+  return uid && extensionDeviceId ? { uid, owner: `uid_${uid}`, device: extensionDeviceId, generation: attachmentGeneration } : null;
+}
+const pendingWrites = createPendingWrites({
+  storage: {
+    async get(key) { return (await storageArea.get([key]))[key] ?? null; },
+    set: (key, value) => storageArea.set({ [key]: value }),
+    keys: async prefix => Object.keys(await storageArea.get(null)).filter(key => key.startsWith(prefix)),
+    remove: key => storageArea.remove(key),
+  },
+  identity: extensionIdentity,
+  randomId: () => 'ext_' + crypto.randomUUID().replaceAll('-', ''),
+  transport: createExtensionTransport({ databaseURL: FIREBASE_CONFIG.databaseURL, fetchImpl: extensionFetch,
+    capability: globalThis.__chronasenseExtensionAccountingCapability, identity: extensionIdentity,
+    async getToken(owner, forceRefresh = false) {
+      const generation = attachmentGeneration;
+      if (uid !== owner) throw Error('Account detached');
+      if ((forceRefresh || !authToken) && !await refreshAuthToken()) throw Error('Authentication unavailable');
+      if (uid !== owner || generation !== attachmentGeneration) throw Error('Account detached');
+      return authToken;
+    } }),
+});
+async function reportAccountingStatus() {
+  const owner = uid, generation = attachmentGeneration;
+  let pending = [], unboundCount = 0, error = trackingFault?.message || null;
+  try {
+    if (owner) {
+      const state = await pendingWrites.snapshot(owner);
+      pending = [...state.queue, ...pendingWrites.captureFailures(owner)];
+    }
+    unboundCount = Object.keys(await chrome.storage.local.get(null)).filter(key => key.startsWith('ta3-extension-unbound:')).length;
+  } catch { error = 'Stored accounting record unreadable; original data retained'; }
+  const status = { pendingCount: pending.length + unboundCount, operationId: pending[0]?.id || null,
+    reason: error || pending[0]?.reason || (pending.length ? 'awaiting-confirmation' : unboundCount ? 'legacy-account-unproven' : null) };
+  if (uid !== owner || attachmentGeneration !== generation) return { pendingCount: 0, operationId: null, reason: 'account-detached' };
+  if (chrome.action?.setBadgeText) {
+    await chrome.action.setBadgeText({ text: status.pendingCount || error ? '!' : '' });
+    if (uid !== owner || attachmentGeneration !== generation) return { pendingCount: 0, operationId: null, reason: 'account-detached' };
+    await chrome.action.setTitle({ title: status.reason
+      ? `Chronasense — retained ${status.operationId || 'source'}: ${status.reason}. Original time is kept; recovery review may be needed.`
+      : 'Chronasense Tracker' });
+  }
+  return status;
+}
+function retryPending() {
+  const owner = uid;
+  if (owner) pendingWrites.drain(owner).catch(error => {
+    console.warn('[Chronasense] pending writes retained', error.message);
+  }).finally(() => reportAccountingStatus().catch(() => {}));
+}
 
 // Time Truth V1 — idle/sleep guard. chrome.idle has no signal finer than this, and we
 // don't want to micromanage seconds of inactivity — 5 minutes is a conservative AFK/
@@ -25,19 +103,44 @@ let lastHeartbeat = Date.now();
 
 // ── Startup ──
 // Called on install/update AND on every service worker restart (MV3 workers are killed after inactivity)
-chrome.runtime.onStartup.addListener(init);
-chrome.runtime.onInstalled.addListener(init);
-init(); // also run immediately on every service worker start to restore uid/authToken
+chrome.runtime.onStartup.addListener(() => transition(init));
+chrome.runtime.onInstalled.addListener(() => transition(init));
+transition(init); // also run immediately on every service worker start to restore uid/authToken
 
 async function init() {
-  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'userTimezoneConfirmed', 'activeTab', 'lastSessionByDomain', 'lastHeartbeat']);
+  attachmentGeneration++;
+  await authWrites;
+  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'userTimezoneConfirmed', 'activeTab', 'lastSessionByDomain', 'lastHeartbeat', 'ta3-extension-device-id']);
+  extensionDeviceId = stored['ta3-extension-device-id'];
+  if (extensionDeviceId == null) {
+    extensionDeviceId = 'extdev_' + crypto.randomUUID().replaceAll('-', '');
+    await storageArea.set({ 'ta3-extension-device-id': extensionDeviceId });
+    if ((await storageArea.get(['ta3-extension-device-id']))['ta3-extension-device-id'] !== extensionDeviceId) throw Error('Extension device readback failed');
+  }
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(extensionDeviceId)) throw Error('Unknown extension device');
   uid          = stored.uid          || null;
   authToken    = stored.authToken    || null;
   userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   userTimezoneConfirmed = !!stored.userTimezoneConfirmed;
   lastHeartbeat = stored.lastHeartbeat || Date.now();
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
-  if (stored.lastSessionByDomain) lastSessionByDomain = stored.lastSessionByDomain;
+  // Old device-wide merge cursors have no account proof. Retain them; never adopt them as a base.
+  lastSessionByDomain = uid ? (await storageArea.get([mergeSlot(uid)]))[mergeSlot(uid)] || {} : {};
+  // The outbox write precedes the old merge/active-tab caches. Rebuild those caches
+  // from captured facts after interruption; an older heartbeat must not shorten them.
+  if (uid) {
+    const retained = await pendingWrites.snapshot(uid);
+    for (const op of [...retained.history, ...retained.queue]) {
+      const capture = op.capture;
+      if (!capture || op.incompatibleCapture) continue;
+      const last = lastSessionByDomain[capture.domain];
+      if (!last || last.endTs < op.entry.ts) lastSessionByDomain[capture.domain] = { startTs: op.entry.tsStart, endTs: op.entry.ts };
+      if (stored.activeTab?.ownerUid === uid && stored.activeTab.domain === capture.domain
+        && stored.activeTab.sessionId === capture.sessionId && stored.activeTab.startedAt < op.entry.ts) {
+        stored.activeTab = { ...stored.activeTab, startedAt: op.entry.ts };
+      }
+    }
+  }
 
   try { chrome.idle.setDetectionInterval(IDLE_THRESHOLD_SECONDS); } catch (e) { /* idle API unavailable */ }
 
@@ -48,13 +151,21 @@ async function init() {
   // heartbeat to back it. Don't bridge that gap as continuous use — close the prior
   // session out at the last confirmed-active moment instead.
   if (stored.activeTab) {
-    activeTab = stored.activeTab;
-    if (Date.now() - lastHeartbeat > IDLE_THRESHOLD_SECONDS * 1000) {
-      closeSessionAtHeartbeat();
+    if (stored.activeTab.ownerUid !== uid || !uid) {
+      const key = 'ta3-extension-unbound:' + crypto.randomUUID();
+      const raw = JSON.stringify({ phase: 'unknown', reason: 'legacy-account-unproven', activeTab: stored.activeTab, lastHeartbeat });
+      await storageArea.set({ [key]: raw });
+      if ((await storageArea.get([key]))[key] !== raw) throw Error('Unbound session readback failed');
+      await storageArea.remove('activeTab');
+      activeTab = null;
+    } else {
+      activeTab = stored.activeTab;
+      if (Date.now() - lastHeartbeat > IDLE_THRESHOLD_SECONDS * 1000) await closeSessionAtHeartbeat();
     }
   }
 
   if (uid) {
+    retryPending();
     chrome.alarms.create('flush', { periodInMinutes: 5 });
     // Best-effort refresh so a timezone change made later in the web app eventually
     // reaches the extension without requiring an explicit sign-out/sign-in. Cheap
@@ -84,16 +195,16 @@ function markHeartbeat() {
 // at "now" — used whenever we discover the user went idle/locked/away without a clean
 // flush event (idle-state transition, periodic alarm finding idle, or a service-worker
 // restart after an unobserved gap). Never logs time past the heartbeat.
-function closeSessionAtHeartbeat() {
+async function closeSessionAtHeartbeat() {
   if (!activeTab) return;
   const endTs = Math.max(activeTab.startedAt, lastHeartbeat);
   const durationMs = endTs - activeTab.startedAt;
   const tab = activeTab;
-  activeTab = null;
-  chrome.storage.local.remove('activeTab');
   if (durationMs >= MIN_SESSION_MS && trackedSites[tab.domain]) {
-    logSession(tab.domain, tab.title, tab.sessionId, endTs, endTs - tab.sessionId);
+    await logSession(tab.domain, tab.title, tab.sessionId, endTs, endTs - tab.sessionId);
   }
+  activeTab = null;
+  await chrome.storage.local.remove('activeTab');
 }
 
 // ── Tab listeners registered at top level so they survive service worker restarts ──
@@ -101,7 +212,7 @@ chrome.tabs.onActivated.addListener(onTabActivated);
 chrome.tabs.onUpdated.addListener(onTabUpdated);
 chrome.windows.onFocusChanged.addListener(onFocusChanged);
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'flush') flushAndRestart();
+  if (alarm.name === 'flush') { retryPending(); transition(flushAndRestart); }
 });
 
 // System-level idle/lock/active signal — the one thing tab events can't tell us.
@@ -109,18 +220,18 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // or 'locked' closes out the current session at the last confirmed-active moment so
 // the AFK/lock time itself is never counted.
 try {
-  chrome.idle.onStateChanged.addListener((state) => {
+  chrome.idle.onStateChanged.addListener((state) => transition(async () => {
     if (state === 'active') {
       markHeartbeat();
       if (!activeTab) {
         chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-          if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
+          if (tabs[0]) switchTab(tabs[0].url, tabs[0].title);
         });
       }
     } else {
-      closeSessionAtHeartbeat();
+      await closeSessionAtHeartbeat();
     }
-  });
+  }));
 } catch (e) { /* idle API unavailable */ }
 
 function loadTrackedSites(customSites, removedSites) {
@@ -197,15 +308,22 @@ export async function signIn() {
     const googleToken = await getGoogleAccessToken(true);
     const userInfo = await fetch(`https://www.googleapis.com/oauth2/v1/userinfo?access_token=${googleToken}`).then(r => r.json());
     const fbData = await exchangeTokenWithFirebase(googleToken);
-    uid       = fbData.localId;
-    authToken = fbData.idToken;
-    await chrome.storage.local.set({ uid, authToken, email: userInfo.email, googleToken, fbRefreshToken: fbData.refreshToken });
-    // Resolve the account timezone BEFORE tracking starts — Time Truth V1: a session
-    // logged before this resolves would otherwise date-key on the device OS fallback.
-    // Best-effort: if the fetch fails (offline, no timezone set yet), tracking still
-    // starts rather than blocking sign-in indefinitely; userTimezoneConfirmed stays
-    // false and init() will keep retrying on later service-worker wakes.
-    await fetchUserTimezone(fbData.localId, fbData.idToken);
+    await transition(async () => {
+      await flushActiveTab();
+      await commitAuthentication(async () => {
+        attachmentGeneration++;
+        uid = fbData.localId; authToken = fbData.idToken;
+        await chrome.storage.local.set({ uid, authToken, email: userInfo.email, googleToken, fbRefreshToken: fbData.refreshToken });
+      });
+      lastSessionByDomain = (await storageArea.get([mergeSlot(uid)]))[mergeSlot(uid)] || {};
+      // Resolve the account timezone BEFORE tracking starts — Time Truth V1: a session
+      // logged before this resolves would otherwise date-key on the device OS fallback.
+      // Best-effort: if the fetch fails (offline, no timezone set yet), tracking still
+      // starts rather than blocking sign-in indefinitely; userTimezoneConfirmed stays
+      // false and init() will keep retrying on later service-worker wakes.
+      await fetchUserTimezone(fbData.localId, fbData.idToken);
+    });
+    retryPending();
     startTracking();
     return { uid, email: userInfo.email };
   } catch (e) {
@@ -214,18 +332,24 @@ export async function signIn() {
 }
 
 export async function signOut() {
-  flushActiveTab();
-  uid = null; authToken = null; activeTab = null;
-  await chrome.storage.local.remove(['uid', 'authToken', 'email', 'googleToken']);
-  chrome.tabs.onActivated.removeListener(onTabActivated);
-  chrome.tabs.onUpdated.removeListener(onTabUpdated);
-  chrome.windows.onFocusChanged.removeListener(onFocusChanged);
+  await transition(async () => {
+    await flushActiveTab();
+    await commitAuthentication(async () => {
+      attachmentGeneration++;
+      uid = null; authToken = null; activeTab = null;
+      await chrome.storage.local.remove(['uid', 'authToken', 'email', 'googleToken']);
+    });
+  });
+  // Listeners stay registered across sign-out/sign-in; recordStart requires an owner.
+  await reportAccountingStatus();
 }
 
 // Refresh token using Firebase refreshToken (no Google re-auth needed)
 async function refreshAuthToken() {
+  const owner = uid, generation = attachmentGeneration;
   try {
     const stored = await chrome.storage.local.get(['fbRefreshToken']);
+    if (!owner || uid !== owner || generation !== attachmentGeneration) return false;
     if (!stored.fbRefreshToken) { console.warn('[Chronasense] no refresh token stored — please sign out and sign back in'); return false; }
     const res = await fetch(
       `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_CONFIG.apiKey}`,
@@ -237,10 +361,13 @@ async function refreshAuthToken() {
     );
     const data = await res.json();
     if (!data.id_token) { console.warn('[Chronasense] token refresh failed', data); return false; }
-    authToken = data.id_token;
-    await chrome.storage.local.set({ authToken, fbRefreshToken: data.refresh_token || stored.fbRefreshToken });
-    console.log('[Chronasense] token refreshed ok');
-    return true;
+    return await commitAuthentication(async () => {
+      if (uid !== owner || generation !== attachmentGeneration) return false;
+      authToken = data.id_token;
+      await chrome.storage.local.set({ authToken, fbRefreshToken: data.refresh_token || stored.fbRefreshToken });
+      console.log('[Chronasense] token refreshed ok');
+      return true;
+    });
   } catch (e) { console.warn('[Chronasense] refresh error', e); return false; }
 }
 
@@ -249,7 +376,7 @@ async function refreshAuthToken() {
 function startTracking() {
   chrome.alarms.create('flush', { periodInMinutes: 5 });
   chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-    if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
+    if (tabs[0]) switchTab(tabs[0].url, tabs[0].title);
   });
 }
 
@@ -267,7 +394,7 @@ function onTabUpdated(tabId, changeInfo, tab) {
 
 function onFocusChanged(windowId) {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    flushActiveTab();
+    const at = Date.now(); transition(() => flushActiveTab(at));
   } else {
     chrome.tabs.query({ active: true, windowId }, (tabs) => {
       if (tabs[0]) switchTab(tabs[0].url, tabs[0].title);
@@ -276,33 +403,34 @@ function onFocusChanged(windowId) {
 }
 
 function switchTab(url, title) {
-  flushActiveTab();
-  recordStart(url, title);
+  const at = Date.now();
+  return transition(async () => { await flushActiveTab(at); await recordStart(url, title, at); });
 }
 
-function recordStart(url, title) {
+async function recordStart(url, title, at = Date.now()) {
+  if (!uid) return;
   const domain = getAnyDomain(url);
-  if (!domain) { activeTab = null; chrome.storage.local.remove('activeTab'); return; }
-  const now = Date.now();
-  activeTab = { url, title, domain, startedAt: now, sessionId: now };
-  chrome.storage.local.set({ activeTab });
+  if (!domain) { activeTab = null; await chrome.storage.local.remove('activeTab'); return; }
+  const now = at;
+  activeTab = { url, title, domain, startedAt: now, sessionId: now, ownerUid: uid };
+  await chrome.storage.local.set({ activeTab });
+  if (JSON.stringify((await storageArea.get(['activeTab'])).activeTab) !== JSON.stringify(activeTab)) throw Error('Active session readback failed');
   markHeartbeat();
 }
 
-function flushActiveTab() {
+async function flushActiveTab(at = Date.now()) {
   if (!activeTab) return;
-  const now = Date.now();
+  const now = at;
   const durationMs = now - activeTab.startedAt;
   const tab = activeTab;
-  activeTab = null;
-  chrome.storage.local.remove('activeTab');
-  if (durationMs < MIN_SESSION_MS) return;
-  if (trackedSites[tab.domain]) {
+  if (durationMs >= MIN_SESSION_MS && trackedSites[tab.domain]) {
     console.log('[Chronasense] flush:', tab.domain, Math.round(durationMs/1000)+'s → logging');
-    logSession(tab.domain, tab.title, tab.sessionId, now, now - tab.sessionId);
-  } else {
+    await logSession(tab.domain, tab.title, tab.sessionId, now, now - tab.sessionId);
+  } else if (durationMs >= MIN_SESSION_MS) {
     maybeNotifyUnknown(tab.domain, durationMs);
   }
+  activeTab = null;
+  await chrome.storage.local.remove('activeTab');
 }
 
 // Periodic 5-minute alarm for a still-open session. Time Truth V1: before trusting
@@ -314,17 +442,17 @@ async function flushAndRestart() {
   let state = 'active';
   try { state = await chrome.idle.queryState(IDLE_THRESHOLD_SECONDS); } catch (e) { /* idle API unavailable — assume active */ }
   if (state !== 'active') {
-    closeSessionAtHeartbeat();
+    await closeSessionAtHeartbeat();
     return;
   }
   markHeartbeat();
   const now = Date.now();
   const durationMs = now - activeTab.startedAt;
   if (durationMs >= MIN_SESSION_MS && trackedSites[activeTab.domain]) {
-    logSession(activeTab.domain, activeTab.title, activeTab.sessionId, now, now - activeTab.sessionId);
+    await logSession(activeTab.domain, activeTab.title, activeTab.sessionId, now, now - activeTab.sessionId);
   }
   activeTab = { ...activeTab, startedAt: now };
-  chrome.storage.local.set({ activeTab });
+  await chrome.storage.local.set({ activeTab });
 }
 
 async function maybeNotifyUnknown(domain, durationMs) {
@@ -365,10 +493,7 @@ chrome.notifications.onButtonClicked.addListener(async (notifId, btnIndex) => {
 // ── Firebase logging ──
 async function logSession(domain, title, startTs, endTs, durationMs) {
   if (!uid) { console.warn('[Chronasense] not logged in, skipping'); return; }
-  if (!authToken) {
-    const ok = await refreshAuthToken();
-    if (!ok) { console.warn('[Chronasense] no token and refresh failed, skipping'); return; }
-  }
+  const owner = uid, generation = attachmentGeneration;
 
   const site    = trackedSites[domain] || {};
   const appName = site.label || domain;
@@ -380,8 +505,6 @@ async function logSession(domain, title, startTs, endTs, durationMs) {
   if (last && (startTs - last.endTs) <= MERGE_WINDOW_MS) {
     entryStartTs = last.startTs; // extend the existing entry
   }
-  lastSessionByDomain[domain] = { startTs: entryStartTs, endTs };
-  chrome.storage.local.set({ lastSessionByDomain });
 
   const totalDuration = endTs - entryStartTs;
   const entry = {
@@ -408,31 +531,11 @@ async function logSession(domain, title, startTs, endTs, durationMs) {
   entry.category = getBucket(entry);
   entry.originalLabel = entry.energy;
 
-  const path = `rooms/uid_${uid}/entries/${entryStartTs}`;
-  const doWrite = () => fetch(
-    `${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`,
-    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }
-  );
-
-  try {
-    let res = await doWrite();
-    console.log('[Chronasense] Firebase write status:', res.status);
-    if (res.status === 401) {
-      console.log('[Chronasense] token expired, refreshing…');
-      const ok = await refreshAuthToken();
-      if (ok) {
-        res = await doWrite();
-        console.log('[Chronasense] retry write status:', res.status);
-      } else {
-        console.warn('[Chronasense] refresh failed, session lost');
-      }
-    } else if (res.status !== 200) {
-      const t = await res.text();
-      console.warn('[Chronasense] Firebase error body:', t);
-    }
-  } catch (e) {
-    console.warn('[Chronasense] network error logging session:', e);
-  }
+  await pendingWrites.enqueue(owner, entry, { domain, sessionId: startTs });
+  if (uid !== owner || generation !== attachmentGeneration) return;
+  lastSessionByDomain[domain] = { startTs: entryStartTs, endTs };
+  await storageArea.set({ [mergeSlot(owner)]: lastSessionByDomain });
+  retryPending();
 }
 
 // ── Helpers ──
@@ -461,16 +564,19 @@ function getAnyDomain(url) {
 }
 
 async function fetchUserTimezone(uidVal, token) {
+  const generation = attachmentGeneration;
   try {
     const url = `${FIREBASE_CONFIG.databaseURL}rooms/uid_${uidVal}/settings/timezone.json?auth=${token}`;
     const res  = await fetch(url);
     const tz   = await res.json();
-    if (tz && typeof tz === 'string') {
+    if (tz && typeof tz === 'string') await commitAuthentication(async () => {
+      if (uid !== uidVal || attachmentGeneration !== generation) return;
+      await chrome.storage.local.set({ userTimezone: tz, userTimezoneConfirmed: true });
+      if (uid !== uidVal || attachmentGeneration !== generation) return;
       userTimezone = tz;
       userTimezoneConfirmed = true;
-      await chrome.storage.local.set({ userTimezone: tz, userTimezoneConfirmed: true });
       console.log('[Chronasense] timezone set to', tz);
-    }
+    });
     // No value at this path (e.g. manual room-code pairing, where the account's
     // settings live outside rooms/uid_<uid>) — leave userTimezone/confirmed as they
     // were rather than guessing; the caller already has a cached-or-device fallback.
@@ -498,12 +604,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'SIGN_OUT') {
-    signOut().then(() => sendResponse({ ok: true }));
+    signOut().then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: e.message }));
     return true;
   }
   if (msg.type === 'GET_STATUS') {
-    chrome.storage.local.get(['uid', 'email'], (data) => {
-      sendResponse({ signedIn: !!data.uid, email: data.email || null });
+    const generation = attachmentGeneration;
+    chrome.storage.local.get(['uid', 'email'], async (data) => {
+      const accounting = await reportAccountingStatus();
+      if (generation !== attachmentGeneration || data.uid !== uid) {
+        sendResponse({ signedIn: !!uid, email: null, accounting: { pendingCount: 0, operationId: null, reason: 'account-detached' } }); return;
+      }
+      sendResponse({ signedIn: !!data.uid, email: data.email || null, accounting });
     });
     return true;
   }

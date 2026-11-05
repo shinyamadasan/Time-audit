@@ -73,6 +73,16 @@ function baseFiles() {
   };
 }
 
+test('local CSS fonts ship byte-identically; external/data URLs remain external', () => {
+  const dir=makeFixture({...baseFiles(),'style.css':'@font-face{src:url("./fonts/inter.woff2?v=1")} a{background:url(data:image/png;base64,AA)} b{background:url(https://example.test/a.png)}','fonts/inter.woff2':'synthetic-font'});
+  try {
+    assert.ok(computeClosure({rootDir:dir}).files.includes('fonts/inter.woff2'));
+    mirror({rootDir:dir});
+    assert.equal(readFileSync(path.join(dir,'www/fonts/inter.woff2'),'utf8'),'synthetic-font');
+    assert.equal(checkParity({rootDir:dir}).ok,true);
+  } finally { cleanup(dir); }
+});
+
 function mirrorIntoWww(dir, closureFiles) {
   for (const rel of closureFiles) {
     const dest = path.join(dir, 'www', rel);
@@ -80,6 +90,24 @@ function mirrorIntoWww(dir, closureFiles) {
     cpSync(path.join(dir, rel), dest);
   }
 }
+
+test('only the shared pure physical-key dependency ships from the extension directory', () => {
+  const shared = 'browser-extension/entry-physical-keys.js';
+  const dir = makeFixture({ ...baseFiles(), 'entry.js': `import './${shared}';`, [shared]: 'globalThis.EntryPhysicalKeys = {};',
+    'browser-extension/background.js': 'globalThis.forbidden = true;' });
+  try {
+    assert.equal(isDevOnlyFile(shared), false);
+    for (const other of ['background.js', 'pending-writes.js', 'manifest.json', 'entry-physical-keys.test.js']) {
+      assert.equal(isDevOnlyFile(`browser-extension/${other}`), true);
+    }
+    assert.deepEqual(computeClosure({ rootDir: dir }).devLeaks, []);
+    mirror({ rootDir: dir }); assert.equal(checkParity({ rootDir: dir }).ok, true);
+    assert.equal(readFileSync(path.join(dir, 'www', shared), 'utf8'), readFileSync(path.join(dir, shared), 'utf8'));
+    writeFileSync(path.join(dir, shared), "import './background.js';");
+    assert.deepEqual(computeClosure({ rootDir: dir }).devLeaks, ['browser-extension/background.js']);
+    assert.throws(() => mirror({ rootDir: dir }), /dev-only/);
+  } finally { cleanup(dir); }
+});
 
 // ── 1 + 2: entrypoints and transitive imports resolve (real tree) ──────────
 

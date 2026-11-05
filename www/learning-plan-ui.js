@@ -799,7 +799,7 @@ function receiveLearningPlanFocusOutcome(value) {
   return true;
 }
 
-function startNextLearningPlanFocus(target) {
+async function startNextLearningPlanFocus(target) {
   if (target.dataset.lpFocusStarting === '1') return;
   target.dataset.lpFocusStarting = '1';
   target.disabled = true;
@@ -809,12 +809,14 @@ function startNextLearningPlanFocus(target) {
     }
     const { plan, nextAction } = currentNextActionForControl(target);
     const metadata = learningPlanFocusMetadata(plan, nextAction);
-    const started = window.enterFocusMode({
+    const owner = ensureRepository().ownerRoomId();
+    const started = await window.enterFocusMode({
       task: metadata.stepTitle,
       context: learningPlanFocusContext(metadata),
       learningPlan: metadata,
       autoStart: true
     });
+    if (owner !== ensureRepository().ownerRoomId()) return;
     if (started === false) {
       showLearningPlanError('Focus is already running. Nothing new was started.');
       resetLearningPlanFocusStartControl(target);

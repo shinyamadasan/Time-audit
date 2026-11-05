@@ -1,6 +1,229 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## TASK-039 shipped accounting capability — November 2 local only
+
+New runtime file `accounting-capability.js`: `AccountingCapability.createTransport({ rest, coordinator, now })`
+returns `{ enforcesAccounting, enforcesCancellation, state, inspect, patch, cancel }`; `check(server, owner)`
+is the behavioural proof (decision 43). States: proven, unverified, incompatible, missing.
+`time-ack.js` adds REST `put`. In `index.html` (accounting section, about line 2717):
+`accountingTransportState`, `accountingTransportRefused`, `accountingFieldUnchanged`, and `_accountingTransport`.
+`scripts/build-release-artifacts.mjs` builds web and Android artifacts and `release-manifest.json`.
+Tests: `tests/accounting-release-artifacts.spec.js` (needs `CHRONASENSE_RELEASE_DIR`), `accounting-capability.test.js`.
+Harness: `tests/accounting-retained-action.js` (`holdEvaluates`, `retainedAccountingResult`, `acknowledgedUndo`).
+Ledger: `accounting-hazards/evidence/shipped-capability-20261101/G1-G9-LEDGER.md`. Guardian NOT RUN / NOT PASSED; production NO-GO.
+
+## TASK-039 qualification closure candidate — October31 local only
+
+`restoreUnifiedAccounting` now captures no-envelope legacy cache sources before clearing their
+confirmed projection; `accountingBootstrapCacheHeld` protects original keys until the canonical
+receipt. `setAccountLocal`/`removeAccountLocal` and heartbeat detach honor that bootstrap hold.
+Read/schema failures leave confirmed entries/redemptions blank. Ordinary compatibility repair
+follows canonical receipt; FocusV1 raw-key retention remains separate. No legacy fallback activation.
+`accounting-command.js` `load` refuses operation/effect identity collisions, mismatched canonical
+receipt generations/history and active effects already receipted; original bytes stay unchanged.
+Tests: `tests/accounting-qualification-closure.spec.js`, coordinator integrity regressions and
+`accounting-hazards/current-accounting-gates.test.js`. Exact G1–G9 scenarios and original-suite
+classifications live in the consolidated integration record and qualification-closure evidence.
+Governed generation `20261031-task039-qualified-accounting-v1`; full candidate qualification pending.
+No production capability activation. Guardian NOT RUN / NOT PASSED; production NO-GO.
+
+## TASK-039 Focus authority acceptance V1 — local amendment, October 31
+
+Owner-approved contract appendix: `TASK_039_ACCOUNTING_CONTRACT.md` Focus authority acceptance V1.
+`retainUnconfirmedCompatibilityCaches` preserves exact raw Focus payloads (including malformed JSON
+and primitives) while allowing coherent hydration; `retainUnprovenFocusCache` protects their original
+key from `persistFocusSession`. `adoptFocusProducer` validates account, Focus schema and session anchors
+in addition to its existing device/causal/cancellation lease. `renderFocusRecoveryStatus` labels confirmed,
+provisional and retained-unproven recovery in `#focus-recovery-status`. Accounting status and provisional
+facts stack in one opaque bounded container. `_startTimer` routes inactive starts and active switches;
+its unreachable pre-O1 detached-start tail is removed. Coordinator `readStored` marks temporary storage
+read exceptions; invalid data still blocks, while successful readback can recover native/Focus producers.
+Versioned tests: `tests/accounting-focus-authority-v1.spec.js`; originals and failure evidence unchanged.
+Governed generation `20261031-task039-focus-authority-v1`. This supersedes the acceptance STOP below
+only for this bounded amendment; full G1–G9/release remain incomplete. Guardian NOT RUN / NOT PASSED.
+
+## TASK-039 unified accounting — local O1 checkpoint, blocked Focus acceptance
+
+October 30: the owner approved O1, resolving the prior ordinary offline acceptance conflict.
+`ordinaryProvisionalState`, `captureOrdinaryTimer`, `prepareOrdinaryAccounting` and their adjacent
+render/recovery helpers in index.html derive a separate ordinary Start/Stop/recovery display from
+immutable original captures. Confirmed globals/caches, totals, exports, Undo and completion stay
+ACK-gated. `AccountingCommand.observeProvisional` durably captures local heartbeat observations;
+the same account envelope imports them. Restore includes unimported durable observations, freezes
+expiry at the original recovery decision and transfers recovery before native effects. No timer
+formula or backend node changed. Unsupported source versions retain bytes and pause publication.
+Original Focus legacy authority/reconciliation acceptance now needs an explicit decision; O1 does
+not authorize adopting ownerless cached sessions. Implementation is stopped at that boundary.
+Full G1–G9 and release remain unapproved; see the consolidated integration record.
+`materializeNativeAccountingPing` now projects only the canonical committed timer, before the Focus
+early return and after recovery invalidation. `queueNativePingEffect` serializes native cancel,
+schedule and follow-up; original endpoint, quiet lineage, owner/attachment and provider-ready repair
+are preserved. Complete historical `_csWrite` stamps remain recognized; malformed original provenance
+is refused by the resolver, TimeAck and coordinator. Extension status includes generic device-held
+unbound facts without ownership adoption. Shared resolver packaging has one exact-path exception;
+the other extension files remain excluded. Local `www/` parity: 101 files; governed generation
+`20261030-task039-o1-provisional-v1`, extension version 1.1. Capability remains disabled by default.
+These newer facts supersede the corresponding earlier checkpoint counts/packaging notes below.
+
+- `accounting-command.js` is a new classic-script coordinator after `time-ack.js`. Immutable
+  intake precedes the account Web Lock; one envelope holds queue, committed projection and apply
+  receipts. Retained native source reservations/results share this envelope without blocking
+  unrelated commands during a query. Exact sealed retry and all-path readback precede atomic local apply. Its production
+  capability defaults to refusal; only the loopback test harness supplies the verified transport.
+- index.html `captureAccountingFrame`, `accountingCoordinator`, `buildAccountingInput`,
+  `stageAccountingChange`, `stageAccountingObservation`, `prepareAccountingObservation` and
+  `applyAccountingFrame` bridge staged entry/timer/Undo/Break writers to that coordinator.
+  `draftPing`, `draftAutoLogBlock` and timer reducers operate on detached state. This is incomplete:
+  full writer qualification and packaging remain outstanding. Native request/result
+  capture, account/device continuation and ACK-gated watermark are now bounded reviewed integration.
+- focus-mode.js now uses detached phase/entry reducers and the same coordinator. A private producer
+  continuation retains original callback-counted facts behind pending ACKs; restore captures overdue
+  facts at the original invocation. Failed capture freezes its event/configuration per owner/device;
+  terminal queued decisions fence restore. Routine/Learning callbacks have durable versioned effects
+  and receipts, with conditional callers awaiting acceptance. This bounded source is independently
+  reviewed; full Focus/G7 and legacy storage caller qualification remain incomplete.
+- storage.js captures raw physical timer/entry/Away/Break sources and restores the canonical
+  envelope before compatibility caches. Accounting compatibility, bootstrap and reconnect paths now
+  request coherent hydration; unsupported legacy intents are retained without fallback SDK publication.
+  Read-only refreshes can observe peer state beside retained commands without ACKing their own partial
+  postimages. Failed capture retains original page-held facts until the same intake passes readback.
+  Focus source leases fence stale producer continuation; native request/result causal frontiers survive
+  intervening hydration. Bounded storage/source SDK matrix188/188 passes; full G1–G9 still incomplete.
+- Local `scripts/firebase-rules-builder.mjs` / generated `firebase.rules.json` contain staged protocol,
+  revision, cancellation, physical-alias and permanent-marker predicates. They are NOT deployed and
+  cannot be activated separately from the unfinished writer migration.
+- Extension `pending-writes.js` captures immutable intake before async outbox import, retains original
+  owner/device/generation and causal order, validates sealed entry-only commands and retries exact
+  conditional PUT/alias PATCH bytes. `background.js` exposes retained operations through existing
+  badge/status and fences credential refresh/cache commits without blocking the producer on itself.
+  Bounded independent review PASS; affected65/65 and actual MV3 process-kill/profile-version plus
+  app SDK Delete/Undo2/2 pass. Historical-code upgrade, full kill points and all gates remain incomplete.
+- `tests/accounting-staged-effects.spec.js` uses actual runtime sources, SDK and a loopback emulator.
+  G2 boundary regressions cover the authorized Switch/Break cursor corrections. Detailed status, all nine
+  incomplete gates and independent boundary review: `TASK_039_ACCOUNTING_INTEGRATION.md`.
+  Generated `www/` is not packaged until the coordinated integration is complete. This section supersedes older
+  unwired descriptions only for the partial local working source; no release safety is implied.
+
+## TASK-039 acknowledged Undo (time acknowledgement lifecycle)
+
+- `time-ack.js` (classic script after storage.js, attaches `TimeAckCore`): durable account-scoped
+  record `ta3-time-ack:<room>` (read back before the first agreement read), phases preparing/intent/pending/accepted/refused/
+  unknown, `begin()`/`recover()`/`retry()`/`abandon()`/`finalize()` under a Web Lock per account,
+  `_csWrite` revision stamps with operation id, and the ID-token REST transport (one multi-path PATCH,
+  authoritative per-path GETs). `abandon()` now fails closed: elapsed time is not cancellation.
+  A recorded keep-server resolution cannot be retried or applied as the original Undo. No time arithmetic.
+- index.html [Undo — Last Action]: signed-in `undoLastAction()` -> `requestAcknowledgedUndo()`; the
+  unchanged helpers run on copies; `applyAcknowledgedUndo()` applies once (original or already-accepted
+  frame, else superseded); `timeAckBlocks()` barrier on deliberate Save/Stop/Switch/edit/delete/log/
+  Away/cleanup/sleep; `#time-ack-status` pending/unconfirmed UI with Check now / Retry Undo.
+- storage.js: `buildTimerPublication()` (extracted unchanged from `syncTimerState()`); `syncTimerState`/
+  `syncEntries`/`syncFocusRedemptions` defer paths held by an unresolved Undo; `.info/connected` ->
+  `timeAckOnConnection()`. Canonical rules unchanged; gated entry+timer variant is test-only.
+- Tests: `time-ack.test.js` (emulator, in `test:rules-emulator`), `tests/time-ack-undo.spec.js`
+  (real SDK + emulator), `tests/time-ack-test-server.js` (stub acknowledging room for stub specs).
+- LOCAL ONLY, not loaded by index.html: `accounting-hazards/command-journal.js` and `browser-adapter.js`
+  demonstrate durable atomic ordinary commands, frozen automatic events and permanent cancellation/readback
+  against `accounting-hazards/rules.js`. The app's broader writers are NOT migrated. Physical extension
+  numeric keys versus app `e_` aliases are an explicit integration blocker. See `TASK_039_ACCOUNTING_HAZARDS.md`.
+- `autoLogDueTemplates({captureOnly:true})` captures the original calculated occurrence without mutation;
+  `applyAutoTemplateEntries()` contains its unchanged publication tail. Used by the local adapter only.
+- Physical-writer LOCAL candidate: `browser-extension/entry-physical-keys.js` resolves typed IDs to
+  their existing raw physical keys, refusing contradictory aliases; `pending-writes.js` retains
+  immutable captured entries, original conditional commands and receipts per owner. The background
+  producer captures before advancing its cache and reconstructs interrupted captures on restart.
+  Default transport has no proven physical-fence capability and retains UNKNOWN without sending.
+  `accounting-hazards/physicalWriterRules()` (in rules.js), physical-writer/interruption tests and
+  `WRITER_COMPATIBILITY.md` cover the isolated candidate. App/Undo physical routing stays unwired.
+  See `TASK_039_PHYSICAL_WRITER_CLOSURE.md`; broader staging boundaries remain blocked.
+
+## TASK-037 bounded online release repair
+
+- Persisted `normalizePreparation()` accepts RTDB-omitted empty ID arrays without relaxing
+  confirmation inputs, invalid-list validation, source-change comparisons or plan authority.
+- Notification-only `doPing()` captures the completed due instant before advancing its interval.
+  `swPingSessionKey`, `swPostPing` and `swDeliverPing` send owned, keyed due events; `swSchedulePing`
+  retains the next backup. A page epoch fences deferred posts; `cancelNativePing` also cancels web
+  reminders. Visibility cancellation is nonterminal, Stop/account detach retires the cached session.
+- `sw.js` shares `deliverPing` between the worker backup and page due event. Bounded recent-session
+  receipts deduplicate intervals and reject ended-session deliveries/clicks. Existing unkeyed client
+  messages remain supported. Worker-process lifetime guarantees and snooze/periodic-tick interference
+  remain existing limitations, not new delivery architecture or timing contracts.
+- Strict tests: `notification-reliability.test.js`, `online-planner-sdk.test.js` and existing planner
+  model/UI suites. Governed generation: `20261027-task037-online-release-repair-v1`.
+
+## TASK-035 bounded release reliability closure
+
+- `restoreTimerAwayState` restores valid expired ordinary sessions with their owned accounting
+  anchors; `invalidateTimerRecovery` / `isCurrentTimerRecovery` bind delayed recovery to the
+  active account/device/session. Pending recovery holds its ticker and preserves the original heartbeat.
+- `syncTimerState` conditionally publishes a restored ordinary timer against its saved pre-restore
+  stamp. Newer server Stop/takeover wins; a changed local cursor catches up through the same conditional
+  boundary. Exact submitted echoes cannot rewind it. Existing Focus reconciliation stays separate.
+- `_doQuickSave` records the pending span through Save, advances existing task/block accounting
+  cursors and gives entry Undo a guarded cursor receipt. Optional `trackingStartedAt` on the same
+  timer preserves hero/HUD presentation origin; it has no recorded-time authority.
+- `newEntryId` (storage.js) supplies positive safe-integer identities for new quick-retro records,
+  independent of event timestamps. Existing records retain their IDs; chronology remains `tsStart`/`ts`.
+- Tests: original seven assertions plus bounded lifecycle/Undo/browser checks in
+  `tests/daily-use-reliability.spec.js`; two-client local SDK proof in `entry-reliability-sdk.test.js`
+  runs through the existing fence SDK gate. Generation: `20261027-task035-release-reliability-v1`;
+  Brain Dump remains unchanged. Release evidence: `TASK_035_RELIABILITY_CLOSURE.md`.
+
+## TASK-033 owner visual refinement (isolated from protected ff3d426)
+
+- Existing Up Next actions disclose through `.execution-alternatives`; the current action and Next stay visible.
+  `renderTodayActionStrip` closes alternatives on a state transition and leaves free-form controls available.
+- Existing eight destinations remain unchanged. At phone/tablet widths four stay in the bar plus More;
+  `#nav-more-dialog` invokes the original secondary buttons, using native dialog focus/Escape behavior.
+- `.pt-source-jump` opens/focuses the existing read-only Q1/Q2 list. No promotion path is connected.
+  Planner headings say Plan your next day; explicit future days retain their authoritative named date.
+- Visual evidence and pending owner approval: `TASK_033_VISUAL_REVIEW.md`.
+  Governed generation: `20261027-task033-visual-refinement-v1`; Brain Dump generation unchanged.
+
+## TASK-033 product quality candidate (from protected TASK-031 d7e01d0)
+
+- Existing My Day/Plan Tomorrow adapters keep their domain actions. Scoped styles use locally bundled
+  Inter, compact preparation cards and consistent controls. `render` puts recommendations after priorities
+  in DOM order before restoring disclosures; desktop grid and phone order share that reading order.
+- `scripts/runtime-mirror.mjs` includes local CSS `url()` assets, so the same font ships in `www/`.
+- Direct edited promotion is NOT connected. Its failed second gate and unconnected prototype are retained
+  only in `TASK_033_PROMOTION_CONTRACT.md` / `review-artifacts/task-033-product-quality/`.
+- Owner review package: `TASK_033_REVIEW.md`. Governed generation: `20261026-task033-product-quality-v1`;
+  Brain Dump retains TASK-031's source-guard generation and unchanged production contracts.
+
+## TASK-031 safe planner candidate (from protected TASK-028)
+
+- `plan-tomorrow-ui.js`: existing preparation renderer and actions now sit in the approved desktop modal/mobile
+  sheet. `considerationHtml` projects at most two explicit Q1 and two Q2 captures from the owned repository,
+  read-only, with existing Brain Dump navigation. No candidate insertion/promotion call is added.
+- Planner draft lifecycle: account/target-scoped bounded session checkpoint, draft-instance-bound input capture,
+  explicit keep/discard, owner/source/day/timezone guards, and exact submitted-signature/local/sync feedback.
+  Existing `confirmPreparation`, Top 3, scheduling and routine semantics remain authoritative. No new task store.
+- `brain-dump-model.js` `arbitratePromotionClaim`: fresh semantic source mismatch aborts; matching claims preserve
+  remote source/provenance. `brain-dump-sync.js` / `brain-dump-ui.js` surface `source-changed` and retain retryability.
+  Existing rules builder predicate `claimSourcePreserved` restricts new claims to unchanged source text/answers/status,
+  protecting against the demonstrated pre-fix-client write too. No wire/schema/claim identity change.
+- Actual evidence, release-order hold and deferred direct candidate insertion: `TASK_031_RELEASE_HANDOFF.md`.
+- Tests extend existing promotion/model/sync/rules/emulator/mutation and real-app planning suites. Runtime/shared
+  copies are generated. Governed generation: `20261026-task031-safe-planner-v1`; Brain Dump: `20261026-task031-source-guard-v1`.
+
+## Daily Command Center V1 (TASK-028 local candidate)
+
+- `daily-command-center.js` is a classic presentation adapter over existing My Day timeline rows. `refresh`
+  upgrades source-rendered rows to native single-open detail cards, retaining original edit/completion controls,
+  recorded-group edit identity and evidence labels. `editableSource`, `execute` and `deletePlanned` re-read the
+  exact Plan Authority target/item and account scope; deletion tombstones only the planned item.
+- `daily-command-center.css` owns the My Day-only desktop dashboard/sidebar, mobile order, compact cards and
+  vertical time indicator. Existing Brain Dump/Eisenhower UI remains unchanged. `refreshOverview` reads current
+  priorities and preparation; it introduces no AI status, domain store or scheduler.
+- `planning-continuity-ui.js` task editor exposes optional bounded plain-text `description` on the existing item.
+  Existing item-wide merge and plan write paths retain it. No entry fields, sync/rules or backend changes.
+- Plan Tomorrow keeps its existing draft/authority/confirmation flow, presented full-screen by `plan-tomorrow.css`;
+  `plan-tomorrow-ui.js` puts priorities before routine/reconciliation context.
+- Index hooks: `renderTodayActionStrip` and the composed timeline part of `renderToday` call the optional adapter.
+  Tests: `daily-command-center.test.js`, `tests/daily-command-center.spec.js`; generated `www/` parity only.
+
 ## Historical task resolution (TASK-018, approved Refined A)
 
 - `task-completion-model.js`: typed original identity, resolution validation, canonical hashes and conservative
@@ -348,7 +571,7 @@ Capability/Career.
 ### storage.js
 Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback, timer sync visibility, and periodic timer/away reconciliation.
-Functions: `persist()`, `normalizeTemplates()`, `templateSyncStamp()`, `ensureTemplateSyncStamp()`, `syncSettings()`, `syncTemplates()`, `applyRemoteTemplates()`, `applyRemoteSettings()`, `scheduleRenderToday()`, `numberFromStorage()`, `rememberTimerSyncStamp()`, `currentTimerSyncStamp()`, `remoteTimerSyncStamp()`, `isStaleRemoteTimerState()`, `rememberAwaySyncStamp()`, `currentAwaySyncStamp()`, `remoteAwaySyncStamp()`, `isStaleRemoteAwayState()`, `loadSyncEventLog()`, `syncEventWriterId()`, `syncEventCloudAt()`, `recordSyncEvent()`, `syncEventEscape()`, `renderSyncEventLog()`, `forceSyncNow()`, `reconcileRemoteActiveState()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `renderTimerSyncDetail()`, `startSyncDetailAgeTicker()`, `stopSyncDetailAgeTicker()`, `startSyncReconcileTicker()`, `stopSyncReconcileTicker()`, `isLocalFocusTimerActive()`, `syncLocalActiveTimerState()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Functions: `persist()`, `normalizeTemplates()`, `templateSyncStamp()`, `ensureTemplateSyncStamp()`, `syncSettings()`, `syncTemplates()`, `applyRemoteTemplates()`, `applyRemoteSettings()`, `scheduleRenderToday()`, `numberFromStorage()`, `rememberTimerSyncStamp()`, `currentTimerSyncStamp()`, `remoteTimerSyncStamp()`, `isStaleRemoteTimerState()`, `rememberAwaySyncStamp()`, `currentAwaySyncStamp()`, `remoteAwaySyncStamp()`, `isStaleRemoteAwayState()`, `loadSyncEventLog()`, `syncEventWriterId()`, `syncEventCloudAt()`, `recordSyncEvent()`, `syncEventEscape()`, `renderSyncEventLog()`, `forceSyncNow()`, `reconcileRemoteActiveState()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `renderTimerSyncDetail()`, `startSyncDetailAgeTicker()`, `stopSyncDetailAgeTicker()`, `startSyncReconcileTicker()`, `stopSyncReconcileTicker()`, `isLocalFocusTimerActive()`, `syncLocalActiveTimerState()`, `buildTimerPublication()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
 Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`, `_lastTimerSyncDetail`, `_syncDetailAgeTicker`, `_syncReconcileTicker`, `_syncReconcileInFlight`, `_syncEventLog`, `TIMER_SYNC_STAMP_KEY`, `AWAY_SYNC_STAMP_KEY`, `SYNC_EVENT_LOG_KEY`, `SYNC_EVENT_LOG_LIMIT`, `SYNC_RECONCILE_MS`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
@@ -842,9 +1065,10 @@ Depends on: —
 ## [Undo — Last Action]
 Lines: ~1447–1549
 Purpose: One-slot in-memory undo for deliberate daily actions. Created entries/redemptions are tombstoned; deleted/extended entries are restored from snapshots with newer sync stamps.
-Functions: `cloneUndoValue()`, `sameUndoId()`, `rememberUndoAction()`, `rememberCreatedUndo()`, `rememberRestoreEntriesUndo()`, `tombstoneUndoEntries()`, `restoreUndoEntries()`, `tombstoneUndoRedemptions()`, `undoLastAction()`, `showUndoToast()`
-Variables: `lastUndoAction`
-Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`, `renderWeek()`, `renderWeekTable()`, `syncEntries()`, `syncFocusRedemptions()`, `showToast()`
+Functions: `cloneUndoValue()`, `sameUndoId()`, `rememberUndoAction()`, `rememberCreatedUndo()`, `rememberRestoreEntriesUndo()`, `tombstoneUndoEntries()`, `restoreUndoEntries()`, `tombstoneUndoRedemptions()`, `undoCursorTarget()`, `undoLastAction()`, `showUndoToast()`, `timeAckEngine()`, `timeAckOpenOperation()`, `timeAckHeldPaths()`, `timeAckDefer()`, `timeAckFlushDeferred()`, `timeAckBlocks()`, `timeAckOnConnection()`, `timeAckAttached()`, `timeAckLiveRecord()`, `timeAckCursorFrame()`, `requestAcknowledgedUndo()`, `applyAcknowledgedUndo()`, `timeAckFinalize()`, `timeAckReconcile()`, `timeAckUserAction()`, `renderTimeAckStatus()`
+Acknowledged Undo (TASK-039): named section following Undo — Last Action (see the block at the top).
+Variables: `lastUndoAction`, `_timeAckOnline`, `_timeAckBusy`, `_timeAckRecheck`, `_timeAckDeferred`
+Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`, `renderWeek()`, `renderWeekTable()`, `syncEntries()`, `syncFocusRedemptions()`, `showToast()`, `TimeAckCore` (time-ack.js), `buildTimerPublication()`, `rememberTimerSyncStamp()`
 
 ## [Timer — Core Interval Tracking]
 Lines: 2197–2476
@@ -1062,7 +1286,7 @@ Depends on: `entries`, `reviews`, `weeklyReviews`, Statistics section, `computeI
 ## [Day Templates]
 Lines: 6729–6910
 Purpose: Recurring block templates, selected-day Settings skeleton editor, modal task/day add form, content-sized hourly weekly calendar, 30-minute blank-slot calendar creation, Today-row template actions, optional auto-log after scheduled end, and template suppression against real/deleted entries.
-Functions: `generateTemplateEntries()`, `findTemplateById()`, `openTemplateLog()`, `templateSlotRange()`, `hhmmToMinutes()`, `minutesToHHMM()`, `addMinutesHHMM()`, `normalizeTemplateDays()`, `sameTemplateDays()`, `dayTemplateLabel()`, `dayTemplateFullLabel()`, `selectedDayTemplateDay()`, `templateEnergyColor()`, `templateTaskChoice()`, `templatesForDay()`, `templateItemsForDay()`, `renderDayTemplatePanel()`, `resetTemplateForm()`, `selectTemplateTaskChoice()`, `applyTemplateTaskChoice()`, `showTemplateForm()`, `hideTemplateForm()`, `cancelTemplateEdit()`, `startTemplateBlockForDay()`, `startTemplateBlockAt()`, `startTemplateBlockForSelectedDay()`, `templateDuplicateKey()`, `findDuplicateTemplate()`, `templateSkippedOnDate()`, `skipTemplateOnDate()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `entryCoversTemplateSlot()`, `scheduleTemplateDiffersFromEntry()`, `updateTemplateFromEntry()`, `maybeOfferTemplateUpdate()`, `renderTemplateList()`, `toggleTplDay()`, `persistTemplatesAfterPaint()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
+Functions: `generateTemplateEntries()`, `findTemplateById()`, `openTemplateLog()`, `templateSlotRange()`, `hhmmToMinutes()`, `minutesToHHMM()`, `addMinutesHHMM()`, `normalizeTemplateDays()`, `sameTemplateDays()`, `dayTemplateLabel()`, `dayTemplateFullLabel()`, `selectedDayTemplateDay()`, `templateEnergyColor()`, `templateTaskChoice()`, `templatesForDay()`, `templateItemsForDay()`, `renderDayTemplatePanel()`, `resetTemplateForm()`, `selectTemplateTaskChoice()`, `applyTemplateTaskChoice()`, `showTemplateForm()`, `hideTemplateForm()`, `cancelTemplateEdit()`, `startTemplateBlockForDay()`, `startTemplateBlockAt()`, `startTemplateBlockForSelectedDay()`, `templateDuplicateKey()`, `findDuplicateTemplate()`, `templateSkippedOnDate()`, `skipTemplateOnDate()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `applyAutoTemplateEntries()`, `entryCoversTemplateSlot()`, `scheduleTemplateDiffersFromEntry()`, `updateTemplateFromEntry()`, `maybeOfferTemplateUpdate()`, `renderTemplateList()`, `toggleTplDay()`, `persistTemplatesAfterPaint()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
 Variables: `_editingTplIdx`
 Depends on: `settings`, Date Picker, `entries`, `persist()`, `renderToday()`, Firebase sync
 

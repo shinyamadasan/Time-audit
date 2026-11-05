@@ -1,0 +1,16 @@
+function syncEntries() {
+  // Only the joined room's own entries, into that room — checked right before the write.
+  const ref = ownedRoomRef();
+  if (!ref) return Promise.resolve(false);
+  const updates = {};
+  // A record inside an unresolved acknowledged Undo is published only by that operation.
+  const held = typeof globalThis.timeAckHeldPaths === 'function' ? globalThis.timeAckHeldPaths() : null;
+  entries.forEach(e => {
+    const path = `entries/e_${e.id}`;
+    if (held && held.has(path)) { globalThis.timeAckDefer('entries'); return; }
+    updates[path] = e;
+  });
+  return ref.update(updates)
+    .then(() => { publishPublicStats(); return true; })
+    .catch(err => { notifySyncWriteFailed(err); return false; });
+}

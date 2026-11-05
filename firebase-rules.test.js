@@ -271,6 +271,19 @@ test('calendar authority facts — exact owner-create contract and immutable chi
 /** A well-formed capture record (what every real client writes). */
 const bd = (id, extra = {}) => ({ schemaVersion: 1, id, text: 'x', createdAt: 1, updatedAt: 1, updatedBy: 'd', status: 'untriaged', ...extra });
 
+test('TASK-031 new claim preserves source facts even when an older client bypasses the UI guard', () => {
+  const at='/rooms/uid_alice_uid/brainDump/cap1';
+  const remote=bd('cap1',{text:'Newer source',status:'triaged',important:true,urgent:false,triagedAt:2,updatedAt:2});
+  const state={rooms:{uid_alice_uid:{brainDump:{cap1:remote}}}};
+  const promotionClaim={type:'do-today',store:'legacy',targetId:'2026-10-26',planItemId:'bdp1|cap1',claimedAt:3,claimedBy:'old-client',when:''};
+  const next={...remote,schemaVersion:2,promotionClaim,updatedAt:3};
+  assert.equal(canWrite(state,A,at,next),true,'matching source claims remain supported');
+  for(const [field,value]of Object.entries({text:'Stale source',important:false,urgent:true,status:'untriaged'})) {
+    assert.equal(canWrite(state,A,at,{...next,[field]:value}),false,`claim cannot change ${field}`);
+  }
+  assert.equal(canWrite(state,A,at,{...remote,text:'Ordinary edited source',important:false,urgent:true,updatedAt:3}),true,'ordinary source edits are unchanged');
+});
+
 test('brainDump — A. the rightful room owner may read and write its own captures', () => {
   const empty = { rooms: { uid_alice_uid: {} } };
   assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'Call the vet' })), true, 'owner creates a capture');
@@ -342,16 +355,25 @@ test('brainDump — E. a capture\'s schemaVersion can never be lowered (old clie
 test('calendar barrier preserves every audited ordinary owner-write room path', () => {
   const ordinary = [
     'timer', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
-    'breakState', 'awayState', 'reviews', 'weeklyReviews', 'focusRedemptions', 'coarseLifeEvidence',
+    'breakState', 'awayState', 'reviews', 'weeklyReviews', 'coarseLifeEvidence',
     'dayBoundaryRevisions', 'commitments', 'planByDeadlineRevisions', 'intentionalOffDays', 'calendarPlans',
   ];
+  const staged = value => ({ ...value, _csWrite: { v: 1, protocol: 'staged-command-v1', operationId: 'calendar_audit',
+    baseExists: false, baseRevision: 0, revision: 1 } });
   const root = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
   for (const child of ordinary) {
-    assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, { proof: child }), true, `${child} remains owner-writable`);
-    assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${child}`, { proof: child }), false, `${child} remains account-isolated`);
+    const protectedPath = ['timer', 'breakState', 'awayState'].includes(child);
+    const value = protectedPath ? staged({ proof: child }) : { proof: child };
+    assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, value), true, `${child} remains owner-writable`);
+    assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${child}`, value), false, `${child} remains account-isolated`);
+    if (protectedPath) assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, { proof: child }), false, `${child} refuses old unstaged writers`);
   }
-  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/entries/e_1', { id: 1, updatedAt: 1 }), true, 'entry leaf remains owner-writable');
-  assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/entries/e_1', { id: 1, updatedAt: 1 }), false, 'entry leaf remains account-isolated');
+  for (const leaf of ['entries/e_1', 'focusRedemptions/r_1']) {
+    assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${leaf}`, staged({ id: 1, updatedAt: 1 })), true, `${leaf} remains owner-writable`);
+    assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${leaf}`, staged({ id: 1, updatedAt: 1 })), false, `${leaf} remains account-isolated`);
+    assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${leaf}`, { id: 1, updatedAt: 1 }), false, `${leaf} refuses unstaged writes`);
+  }
+  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/focusRedemptions', { r_1: staged({ id: 1 }) }), false, 'redemptions collection has no bypass grant');
   assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/entries', { e_1: { id: 1, updatedAt: 1 } }), false, 'entries collection has no bypass grant');
   // brainDump is governed per capture (no collection grant), so it is audited at its record.
   assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), true, 'brainDump captures remain owner-writable');

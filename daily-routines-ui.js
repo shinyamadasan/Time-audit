@@ -158,7 +158,7 @@ form.addEventListener('submit', event => {
   } catch (err) { form.querySelector('[data-form-error]').textContent = err.message; }
 });
 document.getElementById('daily-routine-cancel').addEventListener('click', () => dialog.close());
-document.addEventListener('click', event => {
+document.addEventListener('click', async event => {
   const control = event.target.closest('[data-routine-action]');
   if (!control) return;
   try {
@@ -173,11 +173,11 @@ document.addEventListener('click', event => {
       return;
     }
     if (action === 'edit' || action === 'add') { document.getElementById('routine-manager').close(); openEditor(id); return; }
-    performRoutineAction(action, id, control.closest('[data-instance-id]')?.dataset.instanceId);
+    await performRoutineAction(action, id, control.closest('[data-instance-id]')?.dataset.instanceId);
     renderDailyRoutines();
   } catch (err) { renderDailyRoutines(); message(err); }
 });
-function performRoutineAction(action, id, clickedId) {
+async function performRoutineAction(action, id, clickedId) {
   view = readView();
   const item = [...view.instances, ...view.skipped].find(i => i.routineId === id && i.id === clickedId);
   if (!item) throw new Error('The day or routine changed. Please use the refreshed Today card.');
@@ -193,29 +193,31 @@ function performRoutineAction(action, id, clickedId) {
       if (!next || next.stepId !== view.state.links[item.id]?.stepId) throw new Error('This step changed or is complete. Open Learning Plans to continue.');
       learningPlan = { ...next, planId: plan.id, planTitle: plan.title };
     }
-    const started = globalThis.enterFocusMode({ task: learningPlan?.stepTitle || r.title, context: learningPlan?.planTitle || r.title, learningPlan, dailyRoutine: r.source === 'focus' ? { instanceId: item.id, timezone: item.timezone } : null, workMinutes: r.targetMinutes, autoStart: true });
+    const owner = appRoomOwner();
+    const started = await globalThis.enterFocusMode({ task: learningPlan?.stepTitle || r.title, context: learningPlan?.planTitle || r.title, learningPlan, dailyRoutine: r.source === 'focus' ? { instanceId: item.id, timezone: item.timezone } : null, workMinutes: r.targetMinutes, autoStart: true });
+    if (owner !== appRoomOwner()) return;
     if (started === false) throw new Error('Focus is already running. Nothing new was started.');
     document.getElementById('routine-day-dialog')?.close();
   }
 }
-// Persist the source session identity before starting; a same-device takeover can reuse it.
+// Project the accepted source identity; accounting retains delivery until confirmed.
 globalThis.onDailyRoutineFocusStarted = (link, startedAt) => {
-  // Let the Start action surface storage errors before the timer starts.
   repository.update(initialTimezone(), state => { state.focusLaunch = { ...link, startedAt }; });
   return true;
 };
 // Called only by the existing full work-session completion path, never partial exit.
-globalThis.onDailyRoutineFocusCompleted = (entry, startedAt, endedAt) => {
+globalThis.onDailyRoutineFocusCompleted = (entry, startedAt, endedAt, capturedLink = null) => {
   try {
-    const link = repository.read(initialTimezone()).focusLaunch;
-    if (!link || link.startedAt !== startedAt) return;
+    const link = capturedLink ? { ...capturedLink, startedAt } : repository.read(initialTimezone()).focusLaunch;
+    if (!link || link.startedAt !== startedAt) return true;
     repository.update(initialTimezone(), state => {
       if (!state.routines.some(r => instanceId(r.id, localContext(startedAt, link.timezone).date) === link.instanceId)) throw new Error('The routine linkage no longer exists.');
       state.focus[String(entry.id)] = { instanceId: link.instanceId, entryId: String(entry.id), startedAt, endedAt, duration: entry.blockIntervalMin };
-      state.focusLaunch = null;
+      if (state.focusLaunch?.startedAt === startedAt) state.focusLaunch = null;
     });
     renderDailyRoutines();
-  } catch (err) { message(err); globalThis.showToast(`Focus saved; routine completion could not be saved: ${err.message}`); }
+    return true;
+  } catch (err) { message(err); globalThis.showToast(`Focus saved; routine completion could not be saved: ${err.message}`); return false; }
 };
 globalThis.renderDailyRoutines = renderDailyRoutines;
 /** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Closes every

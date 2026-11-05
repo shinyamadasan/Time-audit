@@ -20,6 +20,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { acknowledgingServer } from './time-ack-test-server.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
@@ -749,6 +750,7 @@ test('CSV exports active rows only, including after Clear Today', async ({ page 
 });
 
 test('CSV excludes tombstones and Clear All, but includes canonical undo restoration', async ({ page }) => {
+  await acknowledgingServer(page);
   await openApp(page);
   await createAccountAFacts(page);
   const baseline = await exportedCsv(page);
@@ -763,6 +765,32 @@ test('CSV excludes tombstones and Clear All, but includes canonical undo restora
   await page.evaluate(() => { window.confirm = () => true; clearAll(); });
   expect(await exportedCsv(page)).toBeNull();
   expect(await page.evaluate(() => entries.find(e => e.id === 111111).deleted)).toBe(true);
+});
+
+test('acknowledged Undo: an unresolved Undo of A neither blocks nor applies into B, and resolves when A returns', async ({ page }) => {
+  await acknowledgingServer(page);
+  await openApp(page);
+  await createAccountAFacts(page);
+  await page.evaluate(() => deleteEntry(111111));
+  await page.evaluate(() => { window.__timeAckDropPatch = true; return undoLastAction(); });
+  await expect(page.locator('#time-ack-status')).toContainText('Undo not confirmed yet');
+  const recordA = await page.evaluate(A => localStorage.getItem(`ta3-time-ack:${A}`), A);
+  expect(JSON.parse(recordA).operation.phase).toBe('unknown');
+  await switchTo(page, 'account-b');
+  await expect(page.locator('#time-ack-status')).toBeHidden();
+  await page.evaluate(() => { document.getElementById('retro-task').value = 'B own log'; document.getElementById('retro-qstart').value = '08:00'; document.getElementById('retro-qend').value = '08:30'; quickRetroLog(); });
+  expect((await shown(page)).entries).toEqual(['B own log']);
+  expect(await page.evaluate(A => localStorage.getItem(`ta3-time-ack:${A}`), A)).toBe(recordA);
+  expect(await page.evaluate(B => localStorage.getItem(`ta3-time-ack:${B}`), B)).toBeNull();
+  await page.evaluate(() => { window.__timeAckDropPatch = false; });
+  await switchTo(page, 'account-a');
+  const status = page.locator('#time-ack-status');
+  await expect(status.getByRole('button', { name: 'Retry Undo' })).toBeVisible();
+  await status.getByRole('button', { name: 'Retry Undo' }).click();
+  await expect(status).toBeHidden();
+  const restored = await page.evaluate(() => entries.find(e => e.id === 111111));
+  expect(restored.deleted).toBeUndefined();
+  expect(await page.evaluate(B => window.__fbTest.get(`rooms/${B}/entries/e_111111`), B)).toBeNull();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

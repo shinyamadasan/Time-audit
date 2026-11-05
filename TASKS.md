@@ -1881,6 +1881,491 @@ closure (2026-10-29, owner-approved):
     connector reconnect).
 status-note: closed. The task-038 branch holds no other unmerged work and can be retired.
 
+### TASK-039 - Final local release safety closure
+status: blocked
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: exact PR20 ce24092..122d383 approved imports, preserving a9e22af main OAuth/current-main paths; CHANGELOG.md/TEST_REPORT.md append-only conflict resolution; this new TASK-039 entry only; release-safety/ local reconciliation/proof scripts and tests; review-artifacts/task-039-final-local-safety/; TASK_039_FINAL_LOCAL_SAFETY.md. Test-only rule variants allowed; canonical generated rules/builder unchanged unless a safe approved-scope guard is proven.
+
+context:
+  BLOCKER: source reconciliation succeeds, but unchanged direct-owner RTDB plan replacements do
+  not encode edit intent/before-image. Actual current PlanAuthority description revert and an old
+  stale freshly stamped merge produce identical uid/path/data/newData. A deterministic rule cannot
+  reject one while allowing the other. Preparation-presence subset passes current/old/offline controls
+  but admits metadata replacement/day-deletion bypass; description freeze blocks supported edits
+  and is bypassed by array reindexing; entry timestamp monotonicity admits freshly stamped stale data.
+  Canonical rules remain exact approved PR20. STOP6 honored; no gateway/redesign or further integration.
+  Local source candidate retains413 PR20 imports and all a9e22af OAuth. Worker45, bundle dry-run,
+  root/www98/shared/rules parity and10 emulator observation cases pass. Observation passes confirm
+  incompatibility, not a deployment-ready safety contract. Own handoff/evidence and focused independent
+  review record the exact source/stop. Guardian pending/NOT RUN/NOT PASSED; production NO-GO.
+  Owner message "ChronaSense PR #20 — Final Local Release Safety Closure", current session
+  October28,2026 America/Phoenix. Authorize LOCAL release-only reconciliation against exact
+  a9e22afba5370f426c4066c94bf216eac3cced94, preserving all approved PR20 functionality and main
+  OAuth offline_access. Resolve only CHANGELOG/TASKS/TEST_REPORT documentation conflicts. PR20
+  remains frozen at122d3835f7114503d9be5ea581227b0d95fb9d9d; gateway c224180 frozen/excluded.
+  Bounded non-gateway stale-session rules/data-transition investigation and local emulator proof;
+  no features, product/runtime redesign, trusted-version assumption or automatic gateway migration.
+
+objective:
+  Produce an isolated exact-source candidate and determine whether the smallest Firebase guards
+  can prevent destructive stale writes while retaining supported planning/edit/time behavior.
+
+acceptance:
+  - Preserve approved UI/planning/Brain Dump/Eisenhower/reminders/accounting/source guards and main
+    OAuth; exact runtime/rules/shared parity and Worker OAuth/consent/scope/both-account tests/bundle.
+  - Real local emulator/SDK proof: unsafe old write refusal, supported saves/legitimate edits,
+    account isolation, historical time/tombstones/protected metadata and offline stale queues.
+  - Do not trust version strings, refresh prompts or unverified client identity. Reuse unchanged
+    earlier evidence; do not silently weaken a supported operation to pass a proposed safety rule.
+  - STOP if no non-gateway protection satisfies safety and functionality; report exact incompatible
+    transition and smallest viable alternatives. Obtain focused independent exact-source review.
+
+constraints:
+  - No push/PR update/merge/deploy/live rules/production data/phone testing. No gateway changes or
+    migration. Preserve prior dirty worktrees/evidence. Guardian pending for final approved combination;
+    production NO-GO. Unresolved safety means status blocked, not a release-ready claim.
+
+verification:
+  - Worker tests/bundle dry-run; root/www/shared/rules generation checks; source/blob import proof.
+  - Bounded local rules variants and real RTDB/SDK deterministic positive/negative/indistinguishability
+    controls; retain actual outputs and evidence; SELF_REVIEW/QA and separate focused review.
+
+### TASK-039 - Stale-session revision contract proof
+status: review
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: stale-contract/ test-only design/adapters/fixtures; review-artifacts/task-039-stale-contract/; TASK_039_STALE_CONTRACT.md; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+
+context:
+  Owner's October 28 2026 session instruction authorizes bounded LOCAL design and real Firebase
+  emulator proof from b662d14616e5744807304d0621f6354392d2c2be. Prior release-safety task stays
+  blocked; this is the separately authorized protocol investigation, not release implementation.
+objective:
+  Demonstrate a minimal direct-RTDB revision/before-image contract rejecting stale planning and
+  recorded-entry writes while allowing supported intentional edits, including description reverts.
+acceptance:
+  - [x] Positive and strict negative controls for both accounts, all three plan stores and their fences.
+  - [x] Unversioned enrollment, direct legacy writes, old offline queues, transaction retries and deletion bypasses covered.
+  - [x] Preserve preparation, descriptions, source metadata, historical time and tombstones; current legitimate edits pass.
+  - [x] Return exact evidence, minimal required client/rules changes and release implications.
+constraints:
+  - Test-only rules and adapters; no canonical runtime/rules changes, PR updates, push, merge,
+    deployment, production access, phone testing or gateway changes. Guardian NOT RUN / NOT PASSED;
+    production NO-GO. Reuse source-bound earlier evidence; no full-suite rerun.
+  - STOP if safety requires a gateway or breaks supported planning; no alternative architecture.
+verification:
+  - Focused real Firebase emulator/SDK allow/deny tests, source preservation and local self-review/QA.
+
+### TASK-039 - Integrate proven stale-write contract
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: write-contract.js and focused contract tests; storage.js; index.html (runtime loader, legacy plan persistence, bounded recovery status only); calendar-plan/operational-plan repositories, models and sync adapters; plan-fence-sync.js; scripts/firebase-rules-builder.mjs and firebase.rules.json; functions/src/{user-scoped-rtdb,plan-create-action,plan-mutation-action,plan-read}.js and affected tests; scripts/functions-shared.mjs; generated www/functions/shared mirrors; CODEMAP.md; package.json test wiring if needed; this entry; CHANGELOG.md/TEST_REPORT.md append only; TASK_039_STALE_WRITE_INTEGRATION.md and review-artifacts/task-039-stale-write-integration/.
+context:
+  Owner's October 28 2026 instruction authorizes LOCAL implementation/integration of proven
+  c7951add89bd0b4adcee13ebc9287f4c7caed875 on the reconciled b662d14 candidate. PR20 and gateway frozen.
+objective:
+  Integrate server-verified revision/existence with durable captured before-images and explicit
+  legacy/conflict recovery; retain legitimate edits, time and all approved source protections.
+blocker:
+  Owner STOP condition: actual undoLastAction rewinds and publishes the owned accounting cursor
+  before persist/syncEntries and clears lastUndoAction without awaiting the entry result. The real
+  emulator accepts this timer rewind while the proposed rules reject a stale entry CAS, leaving
+  valid live recorded time behind the rewound cursor. Legacy owner timer writes remain allowed.
+  Safe handling requires a guarded Undo/accounting acknowledgement/refusal lifecycle beyond the
+  proven record contract. No engine lifecycle change was authorized. Stop proof/evidence only;
+  unwired helper prototype removed, no canonical runtime/rules/API changes or integration claim.
+acceptance:
+  - [ ] Actual planning/entry/fence writers retain original owned bases across retries/reloads/offline work.
+  - [ ] Unknown-provenance legacy queues cannot automatically replay; pending work remains recoverable.
+  - [ ] Current edits/reverts, preparation, source metadata, time, tombstones and Undo remain supported.
+  - [ ] Compatible API writes/moves and semantic receipts use the same rules contract.
+  - [ ] Focused then required complete integration gates, both accounts/all stores/cache upgrades/strict time; exact-source independent review.
+  - [ ] Exact local commit, compatibility verdict, concrete legacy-session rollout/recovery policy and one next approval.
+constraints:
+  - No push/PR update/merge/deploy/live rules/production writes/access, gateway work, phone tests,
+    unrelated features or redesign. Guardian NOT RUN / NOT PASSED; production NO-GO.
+  - STOP if implementation weakens source protection, loses legitimate edits, changes the approved
+    time engine or expands into gateway architecture. Rules must never deploy independently.
+verification:
+  - Focused actual-adapter emulator/SDK and persistence tests first; then required integration
+    gates on complete source, mirrors/rules parity and unchanged seven strict time scenarios.
+  - Independent exact-source review after implementation; retain failures and any STOP evidence.
+
+### TASK-039 - Bounded time-accounting acknowledgement proof
+status: review
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: time-ack-proof/ local-only lifecycle/engine harness/tests; review-artifacts/task-039-time-ack/; TASK_039_TIME_ACK_PROOF.md; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner's October 28 2026 session authorizes LOCAL design/emulator proof from
+  cfa2864576d5cac6a7ecfbedbc1d7791e2eb5806 and preserved evidence. Prior integration remains blocked.
+objective:
+  Prove entry acceptance/refusal coordinates local timer cursor/Undo without changing approved
+  time calculations or integrating across the app; model intent/pending/accepted/refused/unknown.
+acceptance:
+  - [x] Stale rejection preserves local cursor and Undo; acceptance applies local consequences once.
+  - [x] Persist operation identity/frozen original state for offline/reload/interrupted acknowledgement.
+  - [x] Lost replies, duplicates, concurrent edits, both accounts, device/session guards, original
+        timestamps and historical records tested with authoritative emulator outcomes.
+  - [x] Reuse evidence, rerun eight original failure observations and focused actual-engine scenarios.
+  - [x] Return viability, minimal boundary, exact results, calculation impact and proceed/stop decision.
+constraints:
+  - Test-only rule/lifecycle variants; no application/UI/algorithm/rules/API/gateway integration,
+    PR20 modification, push, merge, deployment, live rules, production access or phone testing.
+  - STOP if safety requires a material time-engine rewrite or a new backend architecture.
+  - Guardian NOT RUN / NOT PASSED; production NO-GO. Do not infer acceptance from a UI transition.
+verification:
+  - Focused real Firebase emulator and extracted unchanged engine functions; strict positive and
+    negative controls, durable isolated fixtures, exact source/evidence hashes and self-review/QA.
+
+### TASK-039 - Integrate proven time acknowledgement lifecycle
+status: approved
+owner: claude
+source: owner-direct
+priority: P0
+depends-on: none
+files: time-ack.js (new lifecycle + REST transport); index.html (script include, Undo section, accounting-entry barrier guards, status UI); storage.js (timer publication builder, held-path deferral in syncTimerState/syncEntries, connection hook); time-ack.test.js; tests/time-ack-undo.spec.js; existing Undo specs only where Undo became acknowledged; www/ mirror; package.json test wiring; CODEMAP.md; this entry; CHANGELOG.md/TEST_REPORT.md append only; TASK_039_TIME_ACK_INTEGRATION.md; review-artifacts/task-039-time-ack-integration/.
+context:
+  Owner's October 28 2026 session instruction ("TASK-039 — Integrate Proven Time Acknowledgement
+  Lifecycle") authorizes bounded LOCAL integration of 5e665bd6b6526b8121f3eb682d36692ed7b40fac.
+  Owner answers in the same session: policy = online-only Undo + accounting barrier (Undo starts
+  only while connected; while PENDING/UNKNOWN, Save/Stop/Undo/entry edit/delete are refused before
+  local mutation; timer keeps running; survives reload and auto-reconciles; never discarded; Retry
+  or Abandon only when the server still shows the before-state). Canonical rules unchanged (gated
+  entry+timer variant proven in emulator only). Lifecycle covers Undo only. Claude implements.
+  PR20 and gateway frozen.
+objective:
+  Close the Undo/timer-cursor acknowledgement blocker without changing time calculations.
+acceptance:
+  - [x] Durable account/device/session-bound operation identity and original state captured before send.
+  - [x] Timer cursor rewind and Undo consumption applied only after authoritative acceptance; once.
+  - [x] Confirmed refusal keeps Undo and the original cursor; nothing local changes.
+  - [x] UNKNOWN persists across offline/reload/interrupted response and reconciles from server state.
+  - [x] Barrier refuses conflicting accounting commands; cross-tab duplicate application prevented.
+  - [x] Calculations, timestamps, device guards, historical entries, tombstones, source protections unchanged.
+  - [x] Visible pending/recovery state; no silent discard; no success claim without confirmation.
+  - [x] Strict seven unchanged, original eight reproductions, focused browser/multi-tab, affected gates.
+  - [x] Independent exact-source review.
+constraints:
+  - No push/merge/PR update/deploy/live rules/production data/phone testing; no gateway or PR20 change.
+  - STOP if this requires changing accounting math, bypassing ownership, weakening rules or a new backend.
+  - Guardian NOT RUN / NOT PASSED; production NO-GO.
+blocker-residual:
+  Owner decision needed: never-landed request + record changed elsewhere stays UNKNOWN (no exit).
+  Rest of stale-write contract integration still blocked; gated rules must not deploy. See TASK_039_TIME_ACK_INTEGRATION.md.
+verification:
+  - Real RTDB emulator (canonical rules and gated variant) with actual extracted engine functions;
+    real-SDK browser tests; strict seven x3; original eight from the unchanged proof checkout.
+
+### TASK-039 - Resolve final UNKNOWN Undo recovery blocker (bounded local proof)
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: unknown-recovery-proof/ (local-only cancellation, reconciliation and tests); tests/time-ack-unknown-hazards.spec.js (local emulator hazard reproductions); TASK_039_UNKNOWN_RECOVERY.md; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message October 28, 2026: "TASK-039 — Resolve Final UNKNOWN Undo Recovery Blocker".
+  Accept 9b0671b as the tested local integration candidate, not release approval. Authorize bounded
+  LOCAL implementation/proof. User-confirmed Keep server version requires enforceable proof that
+  submitted/delayed original Undo cannot later modify authoritative records. This isolated branch
+  is based on that explicit checkpoint rather than main; no earlier task is being resumed.
+objective:
+  Prove the smallest enforceable cancellation/supersession mechanism with existing Firebase
+  transactions/revisions/rules; reconcile authoritative account-owned timer, entries and cursor;
+  identify first-read cross-tab and automatic-logging accounting hazards explicitly.
+acceptance:
+  - Preserve original operation identity, immutable intent, timestamps, time calculations and device guards.
+  - Delayed and duplicated original Undo cannot apply after confirmed supersession; timeout alone never retires UNKNOWN.
+  - Test delivery beyond 120 seconds, lost responses, concurrent edits, two tabs, reload/offline recovery and both accounts using local fixtures only.
+  - Reconcile from authoritative account-owned data; retain UNKNOWN on unsafe reconciliation or absent enforcement.
+  - Reproduce and report first-read cross-tab gap and automatic logging hazards; clear PASS/BLOCKED and one next approval.
+constraints:
+  - STOP if safe cancellation requires changing the approved time engine or a new backend; return smallest alternative.
+  - Do not resume broader stale-write integration. No push, PR update, merge, deployment, live data or phone testing.
+  - Proof rules stay local and separate from canonical rules; no production UI exit until accounting safety is proven.
+  - Guardian NOT RUN / NOT PASSED. Production NO-GO. Solo execution; no delegation.
+verification:
+  - Real local RTDB emulator using the original lifecycle and canonical rules plus a narrowly scoped cancellation variant.
+  - Local browser reproductions against the unchanged app; npm test; inspect original runtime byte parity and git diff --check.
+blocker:
+  Permanent operation-ID cancellation is enforceable with existing RTDB rules (29 local proof cases pass),
+  but unchanged 9b0671b loses recorded time in first-read cross-tab and intentional crash-recovery races
+  for both synthetic accounts. Its 120-second abandon also permits a delayed original PATCH afterward.
+  No app exit/barrier release is enabled. Smallest next approval: bounded LOCAL shared preparation /
+  in-flight-write and automatic/recovery accounting fence, then integrate the proven cancellation and
+  authoritative reconciliation path. Broader stale-write integration stays held. See TASK_039_UNKNOWN_RECOVERY.md.
+
+### TASK-039 - Close confirmed accounting hazards (bounded local implementation)
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: time-ack.js; storage.js; index.html (acknowledged Undo and affected accounting entry points); focus-mode.js (only affected accounting entry points); tests/time-ack-*.js; time-ack.test.js; entry-validation.test.js (extract the scheduled producer's publication helper); unknown-recovery-proof/; accounting-hazards/ (local implementation, rules and verification only); CODEMAP.md; governed runtime token assertions and www/ generated mirror; TASK_039_ACCOUNTING_HAZARDS.md; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message October 28, 2026: "TASK-039 — Close Confirmed Accounting Hazards" explicitly authorizes
+  bounded LOCAL implementation and automated verification using 9b0671b and the preserved cancellation proof.
+  Independent exact-source review is explicitly required. Earlier proof and loss evidence are retained.
+objective:
+  Close Undo preparation / ordinary in-flight writer races; preserve automatic/recovery time and original
+  timestamps; remove timeout abandonment; integrate permanent cancellation and authoritative reconciliation
+  only after the accounting hazards are addressed.
+acceptance:
+  - Coordinate preparation and ordinary accounting writers, including already submitted writes.
+  - Late Undo cannot erase legitimate recovered minutes or their original timestamps.
+  - UNKNOWN stays durable until authoritative acceptance/refusal/enforceable cancellation.
+  - Integrate the permanent operation-ID cancellation fence with authoritative account-owned reconciliation.
+  - Inspect scheduled logging, break expiry and PC Time; fix confirmed hazards within this accounting boundary.
+  - Both-account prevention tests cover tabs, delayed requests, reload, offline recovery and process interruption.
+  - Time calculations, entries, Undo semantics, guards and tombstones are preserved; independent exact-source review obtained.
+constraints:
+  - STOP for substantial time-engine redesign, unrelated architecture change or automatic-path scope expansion.
+  - Canonical production rules, PR #20 and gateway frozen. Local rule variants only; no broader stale-write integration.
+  - No push, merge, deployment, live data access or phone testing. Guardian NOT RUN / NOT PASSED; production NO-GO.
+verification:
+  - Convert both demonstrated losses into real-SDK/emulator prevention tests for both synthetic accounts.
+  - Local lifecycle/cancellation tests; npm test; focused affected browser suites; rules/mirror/source preservation.
+  - Independent exact-source review; record exact local commit, remaining hazards and one next approval.
+blocker:
+  Objective-5 compatibility STOP: actual extension logSession advances its persisted merge cursor before
+  an unconditional numeric-key entry PUT, retains no complete refused command, and is incompatible with
+  strict accounting gates. Actual app sync creates e_<id> aliases, so an entry-only Undo can leave the
+  numeric source live. Both failures are proven for both accounts. Need an explicit original-physical-key /
+  proven-identical-alias / contradictory-and-unknown-base retention contract before complete app wiring.
+  Actual runtime preparation and unsafe-abandon fixes are verified; connected local journal/cancellation
+  prevents the original losses and protects automatic timestamps in its tested command boundaries.
+  Adapter remains unwired; preparing/interrupted ordinary drafts are retained and blocked, not auto-resolved.
+  No app-wide PASS. See TASK_039_ACCOUNTING_HAZARDS.md for one bounded LOCAL follow-up approval.
+
+### TASK-039 - Physical-key and legacy-writer compatibility closure
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: browser-extension/entry-physical-keys.js (shared pure physical alias resolution); browser-extension/pending-writes.js and background.js (durable account-owned writes); storage.js and time-ack.js (only required accounting integration); accounting-hazards/ (local adapter, rules and verification); tests/time-ack-unknown-hazards.spec.js and affected extension/entry tests; CODEMAP.md; governed token assertions and www/ generated mirror if required; TASK_039_PHYSICAL_WRITER_CLOSURE.md; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message October 28, 2026: "TASK-039 — Physical-Key and Legacy-Writer Compatibility Closure".
+  Explicit bounded LOCAL implementation using 021d1eecb963d75fabd09735095e54c1fa6ff4b7. Complete
+  inventory and independent exact-source review required. Prior proof/checkpoints remain references.
+objective:
+  Preserve authoritative physical entry keys, retain failed extension work, inventory every writer,
+  wire only the approved accounting boundary, and prove deterministic recovery or explicit UNKNOWN.
+acceptance:
+  - Numeric/e_ aliases never create duplicates, overwrite contradictions, resurrect tombstones or lose time.
+  - Failed extension writes retain complete immutable intent until acknowledged/safely reconciled.
+  - Every entry/timer writer is inventoried and classified; no unexamined production writer remains.
+  - Interrupted commands recover deterministically or remain UNKNOWN without consuming Undo/moving cursor.
+  - Both synthetic accounts, tabs, offline/reload/delay and real SDK semantics; original strict seven and affected tests.
+  - Independent exact-source review; exact local commit, complete inventory, PASS/BLOCKED, unprotected paths and one next decision.
+constraints:
+  - STOP and report exact boundary for materially broader integration. No backend/gateway expansion.
+  - No time-calculation/approved UI change; no source-protection weakening; no unnecessary full suite while unwired.
+  - PR20, canonical production rules and gateway frozen; no push/merge/deploy/production access/write/phone testing.
+  - Guardian NOT RUN / NOT PASSED. Production NO-GO.
+verification:
+  - Local emulator/SDK alias and extension prevention regressions; focused affected node/browser tests.
+  - Original strict time-integrity scenarios; complete writer inventory with independent completeness audit.
+  - Exact-source review, source/mirror/canonical-rule preservation and local checkpoint commit.
+blocker:
+  App handlers change live cursor/Undo before ACK; async native, delayed-delete, Away/Focus and
+  replay/bulk-write paths need an explicit staged-effects/once-only local apply contract. Scope STOP
+  reached; adapter remains unwired and canonical rules frozen. Default extension retains UNKNOWN
+  because physical-fence enforcement is unproven. Existing affected browser suite 27/28; Bob scheduled
+  event absent after resume once, five targeted repeats pass but do not clear failure. See
+  TASK_039_PHYSICAL_WRITER_CLOSURE.md and accounting-hazards/WRITER_COMPATIBILITY.md.
+
+### TASK-039 - Final accounting integration scope decision (local design only)
+status: review
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: TASK_039_ACCOUNTING_CONTRACT.md; accounting-hazards/scope-decision/ (local diagnostics/evidence only); this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message October 29, 2026: "TASK-039 — Final Accounting Integration Scope Decision".
+  Use d50a44f1b2d4b14de99efac76f3ac3793cb0c4a5 and the complete accounting-hazards/WRITER_COMPATIBILITY.md.
+  Explicit LOCAL investigation and staged-command contract DESIGN authorization, not implementation.
+objective:
+  Investigate Bob's scheduled-event failure, define the complete staged-command contract and remaining
+  implementation boundary, compare complete integration versus an independently safe smaller release,
+  and return one evidence-based release strategy and next owner authorization.
+acceptance:
+  - Identify the scheduled-event root cause or classify the unresolved risk; isolated passes cannot close it.
+  - Cover every inventoried writer, physical aliases, cursor/Undo, delayed/native/Away/Focus/automatic/
+    maintenance/reconnect/legacy/extension effects, reuse, mandatory changes and optional improvements.
+  - Define dependency order, partial-deployment prevention and explicit no-loss/no-duplication/no-unauthorized-
+    writes/no-resurrection/no-silently-discarded-pending-operations acceptance gates.
+  - Estimate actual file/module/integration-gate scope; compare both paths and recommend exactly one.
+  - Preserve checkpoint, PR20, gateway, canonical rules and production; report verification limits.
+constraints:
+  - STOP after investigation and complete contract. No application-wide implementation or next task.
+  - No push, merge, deploy, production reads/writes, phone tests or unrelated development.
+  - Guardian NOT RUN / NOT PASSED. Production NO-GO. Existing blocked entries stay blocked.
+verification:
+  - Inspect original failure evidence and capture durable event/journal/network states using local-only diagnostics.
+  - Trace every inventory row to the proposed contract and implementation gate; verify frozen runtime/rules/gateway.
+  - Record diagnostic outcomes and remaining uncertainty; no release-safety claim from passing repeats.
+
+### TASK-039 - Unified accounting integration (one coordinated local project)
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none
+files: accounting-command.js; index.html (approved accounting sections/callers only); storage.js; time-ack.js; focus-mode.js; browser-extension/entry-physical-keys.js; browser-extension/pending-writes.js; browser-extension/background.js; browser-extension/manifest.json; scripts/firebase-rules-builder.mjs; generated firebase.rules.json and www/; conditional accounting-result callers in daily-routines-ui.js and learning-plan-ui.js; affected accounting/rules/SDK/browser tests and local interruption/MV3 harnesses; CODEMAP.md; TASK_039_ACCOUNTING_INTEGRATION.md (one consolidated progress/evidence record); this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message October 29, 2026: "TASK-039 — Authorize Unified Accounting Integration" approves
+  Path A and TASK_039_ACCOUNTING_CONTRACT.md at73739e9. One coordinated LOCAL implementation;
+  routine approved milestones require no further approval. Independent exact-source review required.
+  Owner follow-up October 29, 2026: "Authorize Bounded Pending-Span Accounting Correction"
+  explicitly permits correction of demonstrated Ping→Switch and Work→Break→Save cursor attribution,
+  with unchanged rounding/event instants/IDs/ownership/tombstones/Undo/historical records. Preserve
+  the existing working tree/evidence first; reproduce failures, verify both accounts with real SDK/
+  emulator plus interruption/retry/reload/pending ACK/Undo, obtain independent exact-source review,
+  reevaluate G2/affected G7, then resume the remaining authorized integration milestones.
+  Owner message October 30, 2026: "TASK-039 — O1 Contract Amendment Approved" explicitly authorizes
+  durable provisional ordinary offline Start/Stop and recovery, revised C5, versioned F1-O1–F3-O1,
+  narrow C2 causal continuation and lost-ACK clarification. Confirmed accounting/totals/exports/Undo/
+  completion stay separate. Preserve original tests/failures; maintain original IDs/times/formulas/
+  ownership; handle capture failures honestly; qualify safety and G1–G9 with independent review.
+  The 32 async-extraction failures are separate test maintenance. Existing release prohibitions remain.
+  Owner message October 31, 2026: "TASK-039 — Bounded Focus Authority Acceptance Amendment"
+  approves Focus authority acceptance V1 in this existing project: restore authoritative sessions;
+  restore only identity-proven durable provisional sessions; retain ownerless/ambiguous legacy bytes
+  without activation, deletion or relabeling; prevent legacy override of coherent newer state.
+  Preserve original tests/failure evidence and add versioned replacements. Resolve six native/Focus
+  assertions, diagnose three browser-context errors, repair provisional-panel visibility and investigate
+  unreachable _startTimer tail. Focused regressions precede broad qualification; independent exact-source
+  review required. Stop for materially broader change; no new project/timer architecture, weaker
+  ownership/stale-write/cancellation/accounting, push/merge/deploy/production/rules/phone access.
+  Owner message October 31, 2026: "TASK-039 — Qualification and Release Closure" authorizes
+  verifying/preserving the approved Focus V1 snapshot in a LOCAL milestone commit, complete G1–G9
+  evidence audit, only missing mandatory qualification tests and confirmed in-contract repairs,
+  then full regression/packaging on one frozen integrated candidate and independent exact-source
+  integrated review. Return PASS/FAIL gates, exact commit, blockers and one next owner decision.
+  No push/merge/deploy/production/live rules/phone testing; no new architecture/workstream; STOP
+  at material new approval boundaries. Guardian NOT RUN / NOT PASSED; production NO-GO.
+  Owner message November 1, 2026: "TASK-039 — Authorize Narrow Intermittent-Failure Diagnostics"
+  authorizes one bounded LOCAL diagnostic of the Bob G3 physical-source edit and Alice pending-Break
+  rename-save failures at 0a5502f; test-side instrumentation only, frozen runtime unchanged, one
+  consolidated classification and one next owner decision. No push/merge/deploy/production/rules/
+  phone. G7 stays documented, G8 stays deferred. Guardian NOT RUN / NOT PASSED; production NO-GO.
+objective:
+  Deliver an actual integrated staged-command accounting candidate meeting C1–C5 and G1–G9,
+  with complete writer coverage, retained original facts and honest gate/blocker evidence.
+acceptance:
+  - Implement the single durable coordinator, seven identified runtime sources and every contract writer.
+  - Enforce local rule-source compatibility; preserve mathematics, timestamps, Undo, ownership,
+    tombstones, offline recovery and approved UI. No loss/duplication/stale corruption/abandonment.
+  - Complete packaging and all authorized local G1–G9 checks; retain explicit unrun external gates.
+  - Investigate scheduled-event safety and retain an unresolved blocker if it cannot be established.
+  - Obtain independent exact-source review; return exact candidate commit, nine gate results,
+    unresolved issues and one next release authorization. Isolated proofs are not completion.
+constraints:
+  - STOP for new backend architecture, changed approved accounting mathematics, weaker security
+    or material expansion beyond the reviewed contract. No automatic unrelated tasks.
+    Exception: the two demonstrated pending-span cursor corrections are now explicitly authorized;
+    STOP for wholesale time-engine redesign, weakened ownership or historical-record changes.
+  - PR20 and gateway frozen. No push/merge/deploy/live rules/production data/manual phone testing.
+  - Guardian NOT RUN / NOT PASSED. Production NO-GO. One consolidated progress/evidence record.
+verification:
+  - Contract G1–G9: capture/interruption, time preservation, physical/tombstones, authorization/
+    atomicity, UNKNOWN/cancellation, local apply/listeners, automatic/native/multistore, legacy/MV3,
+    behavior/artifact. Reuse valid evidence; run affected checks then required full qualification once.
+  - Independent reviewer checks the exact integrated source; no release approval inferred.
+remaining:
+  - Previous mathematics blocker explicitly resolved by the owner's bounded authorization above.
+    Full unified migration and G1–G9 remain mandatory; no integrated release PASS is inferred.
+blocker:
+  November 1, 2026 qualification handoff checkpoint: frozen exact-source integrated SDK run stalled
+  with no reporter output and was interrupted (runner exit1); see
+  accounting-hazards/evidence/qualification-closure-20261031/final-integrated-sdk-v2-interrupted.json.
+  Independent exact-source review verified manifest 6a04def40dfc08c8b88aacb8e42c7557a89c0cda849f83017bf7bcea329e978a
+  but reports overall FAIL while the required full suite remains incomplete. npm test exited0;
+  focused current gates and packaging checks are recorded separately. G7 historical Bob scheduled
+  uncertainty remains, G8 installed-writer/pending-queue census and cutover are NOT RUN, and G9
+  full regression is incomplete with Guardian NOT RUN / NOT PASSED and phone testing unrun.
+  This is a local handoff milestone only; no app defect is inferred from the stalled runner.
+  Production NO-GO. Next owner decision: authorize a future bounded read-only installed-writer and
+  pending-queue census (no activation), or keep G8 blocked pending that evidence.
+  October 31, 2026: the Focus authority boundary below is RESOLVED by the owner's approved V1
+  amendment. Bounded implementation and independent exact-source review APPROVED; frozen local
+  accounting SDK308/308 (including48 FA-V1 and6 O1), npm test PASS. Six native/Focus assertions
+  repaired; browser-context diagnostics and remaining inference recorded; provisional UI repaired;
+  unreachable _startTimer tail removed. Original Focus tests/failures remain unchanged.
+  Overall TASK-039 stays blocked because mandatory full G1–G9 matrices, historical Bob uncertainty
+  and installed-writer/cutover qualification remain incomplete. No complete integrated/release PASS
+  or new project is inferred. Consolidated evidence: TASK_039_ACCOUNTING_INTEGRATION.md Focus V1
+  appendix and accounting-hazards/evidence/focus-authority-v1-20261031/qualification.json.
+  Guardian NOT RUN / NOT PASSED; release NO-GO. No new commit/push/merge/deploy/production/phone action.
+  Historical superseded acceptance boundary (preserved evidence):
+  October 30, 2026 NEW boundary: original Focus acceptance has not been amended by O1. Independent
+  source audit identifies twelve legacy authority/reconciliation expectations; the owner-null
+  cache/count case expects an active confirmed Focus session without proven ownership. Current C1/C5
+  requires retained unproven evidence and coherent confirmed authority. Real-SDK boundary cases
+  reproduce both-account count/adoption and corrupt-source-key expectation failures (0/4). Do not
+  restore timestamp/raw-payload authority, adopt unknown owners, or silently weaken these assertions.
+  Product implementation stopped. Preserve/review O1 and obtain a bounded Focus acceptance decision
+  before resuming implementation; see the consolidated integration record. Full G1–G9 remain open.
+  The PRIOR ORDINARY offline blocker below is RESOLVED by owner O1 approval; its evidence remains.
+  October 30, 2026: G9 acceptance conflict confirmed. Original daily-use F1–F3 require _startTimer()
+  to return true and commit running while the server is offline; approved contract C5 forbids
+  changing committed running/cursor/Undo before ACK. After current staged fixture integration,
+  unchanged F4–F7 pass and F1–F3 fail at that explicit offline-Start precondition. Both-account
+  real-SDK proof retains the original offline Start through reload and applies its original T0
+  anchor once after connection, with no optimistic committed running state. Do not fake ACK,
+  weaken C5, or waive/rewrite required original acceptance without an owner/Claude scope decision.
+  See TASK_039_ACCOUNTING_INTEGRATION.md, resumed qualification / acceptance conflict.
+
+### TASK-039 - Shipped web and Android accounting capability (bounded amendment)
+status: blocked
+owner: claude
+source: owner-direct
+priority: P0
+depends-on: none
+files: new accounting-capability.js; time-ack.js (REST helper only); index.html (accounting transport seam, status copy, script tag, governed token); generated www/; firebase rules read only; test fixtures and accounting specs; new release-artifact spec and packaging script; CODEMAP.md; TASK_039_ACCOUNTING_CONTRACT.md appendix; TASK_039_ACCOUNTING_INTEGRATION.md; DECISIONS.md; evidence under accounting-hazards/evidence/; this entry; CHANGELOG.md and TEST_REPORT.md append only.
+context:
+  Owner message November 1, 2026: "GOAL: Make ChronaSense's Real Web and Android Builds
+  Accounting-Capable" authorizes one bounded TASK-039 amendment from checkpoint b729d47: real packaged
+  web and Android candidates provide the accounting capability through the existing coordinator and
+  security contract, without test-only injection. Claude owns implementation by the owner's explicit
+  instruction. Extension excluded. Interactive, solo.
+objective:
+  Make the packaged candidates actually send, retry, recover and acknowledge accounting commands,
+  and fail safe when the capability or backend is missing or incompatible.
+acceptance:
+  - Packaged web and Android provide the capability with no test-only transport injection.
+  - Supported actions, offline O1 Start/Stop, retries, recovery and ACK handling work end to end.
+  - Account/device authorization, physical protections, cancellation and stale-write safeguards hold.
+  - Incompatible or missing capability fails safe; captured facts are never silently discarded.
+  - Browser automatic tracking stays disabled until a compatible extension is separately qualified.
+  - Tests load the packaged artifacts; remaining injection is inventoried and justified.
+  - Affected regressions and the complete integrated suite pass on the final frozen candidate.
+  - Independent exact-source review verifies the capability, packaging and evidence.
+constraints:
+  - Reuse the coordinator, contract, rules and proven REST transport. No second sync system, unrelated
+    features or new backend architecture. Failing release-artifact tests first; preserve evidence.
+  - No push/merge/deploy/production access/live rules/client activation/phone testing/extension
+    activation or auto-upgrade. Preserve historical and local pending operations.
+  - G7's residual-risk decision stays separate. G8 is not declared passed.
+  - STOP and report the exact blocker if a safe transport cannot fit the approved architecture.
+verification:
+  - Red then green release-artifact spec on web and APK-extracted bytes against exact candidate rules.
+  - Affected regressions, npm test, fence suites, parity, complete integrated suite, independent review.
+  - Guardian NOT RUN / NOT PASSED. Production NO-GO.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
