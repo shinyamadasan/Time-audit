@@ -5717,3 +5717,6 @@ behaviour: transient Undo refusals (in-flight work, sources not seen, offline, t
 tests: 442/442 mandatory; 62/62 packaged; new spec 20/20 (both accounts, repeat 2); npm test exit 0.
 deviations: owner-direct within TASK-039. 314 wider failures classified, not repaired.
 evidence: accounting-hazards/evidence/f1-undo-refusal-20261102/F1-CORRECTION.md, WIDER-SUITE-RISK-CLASSIFICATION.md
+### TASK-039 - First-start upgrade fix (November 5, 2026, owner-direct)
+changed: index.html (new legacyCachesOnServer; legacy-cache settle in prepare; scheduled-log keeps an occurrence already on the server; inactive ownerless timer/away/break states pass the owner check; Keep server version covers legacy caches, legacy time-ack, held hydrate and unsent scheduled blocks, and is shown for legacy ops); accounting-command.js (legacy-cache localOnly commit; prepare-time conflicts re-planned, flagged or judged by reason); www mirror; new tests/accounting-first-start-upgrade.spec.js; ci.yml mandatory list 490.
+behaviour: a browser that ran the previous version starts, hydrates and saves; records the server lacks or a cached open session not on the server still hold a conflict, resolvable with Keep server version.
