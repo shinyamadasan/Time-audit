@@ -5720,3 +5720,16 @@ evidence: accounting-hazards/evidence/f1-undo-refusal-20261102/F1-CORRECTION.md,
 ### TASK-039 - First-start upgrade fix (November 5, 2026, owner-direct)
 changed: index.html (new legacyCachesOnServer; legacy-cache settle in prepare; scheduled-log keeps an occurrence already on the server; inactive ownerless timer/away/break states pass the owner check; Keep server version covers legacy caches, legacy time-ack, held hydrate and unsent scheduled blocks, and is shown for legacy ops); accounting-command.js (legacy-cache localOnly commit; prepare-time conflicts re-planned, flagged or judged by reason); www mirror; new tests/accounting-first-start-upgrade.spec.js; ci.yml mandatory list 490.
 behaviour: a browser that ran the previous version starts, hydrates and saves; records the server lacks or a cached open session not on the server still hold a conflict, resolvable with Keep server version.
+
+## TASK-PERF-RECOVERY-V1 - candidate preparation (branch: perf/recovery-v1)
+changed:
+  - Indexed physical-entry lookup and accounting input grouping; fresh snapshot without redundant clone;
+    identical local-storage write suppression; one-pass Settings date counts; governed runtime token and mirror.
+  - perf-recovery.test.js: resolver equivalence, independent snapshots, complete historical-input retention,
+    replay recognition and rejection of altered retained facts/frames/source caches (8 cases).
+tests: npm test exit 0; lint zero errors; 102-file parity, generated rules/shared copies and diff checks pass.
+blockers: exact-commit artifacts, hosted CI and final independent committed-diff review remain outstanding.
+deviations: initial compaction removed after independent review and owner's "whichever is better" reply;
+  preserve all accounting history payloads under the original no-trimming condition.
+review: independent revised-candidate review permits preparation commit; no release/deployment approval.
+status remains codex pending release preparation gates. No main merge, deployment or production changes.

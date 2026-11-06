@@ -97,7 +97,8 @@ function accountLocalKey(base, room = _localStateOwner) {
 function setAccountLocal(base, value) {
   const key = _localStateOwner && _localStateOwner === roomCode ? accountLocalKey(base) : null;
   if (!key || typeof accountingBootstrapCacheHeld === 'function' && accountingBootstrapCacheHeld(base, _localStateOwner)) return false;
-  localStorage.setItem(key, value);
+  // An identical value is already stored (and would raise no storage event); skip the redundant write.
+  if (localStorage.getItem(key) !== String(value)) localStorage.setItem(key, value);
   return true;
 }
 

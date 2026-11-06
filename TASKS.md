@@ -2396,6 +2396,42 @@ constraints:
 verification:
   - Red then green specs; npm test; release-artifact suite; independent review.
 
+### TASK-PERF-RECOVERY-V1 - Owner-approved release preparation
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none (existing reviewed perf/recovery-v1 candidate on 9fd8c912)
+files: existing reviewed changes in accounting-command.js, browser-extension/entry-physical-keys.js,
+  storage.js, index.html, generated www/, CODEMAP.md, package.json,
+  personal-day-boundary-web-runtime.test.js and perf-recovery.test.js; .github/workflows/ci.yml
+  (verified release pins only); this entry; CHANGELOG.md and TEST_REPORT.md append only;
+  release-verification/perf-recovery-v1/ release evidence and report.
+context:
+  Owner message November 6, 2026, "Performance Recovery V1 - Owner Review Decision":
+  APPROVED WITH CONDITIONS for release preparation only, on the existing perf/recovery-v1 branch.
+objective:
+  Commit the reviewed candidate, verify exact packaged web/Android fingerprints before updating pins,
+  run hosted CI, independently verify final diff/accounting safety/evidence and prepare GO/NO-GO report.
+acceptance:
+  - Exact candidate and final preparation commits identified; packaged fingerprints verified before pin updates.
+  - Hosted CI includes mandatory accounting and preservation checks; all remaining failures documented.
+  - Independent reviewer verifies final committed diff, accounting safety and CI evidence.
+  - Report includes CI results, remaining risks, separate follow-ups and rollback for owner deployment decision.
+constraints:
+  - No main merge, production deploy, Firebase/rules change, production repair or accounting-history deletion/trimming.
+  - No Phase 1 expansion into storage/history growth, external-writer conflicts or slow-device performance.
+  - Coordinate with API reliability and DevLabs integration without overlapping production changes.
+  - Never weaken, skip or silently reclassify required tests; stop release readiness on failed/unverified gates.
+verification:
+  - npm test; lint/parity; build-release-artifacts exact-commit web and extracted APK bundle fingerprints.
+  - Hosted CI mandatory accounting, data preservation, packaged checks and complete wider-suite evidence.
+  - Independent final committed-diff and CI review; concise GO/NO-GO report with rollback procedure.
+scope-resolution:
+  Owner replied "whichever is better" on November 6, 2026 to the explicit compaction scope choice.
+  Preserve the original no-trimming condition: remove compaction, retain all historical payloads and strict
+  replay comparisons, keep the other reviewed performance changes. Reverify final candidate before commit.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

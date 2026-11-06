@@ -3233,3 +3233,17 @@ red: new spec reproduced the production queue (legacy-source-needs-resolution, s
 green: new spec 8/8 (both accounts where applicable); required accounting suite 490/490 (2 workers, 17.6 min); npm test exit 0 (2,413 tests, 0 failed).
 review: independent fresh-context review APPROVE after two fix rounds (open-session settle, re-plan scope, legacy-time-ack and hydrate keep-server, runtime content check, slot queue check).
 not run locally: wider browser suite, packaged release spec (CI).
+
+## TASK-PERF-RECOVERY-V1 - November 6, 2026 - preserved-history candidate
+suite: npm test (perf-release-npm-preserved.log), lint, runtime/rules/shared parity; independent focused review.
+result: npm test exit 0; 2,420 passed, 0 failed, 1 existing opt-in Windows control skipped by the default
+  chain. Explicit CROSS_REPO_COMPAT_CONTROL_PROOF=1 with the actual OPENGYM_REPO_PATH then passed 15/15,
+  zero skipped. Initial opt-in attempt failed to discover the sibling checkout from this nested worktree;
+  the existing explicit path option fixed discovery, without changing the test or its assertions.
+  Independent revised performance/preservation regressions 8/8; 3,000 seeded resolver-equivalence rounds.
+  Lint zero errors/162 existing warnings; runtime 102-file parity, rules/shared generation, diff checks pass.
+history: initial compaction candidate npm test also exited 0, but was not committed. Removed compaction
+  and relaxed replay comparisons; revised tests require full historical-payload retention and strict replay.
+untested: exact committed web/APK fingerprints, packaged tests, mandatory hosted accounting suite, complete
+  wider-browser suite/failure assessment and final independent committed-diff/CI review. No production write.
+coverage: not measured. Self-review code-health checklist passes; preparation code acceptable, release gates pending.

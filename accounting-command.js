@@ -528,7 +528,8 @@
       apply(clone(state.committed.value), clone(state.committed));
       return true;
     }
-    function snapshot(owner = identity()?.owner) { return owner ? clone(load(owner)) : null; }
+    // load() parses a fresh object from storage on every call, so no defensive copy is needed.
+    function snapshot(owner = identity()?.owner) { return owner ? load(owner) : null; }
     function observeProvisional(sourceId, at = Date.now()) {
       const observation = capture({ name: 'ordinary-heartbeat', sourceId }, { at, provisionalObservation: true });
       return lock(observation.owner, () => {

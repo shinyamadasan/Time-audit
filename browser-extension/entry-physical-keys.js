@@ -27,7 +27,18 @@
       || Object.keys(meta).some(key => !['v', 'protocol', 'revision', 'baseRevision', 'baseExists', 'operationId'].includes(key))) throw Error('Unknown entry revision');
     return meta.revision;
   }
-  function resolve(raw, id, prefer = 'app') {
+  // Groups physical records by String(id) once, preserving Object.entries order, so repeated lookups
+  // against the same unmodified raw tree avoid rescanning every record (equivalent to the filter below).
+  function index(raw) {
+    const groups = new Map();
+    for (const pair of Object.entries(raw || {})) {
+      if (!pair[1]) continue;
+      const group = String(pair[1].id);
+      if (groups.has(group)) groups.get(group).push(pair); else groups.set(group, [pair]);
+    }
+    return groups;
+  }
+  function resolve(raw, id, prefer = 'app', groups = null) {
     const identity = String(id);
     if (!validKey(identity) || !['string', 'number'].includes(typeof id)
       || (typeof id === 'number' && (!Number.isSafeInteger(id) || id <= 0))) return { status: 'unknown', reason: 'invalid-identity', id };
@@ -36,7 +47,8 @@
         return { status: 'unknown', reason: 'physical-key-occupied', id, physical: [[key, copy(raw[key])]] };
       }
     }
-    const matches = Object.entries(raw || {}).filter(([, value]) => value && String(value.id) === identity);
+    const matches = groups ? (groups.get(identity) || []).slice()
+      : Object.entries(raw || {}).filter(([, value]) => value && String(value.id) === identity);
     const before = {};
     for (const [key, value] of matches) {
       if (![identity, `e_${identity}`].includes(key) || value.id !== id) {
@@ -73,11 +85,16 @@
     const actual = resolve(raw, basis.id, Object.keys(basis.before || {})[0] === `entries/${basis.id}` ? 'extension' : 'app');
     return ['found', 'absent'].includes(actual.status) && same(actual.before, basis.before);
   }
+  // Resolver bound to one raw tree; callers must not mutate that tree while using it.
+  function resolver(raw) {
+    const groups = index(raw);
+    return (id, prefer = 'app') => resolve(raw, id, prefer, groups);
+  }
   function project(raw) {
     const ids = [...new Map(Object.values(raw || {}).filter(record => record && record.id != null).map(record => [String(record.id), record.id])).values()];
-    const entries = [], conflicts = [];
+    const entries = [], conflicts = [], lookup = resolver(raw);
     for (const id of ids) {
-      const basis = resolve(raw, id);
+      const basis = lookup(id);
       if (basis.status === 'found') entries.push(basis.record);
       else conflicts.push(basis);
     }
@@ -85,5 +102,5 @@
     if (malformed.length) conflicts.push({ status: 'unknown', reason: 'malformed-physical-record', physical: copy(malformed) });
     return { entries, conflicts };
   }
-  root.EntryPhysicalKeys = { PROTOCOL, copy, wire, same, content, resolve, prepare, unchanged, project };
+  root.EntryPhysicalKeys = { PROTOCOL, copy, wire, same, content, resolve, resolver, prepare, unchanged, project };
 })(globalThis);

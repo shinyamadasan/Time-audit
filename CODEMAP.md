@@ -1,6 +1,16 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Performance Recovery V1 — November 5 local only
+
+`browser-extension/entry-physical-keys.js`: `resolver(raw)` returns `(id, prefer) => resolve(...)` over a
+one-time String(id) index (exactly equivalent to `resolve`; the raw tree must not be mutated while used).
+`project`, `accountingConfirmedFrame`, `buildAccountingInput` and `legacyCachesOnServer` use it.
+`accounting-command.js`: `snapshot()` returns the freshly parsed envelope (no second clone).
+Historical operation inputs, including bootstrap frames and source caches, remain intact.
+`storage.js` `setAccountLocal` skips identical writes. Tests: `perf-recovery.test.js`. Governed token
+`20261105-perf-recovery-v1`.
+
 ## TASK-039 shipped accounting capability — November 2 local only
 
 New runtime file `accounting-capability.js`: `AccountingCapability.createTransport({ rest, coordinator, now })`

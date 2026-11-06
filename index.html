@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20261101-task039-shipped-capability-v1">
+<meta name="pdb-release" content="20261105-perf-recovery-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,16 +13,16 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="style.css?v=20261105-perf-recovery-v1">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
-<link rel="stylesheet" href="plan-tomorrow.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="plan-tomorrow.css?v=20261105-perf-recovery-v1">
 <link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
-<link rel="stylesheet" href="planning-continuity.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="planning-continuity.css?v=20261105-perf-recovery-v1">
 <link rel="stylesheet" href="brain-dump-tray.css?v=20261026-task031-source-guard-v1">
-<link rel="stylesheet" href="daily-command-center.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="daily-command-center.css?v=20261105-perf-recovery-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -1740,7 +1740,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261101-task039-shipped-capability-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261105-perf-recovery-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1759,40 +1759,40 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20261101-task039-shipped-capability-v1",
-    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-model.js": "./commitments-model.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261101-task039-shipped-capability-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-item-origin.js": "./plan-item-origin.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-model.js": "./task-completion-model.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-repository.js": "./task-completion-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-sync.js": "./task-completion-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261101-task039-shipped-capability-v1",
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261105-perf-recovery-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261105-perf-recovery-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20261105-perf-recovery-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261105-perf-recovery-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261105-perf-recovery-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20261105-perf-recovery-v1",
+    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261105-perf-recovery-v1",
+    "./commitments-model.js": "./commitments-model.js?v=20261105-perf-recovery-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20261105-perf-recovery-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20261105-perf-recovery-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261105-perf-recovery-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261105-perf-recovery-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261105-perf-recovery-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261105-perf-recovery-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20261105-perf-recovery-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261105-perf-recovery-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261105-perf-recovery-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261105-perf-recovery-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261105-perf-recovery-v1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261105-perf-recovery-v1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261105-perf-recovery-v1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261105-perf-recovery-v1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261105-perf-recovery-v1",
+    "./plan-item-origin.js": "./plan-item-origin.js?v=20261105-perf-recovery-v1",
+    "./task-completion-model.js": "./task-completion-model.js?v=20261105-perf-recovery-v1",
+    "./task-completion-repository.js": "./task-completion-repository.js?v=20261105-perf-recovery-v1",
+    "./task-completion-sync.js": "./task-completion-sync.js?v=20261105-perf-recovery-v1",
+    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261105-perf-recovery-v1",
     "./brain-dump-model.js": "./brain-dump-model.js?v=20261026-task031-source-guard-v1",
     "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261026-task031-source-guard-v1",
     "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261026-task031-source-guard-v1",
@@ -1801,42 +1801,42 @@
   }
 }
 </script>
-<script src="storage.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="time-ack.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="browser-extension/entry-physical-keys.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="accounting-command.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="accounting-capability.js?v=20261101-task039-shipped-capability-v1"></script>
+<script src="storage.js?v=20261105-perf-recovery-v1"></script>
+<script src="time-ack.js?v=20261105-perf-recovery-v1"></script>
+<script src="browser-extension/entry-physical-keys.js?v=20261105-perf-recovery-v1"></script>
+<script src="accounting-command.js?v=20261105-perf-recovery-v1"></script>
+<script src="accounting-capability.js?v=20261105-perf-recovery-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="plan-tomorrow-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="plan-tomorrow-ui.js?v=20261105-perf-recovery-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20261105-perf-recovery-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
-<script type="module" src="windows-hud-bridge.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="windows-hud-bridge.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20261105-perf-recovery-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20261105-perf-recovery-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261101-task039-shipped-capability-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261105-perf-recovery-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="commitments-sync.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="planning-continuity-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="commitments-sync.js?v=20261105-perf-recovery-v1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20261105-perf-recovery-v1"></script>
 <script type="module" src="brain-dump-sync.js?v=20261026-task031-source-guard-v1"></script>
 <script type="module" src="brain-dump-ui.js?v=20261026-task031-source-guard-v1"></script>
 <script type="module" src="intelligence-ui.js?v=20261008-intelligence-int001"></script>
@@ -2895,8 +2895,9 @@ function accountingCoordinator() {
         result.lastUndoAction = accountingAcceptedUndo(operation);
       }
       // Never discard an unsubmitted local fact to manufacture successful reconciliation.
+      const projectedIds = new Set(projection.entries.map(record => record.id));
       for (const item of live.entries) {
-        if (!projection.entries.some(record => record.id === item.id)
+        if (!projectedIds.has(item.id)
           && !operation.proposal.identities.some(change => change.store === 'entries' && change.id === item.id)) return null;
       }
       return result;
@@ -2966,8 +2967,9 @@ function legacyCachesOnServer(input, raw) {
   if (unreadable || [...entries, ...redemptions].some(list => list != null && !Array.isArray(list))) return false;
   // Old caches may only lag the server; this version's live frame (runtime) must equal it exactly.
   const exactly = !!source.runtime;
+  const resolveServer = EntryPhysicalKeys.resolver(raw.entries || {});
   for (const entry of entries.flat().filter(Boolean)) {
-    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
+    const actual = resolveServer(entry.id);
     if (actual.status !== 'found' || exactly && !same(EntryPhysicalKeys.content(actual.record), EntryPhysicalKeys.content(entry))) return false;
   }
   for (const item of redemptions.flat().filter(Boolean)) {
@@ -2993,10 +2995,11 @@ function accountingConfirmedFrame(raw, base, owner, established) {
   const same = TimeAckCore.same, result = cloneUndoValue(base);
   const projection = EntryPhysicalKeys.project(raw.entries || {});
   if (projection.conflicts.length) throw Error('physical-source-unresolved');
+  const resolveActual = EntryPhysicalKeys.resolver(raw.entries || {}), resolvePrevious = EntryPhysicalKeys.resolver(base.physicalEntries || {});
   for (const entry of base.entries) {
-    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
+    const actual = resolveActual(entry.id);
     if (actual.status === 'found' && same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(actual.record))) continue;
-    const previous = EntryPhysicalKeys.resolve(base.physicalEntries || {}, entry.id);
+    const previous = resolvePrevious(entry.id);
     if (!established || actual.status !== 'found' || previous.status !== 'found'
       || !same(Object.keys(previous.before).sort(), Object.keys(actual.before).sort())
       || !same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(previous.record))
@@ -3200,17 +3203,21 @@ function buildAccountingInput(name, before, after, { timer = false, extra = {}, 
   const records = [];
   let conflict = after.running && (after.awayActive || after.breakActive || after.focus)
     || after.focus && (after.awayActive || after.breakActive) ? 'incoherent-active-state' : null;
+  const resolvePhysical = EntryPhysicalKeys.resolver(before.physicalEntries || {});
+  const byId = list => { const groups = new Map(); for (const item of list) { if (groups.has(item.id)) groups.get(item.id).push(item); else groups.set(item.id, [item]); } return groups; };
   for (const [store, field] of [['entries', 'entries'], ['focusRedemptions', 'focusRedemptions']]) {
     const ids = [...new Set([...before[field], ...after[field]].map(item => item.id))];
+    const beforeById = byId(before[field]), afterById = byId(after[field]);
     for (const id of ids) {
-      const originals = before[field].filter(item => item.id === id), changed = after[field].filter(item => item.id === id);
+      // id !== id only for NaN, which the original strict-equality filter never matched.
+      const originals = id !== id ? [] : beforeById.get(id) || [], changed = id !== id ? [] : afterById.get(id) || [];
       if (originals.length > 1 || changed.length > 1) {
         records.push({ store, id, originals, changed }); conflict = 'conflicting-local-identities'; continue;
       }
       const previous = originals[0] || null;
       const next = changed[0] || (previous ? { ...previous, deleted: true, updatedAt: at } : null);
       if (!TimeAckCore.same(previous, next)) records.push({ store, id, before: previous, after: next,
-        ...(store === 'entries' ? { physical: EntryPhysicalKeys.resolve(before.physicalEntries || {}, id) } : {}) });
+        ...(store === 'entries' ? { physical: resolvePhysical(id) } : {}) });
     }
   }
   const focus = after.focus;
@@ -10742,13 +10749,15 @@ function renderSettings() {
   renderPerfDebug();
   renderActivityCleanup();
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const datesWithEntries = [...new Set(entries.filter(e=>!e.deleted).map(e=>getDateInTZ(e.tsStart||e.ts,tz)))].sort().reverse();
+  const countsByDate = new Map();
+  for (const e of entries) { if (e.deleted) continue; const d = getDateInTZ(e.tsStart||e.ts,tz); countsByDate.set(d, (countsByDate.get(d) || 0) + 1); }
+  const datesWithEntries = [...countsByDate.keys()].sort().reverse();
   const todayKey = toDateKey(new Date());
   const clearSel = document.getElementById('clear-day-select');
   clearSel.innerHTML = datesWithEntries.length
     ? datesWithEntries.map(d => {
         const label = d === todayKey ? 'Today' : new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
-        const count = entries.filter(e=>!e.deleted && getDateInTZ(e.tsStart||e.ts,tz)===d).length;
+        const count = countsByDate.get(d);
         return `<option value="${d}">${label} (${count} entries)</option>`;
       }).join('')
     : '<option value="">No entries</option>';
@@ -14529,7 +14538,7 @@ if (!localStorage.getItem('ta3-onboarded')) {
   setTimeout(openOnboarding, 400);
 }
 </script>
-<script src="focus-mode.js?v=20261101-task039-shipped-capability-v1"></script>
+<script src="focus-mode.js?v=20261105-perf-recovery-v1"></script>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="ob-overlay" id="ob-overlay">
@@ -14846,6 +14855,6 @@ function buildSessions(events) {
 initPhoneUsageTracking();
 </script>
 
-<script defer src="daily-command-center.js?v=20261101-task039-shipped-capability-v1"></script>
+<script defer src="daily-command-center.js?v=20261105-perf-recovery-v1"></script>
 </body>
 </html>
