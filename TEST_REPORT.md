@@ -3280,3 +3280,12 @@ untested: resolution of hosted context failure, final performance timing, produc
 evidence: release-verification/perf-recovery-v1/RELEASE_REPORT.md, FINAL_INDEPENDENT_REVIEW.md,
   CI_RUN.json, CI_COMPARISON.json, FAILURE_INVESTIGATION.md, CANDIDATE_ARTIFACT_MANIFEST.json,
   ROLLBACK_ARTIFACT_MANIFEST.json; raw reports retained locally and in GitHub run artifacts.
+
+### TASK-PERF-RECOVERY-V1-BLOCKER - diagnostic launch verification (November 6, 2026)
+suite: node syntax checks for run-case.mjs/monitor.mjs; exact original-case instrumented local smoke.
+result: 1/1 passes, countIntegrity true, original source bytes retained, terminal two entries; final raw
+  protocol probe parsed 7,948 lines with zero unparsed/truncated/dropped/output-drop counts. Probe is an
+  intentionally invalid read-only context request after assertions, not evidence of the original cause.
+  Priya independently reviewed source/hash preservation, count/error handling, cleanup, timestamps and scope.
+untested: matched Linux candidate/predecessor runs and any correction; no new release CI success claimed.
+  NO-GO remains; original run 42269983544 remains retained. No runtime/test assertions/gate/catalog changes.

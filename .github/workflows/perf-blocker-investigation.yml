@@ -1,0 +1,95 @@
+name: Performance Recovery V1 blocker investigation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['perf/recovery-v1']
+    paths:
+      - '.github/workflows/perf-blocker-investigation.yml'
+      - 'release-verification/perf-recovery-v1/blocking-failure/*.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-blocker-investigation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Matched Stop/reload investigation / ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: candidate
+            ref: fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc
+          - name: predecessor
+            ref: 9fd8c912349219481908bccce8efb3fad35c5273
+    defaults:
+      run:
+        shell: bash
+        working-directory: subject
+    steps:
+      - name: Check out diagnostic tools
+        uses: actions/checkout@v4
+        with:
+          path: control
+      - name: Check out exact subject
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: subject
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: subject/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Install locked Playwright browser
+        id: browser
+        run: npx playwright install --with-deps chromium
+      - name: Provision original emulator environment
+        id: provision
+        run: npm run provision:rtdb-emulator
+      - name: Record comparable environment
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/evidence"
+          {
+            git rev-parse HEAD
+            node --version
+            npx playwright --version
+            sha256sum package-lock.json tests/daily-use-reliability.spec.js
+            uname -a
+            free -m
+            node -e 'console.log(require("playwright").chromium.executablePath())'
+          } > "$GITHUB_WORKSPACE/evidence/environment.txt"
+      - name: Unchanged original case, ten repetitions
+        run: >-
+          node "$GITHUB_WORKSPACE/control/release-verification/perf-recovery-v1/blocking-failure/run-case.mjs"
+          --subject "$GITHUB_WORKSPACE/subject"
+          --out "$GITHUB_WORKSPACE/evidence/control"
+          --repeats 10 --workers 2
+      - name: Separately instrumented case, ten repetitions
+        if: ${{ always() && !cancelled() && steps.browser.outcome == 'success' && steps.provision.outcome == 'success' }}
+        run: >-
+          node "$GITHUB_WORKSPACE/control/release-verification/perf-recovery-v1/blocking-failure/run-case.mjs"
+          --subject "$GITHUB_WORKSPACE/subject"
+          --out "$GITHUB_WORKSPACE/evidence/instrumented"
+          --repeats 10 --workers 2 --instrumented
+      - name: Retain all outcomes and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-blocker-${{ matrix.name }}
+          path: evidence
+          if-no-files-found: warn

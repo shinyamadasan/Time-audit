@@ -2439,6 +2439,42 @@ blocker:
   the hosted failure remains unresolved and blocking, not reclassified. Mandatory accounting 490/490 and
   packaged 62/62 pass. Release report NO-GO; no merge/deploy. Independent final evidence review confirms NO-GO.
 
+### TASK-PERF-RECOVERY-V1-BLOCKER - One hosted Stop/reload failure investigation
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none (manual investigation on existing perf/recovery-v1; deployment remains NO-GO)
+files: tests/daily-use-reliability.spec.js and tests/accounting-retained-action.js (diagnostics or a proven
+  minimum harness correction only); index.html (stopAndLog accounting path only if evidence requires an
+  implementation correction), associated governed-token assertion and generated www/ only if runtime changes;
+  .github/workflows/perf-blocker-investigation.yml (bounded diagnostic runs, no deployment);
+  release-verification/perf-recovery-v1/blocking-failure/; this entry; CHANGELOG.md/TEST_REPORT.md append only.
+context:
+  Owner message November 6, 2026, "Performance Recovery V1 - Resolve One Blocking Failure".
+  Assign Jomar one focused investigation; Priya independently reviews any justified smallest fix.
+  CI run 42269983544 and FAILURE_INVESTIGATION.md are the starting evidence. Candidate fbe1c38,
+  predecessor 9fd8c912; evidence-only branch HEAD d99c064. Earlier five local passes did not resolve the failure.
+objective:
+  Determine why the execution context was lost, compare candidate/predecessor under comparable conditions,
+  distinguish navigation/crash/resource/performance evidence, and determine whether a correction is justified.
+acceptance:
+  - Unchanged failing case compared against candidate and predecessor with recorded environment and outcomes.
+  - Execution-context/crash/navigation/resource evidence distinguishes observations from unknowns.
+  - Smallest justified correction only, independently reviewed by Priya; no speculative optimization.
+  - Required hosted CI gates rerun if a correction is made; exact commit/run and concise GO/NO-GO reported.
+  - If no defensible cause/fix emerges, preserve NO-GO and report unresolved risk.
+constraints:
+  - No merge/deployment, Firebase/rules change, production repair, accounting-history deletion or trimming.
+  - Preserve test assertions, required counts, baseline catalog, source/accounting protections; no concealment.
+  - No Phase 2, broad optimization, or implementation for storage growth/external writers/slow devices.
+  - Keep API reliability and AI Chief of Staff integration independent; reserve capacity, do not pause them.
+  - Stop implementation if evidence does not justify it or scope/architecture changes are needed.
+verification:
+  - Exact-commit candidate/predecessor diagnostic matrix, including browser lifecycle/CDP and resource evidence.
+  - Smallest-change regression, npm test and parity when changed; independent review before hosted release gates.
+  - Hosted original failure retained; no test/catalog weakening or replacement of evidence by a clean retry.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

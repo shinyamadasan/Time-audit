@@ -5752,3 +5752,13 @@ review: independent final committed-diff/accounting/artifact/CI review confirms 
 deviations: fresh optional performance audit failed setup twice; no final-candidate performance claim.
   Three requested follow-ups stay separate; API/DevLabs implementations untouched. No production writes.
 status set to blocked in TASKS.md. No main merge, deployment, rules change, history trimming or data repair.
+
+### TASK-PERF-RECOVERY-V1-BLOCKER - focused paired investigation setup
+changed: bounded two-job diagnostic workflow and blocking-failure/run-case.mjs / monitor.mjs only;
+  exact candidate/predecessor, unchanged control and separately instrumented case, ten repetitions each,
+  two workers, retained lifecycle/CDP/resource/accounting evidence and strict selected-case count checks.
+tests: syntax/diff checks pass; final local instrumented smoke 1/1 passes with identical original source
+  after instrumentation prefix. Tagged read-only error probe captured, zero parse/drop loss in final smoke.
+review: Priya independently clears diagnostic launch; no application correction or release approval.
+constraints: original test assertions/counts/catalog/gates/runtime unchanged; no Phase 2 or other workstream edits.
+blockers: original hosted failure remains unresolved; paired hosted evidence pending. NO-GO remains.
