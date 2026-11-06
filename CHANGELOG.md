@@ -5739,3 +5739,16 @@ changed: .github/workflows/ci.yml web/Android fingerprints only; rules pin and e
 verified: artifacts built from committed 8986703977a3cda51551fad040e9f2c293bece5f; web tree, extracted APK bundle,
   APK binary and rules hashes independently recomputed against the manifest before pin edits.
 blockers: hosted CI and independent final pin-commit/CI review outstanding. No merge/deploy authorization.
+
+### TASK-PERF-RECOVERY-V1 - release preparation NO-GO (November 6, 2026)
+candidate: fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc; runtime 8986703977a3cda51551fad040e9f2c293bece5f.
+changed: blocked status and release-verification/perf-recovery-v1 reports, manifests and CI comparison only.
+tests: hosted 42269983544 FAILED, 11/14 jobs passed. Mandatory accounting 490/490 and packaged 62/62 pass.
+  Wider 1,071 ran: 771 passed, 300 failed, zero skipped; all 299 prior failures plus one outside the catalog.
+blocker: daily-use-reliability's two-reminders Save/reload/Stop test loses execution context at stopAndLog();
+  terminal accounting assertions not reached. Unchanged local isolation 5/5 passes does not resolve it.
+review: independent final committed-diff/accounting/artifact/CI review confirms NO-GO; predecessor package
+  fingerprints independently verified for rollback. No test/gate/catalog changes or CI retry to hide failure.
+deviations: fresh optional performance audit failed setup twice; no final-candidate performance claim.
+  Three requested follow-ups stay separate; API/DevLabs implementations untouched. No production writes.
+status set to blocked in TASKS.md. No main merge, deployment, rules change, history trimming or data repair.

@@ -3257,3 +3257,26 @@ rules: unchanged 93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be0
 result: independent filesystem hash recomputation matches every fingerprint before pin update. Builder confirms
   root/www commit-byte parity, APK bundle equality (apart from Capacitor files) and no remote server.url.
 untested: hosted regeneration, packaged browser suite, native device behavior and production. APK is debug-signed.
+
+### TASK-PERF-RECOVERY-V1 - final hosted CI and independent review (November 6, 2026)
+candidate: fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc; run 42269983544, completed FAILED (11/14 jobs pass).
+results: mandatory accounting independently recounted 490 unique cases passed, zero failed/skipped/failed attempts;
+  packaged 62/62 pass, zero skipped, hosted fingerprints match verified local web/Android bundles.
+  Wider suite independently recounted 1,071 unique cases: 771 passed, 300 failed, zero skipped/absent/added.
+  All 299 prior failures remain plus one new failure outside the unchanged catalog; release gate fails.
+  Hosted Node TAP summaries 2,414 pass/0 fail/6 existing platform or opt-in skips; Windows local default
+  chain plus explicit control cover those platform checks. Nine existing rules/SDK failures remain reported
+  through the unchanged superseded evaluator; other rules checks and mutation suite 43/43 pass.
+investigation: two-reminders Save/reload/Stop loses execution context at stopAndLog(), before terminal
+  accounting assertions. Same committed case, unchanged local repeat-each=5: 5/5 pass; cause remains unresolved,
+  not labeled harmless or a baseline flake. No gate/test/catalog mutation or failed-CI replacement run.
+  Optional temporary performance audit twice failed beforeAll setup (1 failed, 1 not run each); no metrics.
+  Direct emulator startup/loopback work; paging-file pressure separately observed, not proven causal.
+review: independent final reviewer validates complete evidence and confirms NO-GO. Runtime unchanged after
+  candidate; any subsequent documentation/evidence commit is not claimed as the CI-tested SHA.
+rollback: exact predecessor 9fd8c912 web/bundle match prior pins; independently rehashed APK/rules match manifest.
+untested: resolution of hosted context failure, final performance timing, production signing, real-device and
+  production acceptance. No merge/deploy, rules change, accounting-history trim/deletion or production repair.
+evidence: release-verification/perf-recovery-v1/RELEASE_REPORT.md, FINAL_INDEPENDENT_REVIEW.md,
+  CI_RUN.json, CI_COMPARISON.json, FAILURE_INVESTIGATION.md, CANDIDATE_ARTIFACT_MANIFEST.json,
+  ROLLBACK_ARTIFACT_MANIFEST.json; raw reports retained locally and in GitHub run artifacts.

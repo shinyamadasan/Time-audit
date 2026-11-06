@@ -1,0 +1,269 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Users\\Admin\\Desktop\\Vibe code\\Time audit app\\.worktrees\\perf-recovery-v1\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "tests/daily-use-reliability.spec.js",
+      "--grep",
+      "two reminders retain pending time",
+      "--repeat-each=5",
+      "--workers=1",
+      "--forbid-only",
+      "--reporter=list,json"
+    ],
+    "configFile": "C:\\Users\\Admin\\Desktop\\Vibe code\\Time audit app\\.worktrees\\perf-recovery-v1\\playwright.config.js",
+    "rootDir": "C:/Users/Admin/Desktop/Vibe code/Time audit app/.worktrees/perf-recovery-v1/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": true,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/Admin/Desktop/Vibe code/Time audit app/.worktrees/perf-recovery-v1/test-results",
+        "repeatEach": 5,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/Admin/Desktop/Vibe code/Time audit app/.worktrees/perf-recovery-v1/tests",
+        "testIgnore": [
+          "**/accounting-release-artifacts.spec.js"
+        ],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.61.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "daily-use-reliability.spec.js",
+      "file": "daily-use-reliability.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "TASK-035 bounded reliability closure",
+          "file": "daily-use-reliability.spec.js",
+          "line": 551,
+          "column": 6,
+          "specs": [
+            {
+              "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6256,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T18:49:36.352Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b56967cceca74bf831a-12d2b502f501af54e1c9",
+              "file": "daily-use-reliability.spec.js",
+              "line": 568,
+              "column": 3
+            },
+            {
+              "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5179,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T18:49:43.460Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b56967cceca74bf831a-fcbfca65d9cf06cdfe08",
+              "file": "daily-use-reliability.spec.js",
+              "line": 568,
+              "column": 3
+            },
+            {
+              "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5332,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T18:49:49.484Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b56967cceca74bf831a-830137431bae40887d40",
+              "file": "daily-use-reliability.spec.js",
+              "line": 568,
+              "column": 3
+            },
+            {
+              "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5299,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T18:49:55.815Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b56967cceca74bf831a-94984e0fe6565878eadd",
+              "file": "daily-use-reliability.spec.js",
+              "line": 568,
+              "column": 3
+            },
+            {
+              "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5053,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T18:50:02.131Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b56967cceca74bf831a-65b82ffd14e98c9efd6c",
+              "file": "daily-use-reliability.spec.js",
+              "line": 568,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-06T18:49:35.541Z",
+    "duration": 32029.83,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

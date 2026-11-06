@@ -2397,7 +2397,7 @@ verification:
   - Red then green specs; npm test; release-artifact suite; independent review.
 
 ### TASK-PERF-RECOVERY-V1 - Owner-approved release preparation
-status: codex
+status: blocked
 owner: codex
 source: owner-direct
 priority: P1
@@ -2431,6 +2431,13 @@ scope-resolution:
   Owner replied "whichever is better" on November 6, 2026 to the explicit compaction scope choice.
   Preserve the original no-trimming condition: remove compaction, retain all historical payloads and strict
   replay comparisons, keep the other reviewed performance changes. Reverify final candidate before commit.
+blocker:
+  Hosted run 42269983544 on fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc failed its unchanged wider-suite gate:
+  1,071 ran, 771 passed, 300 failed, zero skipped; one new failure outside the existing catalog.
+  daily-use-reliability: "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or
+  HUD restart" lost its execution context during stopAndLog(). Unchanged local isolation passed 5/5;
+  the hosted failure remains unresolved and blocking, not reclassified. Mandatory accounting 490/490 and
+  packaged 62/62 pass. Release report NO-GO; no merge/deploy. Independent final evidence review confirms NO-GO.
 
 <!-- Paste new tasks above this line. -->
 
