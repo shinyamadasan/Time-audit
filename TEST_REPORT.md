@@ -3247,3 +3247,13 @@ history: initial compaction candidate npm test also exited 0, but was not commit
 untested: exact committed web/APK fingerprints, packaged tests, mandatory hosted accounting suite, complete
   wider-browser suite/failure assessment and final independent committed-diff/CI review. No production write.
 coverage: not measured. Self-review code-health checklist passes; preparation code acceptable, release gates pending.
+
+### TASK-PERF-RECOVERY-V1 - exact committed artifacts, before release pin update
+commit: 8986703977a3cda51551fad040e9f2c293bece5f; build-release-artifacts.mjs completed successfully.
+web: ceedc27b84fd1da3ff38013477d30f4bfe2d824a6e455eb637a031a6fdef14f5 (102 files).
+android bundle: 3e9f1ba5a6eada04f86fa3667ebe4bb614b3af25186a01f62c26d0ad72ca333b (extracted from built APK).
+debug APK: a6f5e69cc75482950f69b151af7a113b72b05ae8ee64285a5c7f39debb66f0a4; 5,915,117 bytes.
+rules: unchanged 93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00.
+result: independent filesystem hash recomputation matches every fingerprint before pin update. Builder confirms
+  root/www commit-byte parity, APK bundle equality (apart from Capacitor files) and no remote server.url.
+untested: hosted regeneration, packaged browser suite, native device behavior and production. APK is debug-signed.

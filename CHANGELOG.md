@@ -5733,3 +5733,9 @@ deviations: initial compaction removed after independent review and owner's "whi
   preserve all accounting history payloads under the original no-trimming condition.
 review: independent revised-candidate review permits preparation commit; no release/deployment approval.
 status remains codex pending release preparation gates. No main merge, deployment or production changes.
+
+### TASK-PERF-RECOVERY-V1 - exact artifact pins
+changed: .github/workflows/ci.yml web/Android fingerprints only; rules pin and every test/count/baseline unchanged.
+verified: artifacts built from committed 8986703977a3cda51551fad040e9f2c293bece5f; web tree, extracted APK bundle,
+  APK binary and rules hashes independently recomputed against the manifest before pin edits.
+blockers: hosted CI and independent final pin-commit/CI review outstanding. No merge/deploy authorization.

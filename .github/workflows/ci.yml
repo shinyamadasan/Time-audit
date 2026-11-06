@@ -34,9 +34,9 @@ env:
   MANDATORY_COUNT: 490
   # Every other browser spec (62 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
   WIDER_COUNT: 1071
-  # Release candidate (first-start fix on c8711f73): packaged web tree, Android bundle tree and Stage B rules.
-  RELEASE_WEB_TREE: bf2443d9f1ee2b20d03ad223bca3b8e1678a9ea0f74248d2299885cc2c4e8cfc
-  RELEASE_BUNDLE_TREE: 5ff0b43550193d85b8591afeb29bb9786c94a4268fb3a42046f49c2fad368e96
+  # Performance Recovery V1 (8986703, full history retained): fingerprints verified from committed web/APK bytes.
+  RELEASE_WEB_TREE: ceedc27b84fd1da3ff38013477d30f4bfe2d824a6e455eb637a031a6fdef14f5
+  RELEASE_BUNDLE_TREE: 3e9f1ba5a6eada04f86fa3667ebe4bb614b3af25186a01f62c26d0ad72ca333b
   RELEASE_RULES_SHA256: 93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00
 
 jobs:
