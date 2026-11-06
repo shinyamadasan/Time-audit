@@ -3289,3 +3289,21 @@ result: 1/1 passes, countIntegrity true, original source bytes retained, termina
   Priya independently reviewed source/hash preservation, count/error handling, cleanup, timestamps and scope.
 untested: matched Linux candidate/predecessor runs and any correction; no new release CI success claimed.
   NO-GO remains; original run 42269983544 remains retained. No runtime/test assertions/gate/catalog changes.
+
+### TASK-PERF-RECOVERY-V1-BLOCKER - matched hosted evidence (November 6, 2026)
+diagnostic commit:a3d461c029263b06d158f3067af76231ac666f7a; run42280197609 SUCCESS (diagnostic workflow only).
+subjects:candidate fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc; predecessor9fd8c912349219481908bccce8efb3fad35c5273.
+result:four groups10/10passed;40total,zero skips/retries,one attempt per case. Original assertion/action bytes
+  retained; matching subject test/lock hashes. Node22.23.4,Playwright1.61.0,Chromium149.0.7827.55,two workers.
+  All20 instrumented snapshots preserve two contiguous spans satisfying the original rounded75-minute
+  assertion, matching local/stored/remote identities/timestamps and empty accounting queues.
+limits:no monitored in-test page crash/disconnect; raw protocol errors and crash-named signals around
+  diagnostic/cleanup windows are retained and not misclassified as the original failure. No natural
+  Promise-collected error observed. Sampled memory ample; cgroup data unavailable. Original full-shard
+  workload not reproduced. Original lost-context cause and terminal hosted accounting outcome remain unknown.
+review:Priya independently confirms NO-GO and no justified correction. Original requiredCI42269983544 FAILED
+  remains authoritative; successful diagnostics do not replace it. No implementation or test change made.
+not rerun:npm test/full release gates; runtime/assertions/gates unchanged and no correction to qualify.
+  This remains a blocked investigation, not a ready-for-release or completed implementation handoff.
+evidence:release-verification/perf-recovery-v1/blocking-failure/FINDING.md,MATCHED_SUMMARY.json,
+  WORKER_PROVENANCE.json,SOURCE_EVIDENCE.json,HOSTED_RUN.json,INDEPENDENT_REVIEW.md; raw hosted artifacts retained.

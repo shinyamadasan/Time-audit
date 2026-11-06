@@ -5762,3 +5762,14 @@ tests: syntax/diff checks pass; final local instrumented smoke 1/1 passes with i
 review: Priya independently clears diagnostic launch; no application correction or release approval.
 constraints: original test assertions/counts/catalog/gates/runtime unchanged; no Phase 2 or other workstream edits.
 blockers: original hosted failure remains unresolved; paired hosted evidence pending. NO-GO remains.
+
+### TASK-PERF-RECOVERY-V1-BLOCKER - focused finding: NO-GO
+changed: focused evidence, original investigation follow-up, task blocked status and logs only.
+tests: hosted42280197609, exact candidate/predecessor, unchanged10+instrumented10 each:40/40pass,0skips/retries.
+  Identical test/lock hashes; Node22.23.4/Playwright1.61.0/Chromium149.0.7827.55/two workers.
+finding: original context-loss cause not reproduced or proven. Raw diagnostics/cleanup errors are disclosed;
+  no monitored in-test crash/disconnection, but historical resource pressure and full-shard load remain unknown.
+  Original failure's worker had no prior cross-file holdEvaluates installer. No correction justified.
+review: Priya independently confirms NO-GO; original requiredCI42269983544 remains failed. No replacement
+  full release-CI rerun because no implementation/test correction was made. No Phase2 or other workstream edits.
+status: blocked; no runtime/test assertions/counts/catalog/rules changes, merge, deployment or history trimming.

@@ -1,0 +1,171 @@
+{
+  "candidate": {
+    "target": {
+      "file": "daily-use-reliability.spec.js",
+      "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+      "testStatus": "unexpected",
+      "resultStatus": "failed",
+      "workerIndex": 25,
+      "parallelIndex": 0,
+      "startTime": "2026-11-06T18:39:51.336Z",
+      "duration": 4854
+    },
+    "priorSameWorker": [
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "S2: a stopped and logged block is never duplicated by repeated reloads",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-06T18:39:41.006Z",
+        "duration": 5195
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown null never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-06T18:39:46.428Z",
+        "duration": 993
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown 0 never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-06T18:39:47.432Z",
+        "duration": 1341
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown -1 never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-06T18:39:48.788Z",
+        "duration": 1235
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown invalid never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-06T18:39:50.032Z",
+        "duration": 1294
+      }
+    ],
+    "holdEvaluatesInstallingPriorFiles": [],
+    "interpretation": "workerIndex identifies a distinct Playwright worker; this checks only explicit holdEvaluates calls in prior files, not every possible mutation.",
+    "overlappingOtherWorkers": [
+      {
+        "file": "daily-routines-ui.spec.js",
+        "title": "failed launch persistence reports the actual error and does not start the timer",
+        "workerIndex": 26,
+        "parallelIndex": 1,
+        "startTime": "2026-11-06T18:39:50.491Z",
+        "duration": 7185,
+        "status": "failed"
+      }
+    ],
+    "overlapLimit": "Temporal overlap documents concurrency, not observed CPU, memory pressure, crash, or causation.",
+    "runId": 42269983544,
+    "commit": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc"
+  },
+  "baseline": {
+    "target": {
+      "file": "daily-use-reliability.spec.js",
+      "title": "two reminders retain pending time; Save/reload/Stop has no duplicate coverage or HUD restart",
+      "testStatus": "expected",
+      "resultStatus": "passed",
+      "workerIndex": 25,
+      "parallelIndex": 0,
+      "startTime": "2026-11-05T07:28:30.704Z",
+      "duration": 5442
+    },
+    "priorSameWorker": [
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "S2: a stopped and logged block is never duplicated by repeated reloads",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-05T07:28:17.019Z",
+        "duration": 7649
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown null never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-05T07:28:24.881Z",
+        "duration": 1767
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown 0 never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-05T07:28:26.670Z",
+        "duration": 1516
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown -1 never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-05T07:28:28.207Z",
+        "duration": 1329
+      },
+      {
+        "file": "daily-use-reliability.spec.js",
+        "title": "malformed saved countdown invalid never becomes a running or published timer",
+        "testStatus": "expected",
+        "resultStatus": "passed",
+        "workerIndex": 25,
+        "parallelIndex": 0,
+        "startTime": "2026-11-05T07:28:29.557Z",
+        "duration": 1133
+      }
+    ],
+    "holdEvaluatesInstallingPriorFiles": [],
+    "interpretation": "workerIndex identifies a distinct Playwright worker; this checks only explicit holdEvaluates calls in prior files, not every possible mutation.",
+    "overlappingOtherWorkers": [
+      {
+        "file": "daily-routines-ui.spec.js",
+        "title": "scheduled Focus linkage survives reload and existing same-device timer takeover",
+        "workerIndex": 23,
+        "parallelIndex": 1,
+        "startTime": "2026-11-05T07:28:25.631Z",
+        "duration": 8147,
+        "status": "failed"
+      },
+      {
+        "file": "daily-routines-ui.spec.js",
+        "title": "active scheduled Focus has a compact scrollable landscape surface",
+        "workerIndex": 26,
+        "parallelIndex": 1,
+        "startTime": "2026-11-05T07:28:35.017Z",
+        "duration": 2738,
+        "status": "passed"
+      }
+    ],
+    "overlapLimit": "Temporal overlap documents concurrency, not observed CPU, memory pressure, crash, or causation.",
+    "runId": 41985833075,
+    "commit": "2b8857cb5e1decbb7d7d1762f3bff839b6c02ea8"
+  }
+}

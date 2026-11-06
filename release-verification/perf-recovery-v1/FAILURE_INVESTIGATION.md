@@ -61,3 +61,11 @@ Original measurements from the removed-compaction candidate do not establish fin
 Release interpretation: distinguish an unchanged-baseline CI gate from all tests passing, and distinguish
 mandatory accounting coverage from the safety scenarios that failed before their assertions were reached.
 No full safety or final performance guarantee follows from a green aggregate job alone.
+
+## Focused owner-authorized follow-up
+
+Jomar's matched investigation ran in hosted run42280197609: candidate/predecessor each passed ten unchanged
+and ten instrumented cases (40total, zero skips/retries). Priya independently confirms NO-GO: the original
+cause remains unproven, the full-shard workload was not replayed, and no correction is justified by clean
+repetitions. Original required CI42269983544 remains failed. See blocking-failure/FINDING.md,
+MATCHED_SUMMARY.json and INDEPENDENT_REVIEW.md for the scoped evidence and limits.

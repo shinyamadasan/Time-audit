@@ -2440,7 +2440,7 @@ blocker:
   packaged 62/62 pass. Release report NO-GO; no merge/deploy. Independent final evidence review confirms NO-GO.
 
 ### TASK-PERF-RECOVERY-V1-BLOCKER - One hosted Stop/reload failure investigation
-status: codex
+status: blocked
 owner: codex
 source: owner-direct
 priority: P1
@@ -2449,7 +2449,8 @@ files: tests/daily-use-reliability.spec.js and tests/accounting-retained-action.
   minimum harness correction only); index.html (stopAndLog accounting path only if evidence requires an
   implementation correction), associated governed-token assertion and generated www/ only if runtime changes;
   .github/workflows/perf-blocker-investigation.yml (bounded diagnostic runs, no deployment);
-  release-verification/perf-recovery-v1/blocking-failure/; this entry; CHANGELOG.md/TEST_REPORT.md append only.
+  release-verification/perf-recovery-v1/blocking-failure/; existing FAILURE_INVESTIGATION.md (focused
+  follow-up pointer only); this entry; CHANGELOG.md/TEST_REPORT.md append only.
 context:
   Owner message November 6, 2026, "Performance Recovery V1 - Resolve One Blocking Failure".
   Assign Jomar one focused investigation; Priya independently reviews any justified smallest fix.
@@ -2474,6 +2475,13 @@ verification:
   - Exact-commit candidate/predecessor diagnostic matrix, including browser lifecycle/CDP and resource evidence.
   - Smallest-change regression, npm test and parity when changed; independent review before hosted release gates.
   - Hosted original failure retained; no test/catalog weakening or replacement of evidence by a clean retry.
+blocker:
+  Matched hosted run 42280197609: candidate/predecessor each passed ten unchanged and ten instrumented cases
+  (40 total, zero skips/retries). The original context-loss error did not reproduce, so its cause remains
+  unproven. No product or test correction is justified by clean repetitions alone. Priya confirms NO-GO.
+  Original required run 42269983544 remains failed; no full release-CI rerun was substituted for a fix.
+  Browser/resource/performance causation for that historical failure cannot be recovered from absent
+  original lifecycle/protocol/resource evidence; isolated comparison does not recreate the full-shard load.
 
 <!-- Paste new tasks above this line. -->
 

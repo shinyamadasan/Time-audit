@@ -1,0 +1,20 @@
+{
+  "playwright": "1.61.0",
+  "bundleSha256": "6bc8db3d485266f1e0b62d18494849dce89c03479220b1784d96625ab8eb9cc0",
+  "anchor": "packages/playwright-core/src/server/chromium/crExecutionContext.ts / rewriteError",
+  "rewriteError": "function rewriteError(error) {\n  if (error.message.includes(\"Object reference chain is too long\") || error.message.includes(\"CBOR: stack limit exceeded\"))\n    throw new Error(\"Cannot serialize result: object reference chain is too long.\");\n  if (error.message.includes(\"Object couldn't be returned by value\"))\n    return { result: { type: \"undefined\" } };\n  if (error instanceof TypeError && error.message.startsWith(\"Converting circular structure to JSON\"))\n    rewriteErrorMessage(error, error.message + \" Are you passing a nested JSHandle?\");\n  if (!isJavaScriptErrorInEvaluate(error) && !isSessionClosedError(error))\n    throw new Error(\"Execution context was destroyed, most likely because of a navigation.\");\n  throw error;\n}",
+  "sources": [
+    {
+      "ref": "9fd8c912349219481908bccce8efb3fad35c5273",
+      "testBlobSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+      "helperBlobSha256": "a8198441f25fd3465781b90f4f7e635eb26c5b4b7e85e448dd3444e1e155d195"
+    },
+    {
+      "ref": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc",
+      "testBlobSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+      "helperBlobSha256": "a8198441f25fd3465781b90f4f7e635eb26c5b4b7e85e448dd3444e1e155d195"
+    }
+  ],
+  "testAndHelperUnchanged": true,
+  "conclusion": "Generic error text does not prove navigation. Original raw protocol response/trace unavailable; Promise collection remains a hypothesis until natural matched evidence."
+}

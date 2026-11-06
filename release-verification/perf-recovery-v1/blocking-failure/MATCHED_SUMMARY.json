@@ -1,0 +1,1027 @@
+{
+  "run": 42280197609,
+  "diagnosticCommit": "a3d461c029263b06d158f3067af76231ac666f7a",
+  "subjects": {
+    "candidate": {
+      "runs": {
+        "control": {
+          "commit": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc",
+          "node": "v22.23.4",
+          "platform": "linux",
+          "playwright": "1.61.0",
+          "sourceSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+          "lockSha256": "4e7dfe3dfed0c771d4f0f09178e60f2eb62d07572bc4b9f7f9db10f03c7a96a2",
+          "repeats": 10,
+          "workers": 2,
+          "countIntegrity": true,
+          "exitCode": 0,
+          "cases": 10,
+          "statuses": [
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected"
+          ],
+          "sourceCopyIdentical": null
+        },
+        "instrumented": {
+          "commit": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc",
+          "node": "v22.23.4",
+          "platform": "linux",
+          "playwright": "1.61.0",
+          "sourceSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+          "lockSha256": "4e7dfe3dfed0c771d4f0f09178e60f2eb62d07572bc4b9f7f9db10f03c7a96a2",
+          "repeats": 10,
+          "workers": 2,
+          "countIntegrity": true,
+          "exitCode": 0,
+          "cases": 10,
+          "statuses": [
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected"
+          ],
+          "sourceCopyIdentical": true
+        }
+      },
+      "cases": [
+        {
+          "repeat": 0,
+          "worker": 0,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993564911,
+          "afterEachStartedAt": 1793993571962,
+          "endedAt": 1793993571990,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 1,
+          "worker": 1,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993564900,
+          "afterEachStartedAt": 1793993571880,
+          "endedAt": 1793993571925,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498867,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 2,
+          "worker": 2,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993572755,
+          "afterEachStartedAt": 1793993579887,
+          "endedAt": 1793993579920,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498867,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 3,
+          "worker": 3,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993572819,
+          "afterEachStartedAt": 1793993579769,
+          "endedAt": 1793993579800,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498874,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 4,
+          "worker": 4,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993580612,
+          "afterEachStartedAt": 1793993587405,
+          "endedAt": 1793993587439,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498867,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 5,
+          "worker": 5,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993580717,
+          "afterEachStartedAt": 1793993587728,
+          "endedAt": 1793993587753,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498874,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 6,
+          "worker": 6,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993588334,
+          "afterEachStartedAt": 1793993595188,
+          "endedAt": 1793993595226,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 7,
+          "worker": 7,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993588665,
+          "afterEachStartedAt": 1793993595414,
+          "endedAt": 1793993595438,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 8,
+          "worker": 8,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993596075,
+          "afterEachStartedAt": 1793993603003,
+          "endedAt": 1793993603037,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 9,
+          "worker": 9,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993596292,
+          "afterEachStartedAt": 1793993603097,
+          "endedAt": 1793993603117,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        }
+      ],
+      "resources": {
+        "samples": 72,
+        "minimumMemAvailableBytes": 14138953728,
+        "maximumNodeRssBytes": 242159616,
+        "maximumEnumeratedBrowserRssSumBytes": 717631488,
+        "maximumCommittedAsBytes": 6796132352,
+        "cgroupEventsAvailableSamples": 0,
+        "unavailableCgroupIsNotZeroOOMEvents": true
+      },
+      "protocol": {
+        "parsed": 79899,
+        "unparsed": 0,
+        "truncated": 0,
+        "dropped": 0,
+        "droppedOutputBytes": 0,
+        "rawObservationCount": 243,
+        "uniqueObservationCount": 134,
+        "inducedUniqueErrors": 10,
+        "nonProbeErrors": [
+          {
+            "at": 1793993571958,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993572044,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993579893,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993579942,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993585283,
+            "error": {
+              "code": -32000,
+              "message": "No resource with given identifier found"
+            },
+            "command": null,
+            "sessionId": "96F0313B7FDBE5A7A1379ED171309540",
+            "nearAnyAfterEachOrTeardown": false,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993587502,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993587793,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993592967,
+            "error": {
+              "code": -32000,
+              "message": "No resource with given identifier found"
+            },
+            "command": null,
+            "sessionId": "B125C2E9CE2B5C30CDF9DB451E2716FD",
+            "nearAnyAfterEachOrTeardown": false,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993595251,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993595480,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993603105,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993603163,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          }
+        ],
+        "targetCrashedNotifications": [
+          {
+            "at": 1793993571982,
+            "sessionId": "B192008F9A88F8788F1B209EAEBF1665",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993572045,
+            "sessionId": "541F6EC41172729849D044EBAFD6CE1B",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993579893,
+            "sessionId": "565D9D3516806848D69D4B524C6B9A16",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993579966,
+            "sessionId": "6CE7C2BF0E844DD3A725A3B05F6F4306",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993587502,
+            "sessionId": "73834D243D2A972AF5D84926B5D59602",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993587798,
+            "sessionId": "F1862D96616622B3629B722EA3095B53",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993595281,
+            "sessionId": "CA341918CF959E64AECA64A862FADF15",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993595480,
+            "sessionId": "87DE3C7FC7CD7806C99A8BB619468C4A",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993603105,
+            "sessionId": "021C92AB8883356B2634E4B72CE09D09",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993603163,
+            "sessionId": "8786E9FEE604103644C20173788245E0",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          }
+        ],
+        "promiseCollectedResponses": 0,
+        "stopAndLogRuntimeErrorResponses": 0,
+        "phaseLimit": "Temporal windows overlap across two workers; session-to-test ownership is incomplete. Near teardown is not causal attribution."
+      }
+    },
+    "predecessor": {
+      "runs": {
+        "control": {
+          "commit": "9fd8c912349219481908bccce8efb3fad35c5273",
+          "node": "v22.23.4",
+          "platform": "linux",
+          "playwright": "1.61.0",
+          "sourceSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+          "lockSha256": "4e7dfe3dfed0c771d4f0f09178e60f2eb62d07572bc4b9f7f9db10f03c7a96a2",
+          "repeats": 10,
+          "workers": 2,
+          "countIntegrity": true,
+          "exitCode": 0,
+          "cases": 10,
+          "statuses": [
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected"
+          ],
+          "sourceCopyIdentical": null
+        },
+        "instrumented": {
+          "commit": "9fd8c912349219481908bccce8efb3fad35c5273",
+          "node": "v22.23.4",
+          "platform": "linux",
+          "playwright": "1.61.0",
+          "sourceSha256": "740cf13f3c4d96add2ef3b35c7852ccd99e2c0ed770c0a3e0149fc3d740a98b2",
+          "lockSha256": "4e7dfe3dfed0c771d4f0f09178e60f2eb62d07572bc4b9f7f9db10f03c7a96a2",
+          "repeats": 10,
+          "workers": 2,
+          "countIntegrity": true,
+          "exitCode": 0,
+          "cases": 10,
+          "statuses": [
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected",
+            "expected"
+          ],
+          "sourceCopyIdentical": true
+        }
+      },
+      "cases": [
+        {
+          "repeat": 0,
+          "worker": 0,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993563995,
+          "afterEachStartedAt": 1793993571563,
+          "endedAt": 1793993571594,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498875,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 1,
+          "worker": 1,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993564038,
+          "afterEachStartedAt": 1793993571614,
+          "endedAt": 1793993571648,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 2,
+          "worker": 2,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993572502,
+          "afterEachStartedAt": 1793993579903,
+          "endedAt": 1793993579937,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498907,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 3,
+          "worker": 3,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993572550,
+          "afterEachStartedAt": 1793993580131,
+          "endedAt": 1793993580160,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498874,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 4,
+          "worker": 4,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993580892,
+          "afterEachStartedAt": 1793993588139,
+          "endedAt": 1793993588180,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 5,
+          "worker": 5,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993581192,
+          "afterEachStartedAt": 1793993588456,
+          "endedAt": 1793993588487,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498907,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 6,
+          "worker": 6,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993589154,
+          "afterEachStartedAt": 1793993596214,
+          "endedAt": 1793993596250,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498866,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 7,
+          "worker": 7,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993589501,
+          "afterEachStartedAt": 1793993596963,
+          "endedAt": 1793993596992,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498874,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 8,
+          "worker": 8,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993597317,
+          "afterEachStartedAt": 1793993604464,
+          "endedAt": 1793993604495,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498875,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        },
+        {
+          "repeat": 9,
+          "worker": 9,
+          "status": "passed",
+          "browser": "149.0.7827.55",
+          "startedAt": 1793993598248,
+          "afterEachStartedAt": 1793993604953,
+          "endedAt": 1793993604973,
+          "mainNavigations": 2,
+          "inTestCrashEvents": [],
+          "pageErrors": [],
+          "observerErrors": [],
+          "terminalErrors": [],
+          "entryCount": 2,
+          "contiguous": true,
+          "totalMs": 4498875,
+          "roundedMinutes": 75,
+          "distinctEntryIds": 2,
+          "storedMatchesEntries": true,
+          "remoteMatchesEntries": true,
+          "stopped": true,
+          "terminalQueueLength": 0,
+          "terminalHudCaptured": false
+        }
+      ],
+      "resources": {
+        "samples": 79,
+        "minimumMemAvailableBytes": 14206676992,
+        "maximumNodeRssBytes": 242085888,
+        "maximumEnumeratedBrowserRssSumBytes": 727343104,
+        "maximumCommittedAsBytes": 6717800448,
+        "cgroupEventsAvailableSamples": 0,
+        "unavailableCgroupIsNotZeroOOMEvents": true
+      },
+      "protocol": {
+        "parsed": 79779,
+        "unparsed": 0,
+        "truncated": 0,
+        "dropped": 0,
+        "droppedOutputBytes": 0,
+        "rawObservationCount": 243,
+        "uniqueObservationCount": 131,
+        "inducedUniqueErrors": 10,
+        "nonProbeErrors": [
+          {
+            "at": 1793993571666,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993571701,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993579970,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993580183,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993588223,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993588518,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993596279,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993596279,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993597053,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993601937,
+            "error": {
+              "code": -32000,
+              "message": "No resource with given identifier found"
+            },
+            "command": null,
+            "sessionId": "024C2B2CD0B4B54ADDCB90178EB617C4",
+            "nearAnyAfterEachOrTeardown": false,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993604531,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993605015,
+            "error": {
+              "code": -32001,
+              "message": "Session with given id not found."
+            },
+            "command": null,
+            "sessionId": null,
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          }
+        ],
+        "targetCrashedNotifications": [
+          {
+            "at": 1793993571667,
+            "sessionId": "61CEECEED33EC762AC4EF6C685BC9D01",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993580213,
+            "sessionId": "2E23D47392D1025F0ABB2624803E3738",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993588265,
+            "sessionId": "C8C950BF8B8B19E4B033EE238B27B7B8",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993596310,
+            "sessionId": "428D580D8738A8D70C9EA0A478DAAD07",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993597069,
+            "sessionId": "0C30777FFD0D4ABBC037F2516951AC5D",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          },
+          {
+            "at": 1793993604564,
+            "sessionId": "C02327094CD2D15718766FCA193A1747",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": true
+          },
+          {
+            "at": 1793993605018,
+            "sessionId": "A5B475ABA23C088670FFA74F8311C580",
+            "nearAnyAfterEachOrTeardown": true,
+            "insideAnyTestWindow": false
+          }
+        ],
+        "promiseCollectedResponses": 0,
+        "stopAndLogRuntimeErrorResponses": 0,
+        "phaseLimit": "Temporal windows overlap across two workers; session-to-test ownership is incomplete. Near teardown is not causal attribution."
+      }
+    }
+  },
+  "comparability": {
+    "sameNode": true,
+    "samePlaywright": true,
+    "sameSourceHash": true,
+    "sameLockHash": true,
+    "limitation": "Same selected case and configured runner/browser stack; not the original 278-case ambient workload or original unretained trace."
+  }
+}
