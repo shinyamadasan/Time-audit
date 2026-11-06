@@ -1,0 +1,12 @@
+{
+  "candidate": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc",
+  "ref": "ci-perf-recovery-v1-final-20261106-fbe1c38",
+  "authorizedDispatches": 1,
+  "requestedAt": "2026-11-06T19:52:06.3594993Z",
+  "state": "confirmed single fresh full CI run; no retries authorized",
+  "dispatchExit": 0,
+  "output": [
+    "https://github.com/shinyamadasan/Time-audit/actions/runs/42283392080"
+  ],
+  "runId": 42283392080
+}

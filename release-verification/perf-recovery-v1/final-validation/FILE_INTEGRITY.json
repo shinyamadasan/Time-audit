@@ -1,0 +1,90 @@
+{
+  "files": [
+    {
+      "sha256": "d9d718124c6e58ceff030cce03712323c8b7ca3f7d8caa33f7ea730c8e0ccbeb",
+      "bytes": 312455,
+      "path": "CI_COMPARISON.json"
+    },
+    {
+      "sha256": "33b156ca6e6557d6ad29145fb11a47bdbf0c3ff2c4ea659ebc150800bbd6cc24",
+      "bytes": 31410,
+      "path": "CI_RUN.json"
+    },
+    {
+      "sha256": "28f935dc06d9b8a62bc07538430b5b553a22ceabf245ed924d8a4207bb383351",
+      "bytes": 980,
+      "path": "IDENTITY.json"
+    },
+    {
+      "sha256": "0295453035bfc552b464fe5f6dea16c9364a30c410297a6deb9f5b6d97424956",
+      "bytes": 1563,
+      "path": "INDEPENDENT_REVIEW.md"
+    },
+    {
+      "sha256": "e85cade1298e94d4c3ccd03fc8bd1b71e2f5d30fd9347eb2c395476ff17d96ca",
+      "bytes": 416,
+      "path": "LAUNCH.json"
+    },
+    {
+      "sha256": "3a4a18faf5c9f5e1183c80152abf01ad3eda01b4f9d9c04093967a5007f1008c",
+      "bytes": 88530,
+      "path": "packaged-ci.log"
+    },
+    {
+      "sha256": "e5e5aeec42f13a70bee091754cbd7312f61f07496a256c29112dc792a05f9048",
+      "bytes": 4336,
+      "path": "RELEASE_DECISION.md"
+    },
+    {
+      "sha256": "ec489276534b3aa4e7dfcf4261b21ad82187009e936a87259e995d215ea58a23",
+      "bytes": 165491,
+      "path": "rules-ci.log"
+    },
+    {
+      "sha256": "3e12b4383ecc2e82cd9695e3b8105381c292adf14f71f7d84066b6f00b85b81f",
+      "bytes": 474,
+      "path": "TAG_REF.json"
+    },
+    {
+      "sha256": "7bbd6c9a4a31b30ac305b238081dfbdbd699f50de05168b002492154dc005a87",
+      "bytes": 1197931,
+      "path": "unit-ci.log"
+    },
+    {
+      "sha256": "ba306ce0c2c6c2769ac6431c700b86124d7f914f67680e8fc151d035a2229689",
+      "bytes": 729001,
+      "path": "accounting/accounting-1/accounting-1.json"
+    },
+    {
+      "sha256": "54c836342d2955ea2bc8fd84f0aeb70c52f615e7e8ab114431db7c09d86b31bb",
+      "bytes": 749474,
+      "path": "accounting/accounting-2/accounting-2.json"
+    },
+    {
+      "sha256": "f0f1c336dd9246cfab693395cf982eacb7e93344322233eb906b2ed8bcf66fec",
+      "bytes": 59595,
+      "path": "accounting/accounting-3/accounting-3.json"
+    },
+    {
+      "sha256": "eb51ca0b40fdeda8fd50aa163b1c7b402d94b347dd6f71af3908bf0b06470247",
+      "bytes": 714637,
+      "path": "wider/wider-1/wider-1.json"
+    },
+    {
+      "sha256": "bba64e687cc9b6dc0a94087852a2b6db7cc1f3678739f7da186f0563287f487c",
+      "bytes": 723491,
+      "path": "wider/wider-2/wider-2.json"
+    },
+    {
+      "sha256": "19a4bc3374bcb724badc665d44cbbb65d4ac5a8e07c885292509e363076fe048",
+      "bytes": 899327,
+      "path": "wider/wider-3/wider-3.json"
+    },
+    {
+      "sha256": "9210c63cdc13d578bf566be3ef2bea402047884b44c134499ebd85bc4b2d6055",
+      "bytes": 526613,
+      "path": "wider/wider-4/wider-4.json"
+    }
+  ],
+  "note": "Raw logs/shard reports are locally retained and available in the hosted run artifacts; selected identity/comparison/review evidence is committed."
+}

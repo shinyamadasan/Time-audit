@@ -3307,3 +3307,18 @@ not rerun:npm test/full release gates; runtime/assertions/gates unchanged and no
   This remains a blocked investigation, not a ready-for-release or completed implementation handoff.
 evidence:release-verification/perf-recovery-v1/blocking-failure/FINDING.md,MATCHED_SUMMARY.json,
   WORKER_PROVENANCE.json,SOURCE_EVIDENCE.json,HOSTED_RUN.json,INDEPENDENT_REVIEW.md; raw hosted artifacts retained.
+
+### TASK-PERF-RECOVERY-V1-FINAL-CI - November 6, 2026
+suite: fresh full unchanged GitHub CI 42283392080 on fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc.
+result: 14/14 required jobs passed. Mandatory accounting490 unique passes, zero failed/skipped attempts;
+  strict packaged62/62 passes zero skips. Wider1071:772 passed,299 existing failures, zero added/missing cases,
+  zero outside unchanged catalog. Formerly blocking Stop/reload case passed one attempt in full suite.
+  Unit/rules logs disclose existing six Node skips and nine reported rules/SDK failures; not an all-tests-pass claim.
+identity: 102 runtime files and retained web/Android bundle pins independently verified; local and hosted debug
+  APK hashes separately disclosed. Exactly one dispatch, no retries, no assertions/count/catalog/gate changes.
+review: Priya independently verified complete results including exception logs; eligible for separate owner
+  approval only. Original failure and diagnostics retained; cause not proven and no fix asserted.
+untested: production signing, real-device acceptance, historical failure cause and slow-device performance.
+  No further local npm test repetition: no implementation changes; authorized unchanged full hosted suite ran.
+evidence: release-verification/perf-recovery-v1/final-validation/RELEASE_DECISION.md and INDEPENDENT_REVIEW.md;
+  machine-readable run/identity/comparison/shards retained; full raw job logs retained locally and on GitHub.

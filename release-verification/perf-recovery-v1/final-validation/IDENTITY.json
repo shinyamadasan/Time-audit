@@ -1,0 +1,16 @@
+{
+  "candidate": "fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc",
+  "artifactRuntimeCommit": "8986703977a3cda51551fad040e9f2c293bece5f",
+  "verifiedAt": "2026-11-06T19:51:42.414Z",
+  "runtimeFiles": 102,
+  "candidateRootAndWwwMatchRetainedArtifacts": true,
+  "webTree": "ceedc27b84fd1da3ff38013477d30f4bfe2d824a6e455eb637a031a6fdef14f5",
+  "androidBundleTree": "3e9f1ba5a6eada04f86fa3667ebe4bb614b3af25186a01f62c26d0ad72ca333b",
+  "localDebugApkSha256": "a6f5e69cc75482950f69b151af7a113b72b05ae8ee64285a5c7f39debb66f0a4",
+  "rulesSha256": "93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00",
+  "releasePinsMatch": true,
+  "workflowBlob": "38bb8d1d269c0d65b92f0dcc20e133483918df49",
+  "testsTree": "04c365c64fb9dd2eeffdb0e322631b8e7a6b2b41",
+  "failureCatalogSha256": "425952a51272bf74a227fb223778108ce7fad0d985854ce8dac0a9c60c9449dc",
+  "note": "Retained debug APK verified; hosted packaged gate will rebuild and verify identical web/bundle pins. CI validation only."
+}

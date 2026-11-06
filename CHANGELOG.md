@@ -5773,3 +5773,14 @@ finding: original context-loss cause not reproduced or proven. Raw diagnostics/c
 review: Priya independently confirms NO-GO; original requiredCI42269983544 remains failed. No replacement
   full release-CI rerun because no implementation/test correction was made. No Phase2 or other workstream edits.
 status: blocked; no runtime/test assertions/counts/catalog/rules changes, merge, deployment or history trimming.
+
+### TASK-PERF-RECOVERY-V1-FINAL-CI - return for separate owner approval (November 6, 2026)
+changed: final-validation evidence and this owner-direct task only; frozen candidate fbe1c38 unchanged.
+tests: exactly one fresh full hosted run 42283392080, 14/14 required jobs passed; accounting490/490,
+  packaged62/62 zero skipped; wider1071=772 passed/299 unchanged cataloged failures, zero new/missing cases.
+  Existing six Node skips and nine reported rules/SDK exceptions remain disclosed; tests/catalog/gates unchanged.
+review: independent Priya confirms complete evidence and runtime/artifact identity; RETURN FOR OWNER APPROVAL,
+  no merge or deployment approval. Historical failure cause unproven; no speculative fix or Phase2.
+risks: known baseline/coverage gaps, production signing and real-device acceptance, unexplained historical
+  context loss. Rollback procedure and exact fingerprints retained in final-validation/RELEASE_DECISION.md.
+status: review. No further performance activity planned; existing integration and read-only audit prioritized.

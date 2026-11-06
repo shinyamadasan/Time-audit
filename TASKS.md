@@ -2483,6 +2483,37 @@ blocker:
   Browser/resource/performance causation for that historical failure cannot be recovered from absent
   original lifecycle/protocol/resource evidence; isolated comparison does not recreate the full-shard load.
 
+### TASK-PERF-RECOVERY-V1-FINAL-CI - One final unchanged-gate validation
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none (same frozen candidate fbe1c38; manual CI validation only)
+files: this entry; CHANGELOG.md/TEST_REPORT.md append only;
+  release-verification/perf-recovery-v1/final-validation/ evidence and concise disposition.
+context:
+  Owner message November 6, 2026, "Performance Recovery V1 - Final Direction" accepts Jomar/Priya's
+  investigation, retains NO-GO, authorizes exactly one fresh full unchanged-gate CI validation.
+objective:
+  Verify exact runtime/artifact identity, validate the frozen release candidate once, then stop Performance
+  Recovery work and redirect available agents to existing productivity goals within their authorized scope.
+acceptance:
+  - Candidate fbe1c38cbeefb4b37bbb8bfa15ecfbf942f060cc and retained artifact/pin identity verified.
+  - Exactly one fresh full CI workflow run; preserve tests, counts, rules, catalog and required gates.
+  - If all required gates pass, Priya reviews complete results for return to separate owner approval.
+  - If a required gate fails, retain NO-GO and park Performance Recovery with all prior evidence.
+  - After validation, prioritize Ramon-to-ChronaSense read/write integration; West Edge Exterior stays
+    pending correct domain and authorization. No duplicate or speculative workstreams.
+constraints:
+  - CI validation only: no merge/deploy, source/test/catalog changes, Phase2, speculative debugging or retries.
+  - Do not modify production, Firebase/rules, accounting history or other workstreams' implementations.
+  - Use an exact candidate ref for the single dispatch; an ambiguous dispatch must be reconciled, not repeated.
+  - No further Performance Recovery activity without new evidence or owner direction after disposition.
+verification:
+  - Rehash retained web/Android artifacts; compare committed candidate runtime bytes and release pins.
+  - Full hosted CI on exact candidate; retain complete run/job and accounting/packaged/wider evidence.
+  - Conditional independent Priya review, or explicit failed-gate NO-GO/parked record; concise owner report.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
