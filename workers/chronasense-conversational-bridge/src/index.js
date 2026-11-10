@@ -15,7 +15,7 @@ let remoteJwks = null;
 
 export const OAUTH_PROVIDER_CONFIG = Object.freeze({
   apiRoute: '/mcp', authorizeEndpoint: '/authorize', tokenEndpoint: '/oauth/token',
-  scopesSupported: [...KNOWN_SCOPES], requiredScopes: [READ_SCOPE],
+  scopesSupported: [...KNOWN_SCOPES], requiredScopes: [READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE],
   resourceMetadata: { resource: RESOURCE, authorization_servers: [ISSUER],
     bearer_methods_supported: ['header'], resource_name: 'ChronaSense' },
   clientIdMetadataDocumentEnabled: true,
