@@ -332,6 +332,6 @@
     return 'op_' + Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
-  const api = { STORAGE_BASE, META, stored, same, stamp, createTimeAck, createRestTransport, webLock, randomOperationId };
+  const api = { STORAGE_BASE, META, stored, canonical, same, stamp, createTimeAck, createRestTransport, webLock, randomOperationId };
   root.TimeAckCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

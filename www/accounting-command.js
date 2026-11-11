@@ -10,12 +10,82 @@
   const pathAllowed = path => /^(timer|awayState|breakState)$/.test(path)
     || /^(entries|focusRedemptions)\/[^\x00-\x1f\x7f.#$\[\]/]+$/.test(path);
 
-  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {} }) {
+  // ── Compacted inputs (storage-growth release N) ─────────────────────────────────────────────
+  // A compacted history input keeps its name and a digest of the original input in place of large
+  // bodies. The digest is SHA-256 over the exact bytes TimeAckCore.same() compares
+  // (JSON.stringify(canonical(stored(x)))), so "same()" and "equal digest" agree. A digest version this
+  // build does not know is never equal to anything (fail closed). Callers that would otherwise throw on
+  // inequality must check unknownDigest() first and retain instead of throwing.
+  const DIGEST_V = 1;
+  const SHA_K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+  /** Synchronous SHA-256 of a string's UTF-8 bytes, as lowercase hex. */
+  function sha256Hex(text) {
+    const bytes = new TextEncoder().encode(text);
+    const length = bytes.length, padded = new Uint8Array(((length + 9 + 63) >> 6) << 6);
+    padded.set(bytes); padded[length] = 0x80;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 8, Math.floor(length / 0x20000000)); view.setUint32(padded.length - 4, (length << 3) >>> 0);
+    const h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const w = new Uint32Array(64), rotr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let offset = 0; offset < padded.length; offset += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      }
+      let [a, b, c, d, e, f, g, k] = h;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + SHA_K[i] + w[i]) >>> 0;
+        const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+        k = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      [a, b, c, d, e, f, g, k].forEach((value, i) => { h[i] = (h[i] + value) >>> 0; });
+    }
+    return h.map(value => value.toString(16).padStart(8, '0')).join('');
+  }
+  function inputDigest(input) {
+    const core = root.TimeAckCore;
+    if (!core?.stored || !core?.canonical) throw Error('Accounting digest unavailable');
+    return sha256Hex(JSON.stringify(core.canonical(core.stored(input))));
+  }
+  const unknownDigest = input => !!input?.compacted && input.digestV !== DIGEST_V;
+  /** same() over two operation inputs, where either may be compacted (compared by digest). */
+  function sameInputWith(same, a, b) {
+    if (!a?.compacted && !b?.compacted) return same(a, b);
+    if (unknownDigest(a) || unknownDigest(b)) return false;
+    const digestOf = input => input.compacted ? input.digest : inputDigest(input);
+    return digestOf(a) === digestOf(b);
+  }
+  /** The facts a repeated eventKey must agree on; compacted inputs carry it as semanticDigest. */
+  function semanticInput(operation) {
+    const facts = clone(operation.input.observation?.facts);
+    if (!facts) return operation.input;
+    if (operation.input.name === 'scheduled-log' && facts.entry) delete facts.entry.updatedAt;
+    return { name: operation.input.name, facts };
+  }
+  function sameSemanticWith(same, a, b) {
+    if (!a.input?.compacted && !b.input?.compacted) return same(semanticInput(a), semanticInput(b));
+    if (unknownDigest(a.input) || unknownDigest(b.input)) return false;
+    const digestOf = op => op.input.compacted ? op.input.semanticDigest : inputDigest(semanticInput(op));
+    return digestOf(a) === digestOf(b);
+  }
+
+  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {}, compaction = {} }) {
     const drains = new Map();
     const failed = new Map();
     // Perf (stabilization 2026-11-19): validation below is a pure function of the stored string, so a string
     // that already passed it is not re-validated. Every caller still gets its own freshly parsed object.
     const validatedRaw = new Map();
+    const elided = new Set(); // no-op hydrates settled by this coordinator without a history record
+    const sameInput = (a, b) => sameInputWith(same, a, b);
     function readStored(slot) {
       try { return storage.getItem(slot); }
       catch (error) { error.accountingStorageRead = true; throw error; }
@@ -131,7 +201,7 @@
       const state = load(reservation.owner);
       const original = [...state.sources || [], ...state.queue, ...state.history,
         ...captures(reservation.owner).map(item => item.captured)].find(item => item.id === reservation.id && item.source);
-      if (!original || !same(original.input, reservation.input)
+      if (!original || !sameInput(original.input, reservation.input)
         || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === reservation[field])
         || typeof result?.ok !== 'boolean') throw Error('Unproven accounting source reservation');
       const id = randomId();
@@ -162,9 +232,11 @@
           const original = [...state.sources, ...state.queue, ...state.history].find(item => item.id === originalId);
           if (captured.phase === 'awaiting-source') {
             if (!original) state.sources.push(captured);
-            else if (!same(original.input, captured.input)) throw Error('Accounting source identity changed');
+            else if (unknownDigest(original.input)) continue; // retained in intake, never thrown (see DIGEST_V)
+            else if (!sameInput(original.input, captured.input)) throw Error('Accounting source identity changed');
           } else {
-            if (!original?.source || !same(original.input, captured.input)
+            if (original && unknownDigest(original.input)) continue;
+            if (!original?.source || !sameInput(original.input, captured.input)
               || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === captured[field])
               || typeof captured.result?.ok !== 'boolean') throw Error('Unreadable accounting source result');
             if (!original.source.outcomes.some(item => item.id === captured.id)) {
@@ -183,17 +255,14 @@
         }
         const known = [...state.queue, ...state.history].find(op => op.id === captured.id
           || (captured.eventKey && op.eventKey === captured.eventKey));
-        const semantic = operation => {
-          const facts = clone(operation.input.observation?.facts);
-          if (!facts) return operation.input;
-          if (operation.input.name === 'scheduled-log' && facts.entry) delete facts.entry.updatedAt;
-          return { name: operation.input.name, facts };
-        };
-        if (known?.id === captured.id && (!same(known.input, captured.input)
+        // A replay against a compacted record of a digest version this build cannot read stays in intake
+        // (retained evidence) instead of throwing on every drain.
+        if (known && unknownDigest(known.input)) continue;
+        if (known?.id === captured.id && (!sameInput(known.input, captured.input)
           || !['owner', 'uid', 'device', 'generation', 'at', 'eventKey', 'dependsOn'].every(field => known[field] === captured[field]))) {
           throw Error('Accounting capture identity changed');
         }
-        if (known && captured.eventKey && !same(semantic(known), semantic(captured))) {
+        if (known && captured.eventKey && !sameSemanticWith(same, known, captured)) {
           // A repeated source identity with different facts is evidence, never silent deduplication.
           if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'occurrence-changed' });
         } else if (!known) state.queue.push(captured);
@@ -253,6 +322,41 @@
         || new Set(proposal.effects.map(effect => effect.id)).size !== proposal.effects.length)) throw Error('Invalid accounting effects');
       return proposal;
     }
+    // Storage-growth A1 (flag compaction.stripFirstHydrate, default off): a first hydrate's frame and raw
+    // source caches are read only by its own prepare. Once it commits with a coherent account read they are
+    // replaced by a digest in the SAME save, unless any queued, sourced, captured or page-held operation
+    // still depends on it (e.g. the legacy-bootstrap capture made during its prepare).
+    function dependedOn(state, id) {
+      return [...state.queue, ...state.sources || [], ...captures(state.owner).map(item => item.captured),
+        ...[...failed.values()].map(item => item.record)].some(item => item.dependsOn === id);
+    }
+    function strippableHydrate(state, operation, receipt) {
+      return operation.input.name === 'hydrate-accounting' && receipt.phase === 'local-applied'
+        && receipt.authority === 'coherent-account-read' && !operation.input.compacted
+        && (operation.input.frame != null || operation.input.sourceCaches != null) && !dependedOn(state, operation.id);
+    }
+    function compactedHydrateInput(operation) {
+      const input = operation.input, length = value => value == null ? 0 : JSON.stringify(value).length;
+      return { name: input.name, confirmedOnly: input.confirmedOnly, compacted: 1, digestV: DIGEST_V,
+        digest: inputDigest(input), semanticDigest: inputDigest(semanticInput(operation)),
+        bytes: { frame: length(input.frame), sourceCaches: Object.fromEntries(Object.entries(input.sourceCaches || {}).map(([key, raw]) => [key, length(raw)])) } };
+    }
+    // Storage-growth B (flag compaction.elideNoopHydrate, default off): a hydrate after the first commit that
+    // changes nothing is settled without a history record or a generation bump. "Nothing" means the whole
+    // projection (view fields included) equals committed.value, it carries no evidence, nothing depends on it,
+    // and every settled write equals the newest value history already holds for that path (the same
+    // first-seen-per-path rule the observation ancestry walk uses).
+    function noopHydrate(state, operation, proposal) {
+      if (operation.input.name !== 'hydrate-accounting' || !state.committed || proposal.evidence != null
+        || dependedOn(state, operation.id) || !same(proposal.projection, state.committed.value)) return false;
+      const latest = {};
+      for (const item of [...state.history].reverse()) {
+        for (const [path, value] of Object.entries(item.settledWrites || item.proposal?.patch || {})) {
+          if (!Object.hasOwn(latest, path)) latest[path] = value;
+        }
+      }
+      return Object.entries(proposal.settledWrites || {}).every(([path, value]) => Object.hasOwn(latest, path) && same(latest[path], value));
+    }
     function commitProjection(state, operation, projection, context, details) {
       validateProjection(clone(projection), operation.owner);
       const generation = state.generation + 1;
@@ -269,7 +373,9 @@
         }
       }
       const { effectName, deliverEffects, ...receipt } = details;
-      next.history.push({ ...clone(operation), ...clone(receipt), appliedGeneration: generation });
+      const record = { ...clone(operation), ...clone(receipt), appliedGeneration: generation };
+      if (compaction.stripFirstHydrate === true && strippableHydrate(next, operation, receipt)) record.input = compactedHydrateInput(operation);
+      next.history.push(record);
       save(next); Object.assign(state, next);
       if (attached(context)) apply(clone(projection), clone(committed));
       return generation;
@@ -343,6 +449,14 @@
           return retained(update(state, operation, { phase: 'conflict', reason: 'confirmed-refresh-must-be-read-only' }));
         }
         if (['hydrate-accounting', 'native-usage', 'legacy-accounting-caches'].includes(operation.input.name) && proposal?.localOnly === true && proposal.projection) {
+          if (compaction.elideNoopHydrate === true && noopHydrate(state, operation, proposal)) {
+            validateProjection(clone(proposal.projection), operation.owner);
+            const next = clone(state);
+            next.queue = next.queue.filter(item => item.id !== operation.id);
+            save(next); Object.assign(state, next); elided.add(operation.id);
+            if (attached(context)) apply(clone(proposal.projection), clone(state.committed));
+            return { status: 'applied', id: operation.id, generation: state.generation, noop: true };
+          }
           const generation = commitProjection(state, operation, proposal.projection, context, { phase: 'local-applied',
             authority: operation.input.name === 'native-usage' ? 'retained-native-result-and-coherent-read'
               : operation.input.name === 'legacy-accounting-caches' ? 'legacy-caches-on-server' : 'coherent-account-read',
@@ -435,7 +549,8 @@
           if (!refresh) throw error;
           const settled = state.history.find(item => item.id === refresh.id);
           if (settled) {
-            if (!same(settled.input, refresh.input)) throw Error('Accounting capture identity changed');
+            // A read-only refresh already settled under an unreadable digest version is not re-run or thrown on.
+            if (!unknownDigest(settled.input) && !sameInput(settled.input, refresh.input)) throw Error('Accounting capture identity changed');
           } else if (!state.queue.some(item => item.id === refresh.id)) { state.queue.push(refresh); save(state); }
           // The queue/history now durably owns this read; its intake cannot replay the receipt.
           storage.removeItem(prefix(context.owner) + refresh.id);
@@ -486,8 +601,11 @@
     function submit(input, options) {
       const operation = capture(input, options);
       options?.onCaptured?.(clone(operation));
-      return drain().then(result => ({ ...result, capturedId: operation.id,
-        ownApplied: load(operation.owner).history.some(item => item.id === operation.id && item.phase === 'local-applied') }));
+      return drain().then(result => {
+        const ownApplied = load(operation.owner).history.some(item => item.id === operation.id && item.phase === 'local-applied');
+        // An elided no-op hydrate settled without a history record; it is settled, not retained.
+        return { ...result, capturedId: operation.id, ownApplied, ownSettled: ownApplied || elided.has(operation.id) };
+      });
     }
     function cancel(id) {
       const context = clone(identity());
@@ -544,5 +662,6 @@
     return { capture, failedCaptures, reserveSource: (input, options) => capture(input, { ...options, source: true }), completeSource,
       submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)) };
   }
-  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, clone, pathValue, pathAllowed, createCoordinator };
+  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, DIGEST_V, clone, pathValue, pathAllowed, createCoordinator,
+    sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b) };
 })(globalThis);
