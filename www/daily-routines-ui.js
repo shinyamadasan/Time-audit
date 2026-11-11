@@ -53,6 +53,11 @@ function scheduleLabel(r) {
 function button(action, id, label) {
   return `<button type="button" class="btn sm" data-routine-action="${action}" data-routine-id="${escape(id)}" data-routine-owner="${escape(appRoomOwner() || '')}">${label}</button>`;
 }
+// The Learning Plan a learning routine's instance is bound to, by its CURRENT title (renames show up);
+// falls back to the title captured when the instance was bound. Read-only: no new association.
+function learningPlanTitle(link) {
+  return view.plans.find(p => p.id === link.planId)?.title || link.planTitle || 'Learning Plan';
+}
 function renderCard(item, completion, status) {
   const r = item.routine;
   const link = view.state.links[item.id];
@@ -76,7 +81,7 @@ function renderCard(item, completion, status) {
   if (completion?.level === 'incomplete' && completion.duration) note = `${completion.duration} min recorded · below minimum/target.`;
   return `<article class="daily-routine-card" data-instance-id="${escape(item.id)}">
     <div><strong>${complete ? '✓ ' : ''}${escape(r.title)}</strong>
-    ${r.source === 'learning' && hasStep ? `<div>${escape(link.stepTitle)}</div>` : ''}
+    ${r.source === 'learning' && hasStep ? `<div class="routine-learning">${escape(learningPlanTitle(link))} · Today's step: ${escape(link.stepTitle)}</div>` : ''}
     <div class="routine-meta">${escape(scheduleLabel(r))} · Target ${r.targetMinutes} min${r.minimumMinutes ? ` · Minimum ${r.minimumMinutes} min` : ''}</div>
     <div class="routine-meta">${escape(status.label)}${completion ? ` · ${completion.source === 'manual' ? 'Manual assertion' : 'Source completion'}` : ''}${streak ? ` · ${streak} consecutive calendar day${streak === 1 ? '' : 's'}` : ''}</div>
     ${note ? `<div class="routine-meta">${escape(note)}</div>` : ''}</div><div class="routine-actions">${actions}</div></article>`;

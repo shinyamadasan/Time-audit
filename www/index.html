@@ -468,6 +468,7 @@
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
     </div>
     <div id="timeline-anytime" hidden></div>
+    <section id="sop-execution" class="sop-execution" aria-label="Procedures (SOPs)"></section>
     <div id="timeline-blocks"></div>
   </div>
 
@@ -1781,6 +1782,8 @@
     "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261101-task039-shipped-capability-v1",
     "./capability-career-repository.js": "./capability-career-repository.js?v=20261101-task039-shipped-capability-v1",
     "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261101-task039-shipped-capability-v1",
+    "./sop-model.js": "./sop-model.js?v=20261111-my-day-learning-execution-candidate",
+    "./sop-repository.js": "./sop-repository.js?v=20261111-my-day-learning-execution-candidate",
     "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261101-task039-shipped-capability-v1",
     "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261101-task039-shipped-capability-v1",
     "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261101-task039-shipped-capability-v1",
@@ -1811,6 +1814,7 @@
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="daily-routines-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="sop-ui.js?v=20261111-my-day-learning-execution-candidate"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20261101-task039-shipped-capability-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
@@ -6452,9 +6456,16 @@ function renderPlannedTimelineRow(row, editable, { completable = editable, toggl
   return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}${row.carryIn ? ' tl-carry-in' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}">
     <div class="tl-time">${timelineRowEscape(startLabel)}</div><div class="tl-bar-col tl-bar-plan"></div>
     <button class="tl-plan-check" onclick="${toggleFn}('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${completable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
-    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · Planned time only</div></div>
+    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · Planned time only</div>${sopBadgeHtml(row)}</div>
     ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
   </div>`;
+}
+
+/** My Day execution task: the linked SOP's run line for a plan row, or '' (unlinked rows unchanged).
+ *  Read-only over sop-ui.js's device-local SOP store; never writes the plan item. */
+function sopBadgeHtml(row) {
+  if (!row || !row.itemId || !globalThis.SopUI) return '';
+  try { return globalThis.SopUI.badgeHtml(String(row.itemId)); } catch { return ''; }
 }
 
 function renderAnytimeLane(rows, editable) {
@@ -6466,7 +6477,7 @@ function renderAnytimeLane(rows, editable) {
     const title = timelineRowEscape(row.title);
     if (row.sourceType === 'commitment') return `<div class="anytime-row" data-commitment-id="${timelineRowEscape(row.commitmentId)}"><span class="anytime-marker" aria-hidden="true">◆</span><div class="anytime-title">${title}</div><span class="anytime-type">Commitment · date only</span>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}</div>`;
     const star = row.planKind === 'priority' ? '<span class="anytime-star" aria-label="Top Priority">★</span>' : '';
-    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
+    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${sopBadgeHtml(row)}${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
   }).join('');
   const more = rows.length > 4 ? `<button class="pc-more" onclick="toggleTimelineAnytime()">${timelineAnytimeExpanded ? 'Show less' : `Show ${rows.length - 4} more`}</button>` : '';
   root.hidden = false;
@@ -8018,6 +8029,7 @@ function renderToday() {
     }
     const editable = isTimelineTargetEditable(timelineTarget);
     renderAnytimeLane(projection.anytime, editable);
+    globalThis.SopUI?.setMyDayTasks([...projection.anytime, ...projection.positioned], editable);
     const base = assembleTodayTimeline(displayTimelineE, myDay, { includeGaps: viewingCurrentTimeline, templateEntries: dailyViewTemplates });
     const sourceOrder = item => item._timelinePlanned ? (item.sourceType === 'planned-task' ? 0 : 1) : item.template ? 2 : item.isGap ? 4 : 3;
     const rowId = item => String(item.id || item.templateId || '');

@@ -144,3 +144,22 @@ test('repository: an invalid change is refused and nothing is written', () => {
   assert.throws(() => repo.update(s => ({ ...s, links: { pX: { sopId: 'missing', linkedAt: T } } })), /Invalid SOP link/);
   assert.equal(storage.map.size, 0);
 });
+
+// ── My Day execution-task helpers (sop-ui.js, pure parts) ────────────────────
+import { runSummary, linkableTasks } from './sop-ui.js';
+
+test('My Day run line: progress + next step, "All steps done" when complete, nothing when unlinked', () => {
+  const { sop, state } = withSop();
+  let s = linkSop(state, 'pTask1', sop.id, T);
+  assert.equal(runSummary(sopRunView(s, 'pTask1')), 'SOP 0/3 · Next: Clear inbox');
+  for (const step of sop.steps) s = setStepChecked(s, 'pTask1', step.id, true, T + 1);
+  assert.equal(runSummary(sopRunView(s, 'pTask1')), 'SOP 3/3 · All steps done');
+  assert.equal(runSummary(sopRunView(s, 'pRegular')), null);
+});
+
+test('only open, unlinked My Day tasks are offered for linking', () => {
+  const { sop, state } = withSop();
+  const s = linkSop(state, 'pLinked', sop.id, T);
+  const tasks = [{ itemId: 'pLinked', done: false }, { itemId: 'pDone', done: true }, { itemId: 'pOpen', done: false }];
+  assert.deepEqual(linkableTasks(tasks, s).map(t => t.itemId), ['pOpen']);
+});
