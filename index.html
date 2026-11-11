@@ -2681,8 +2681,13 @@ function phoneUsageDependency(coordinator, owner) {
 }
 
 function accountingCapturedCommands(coordinator, owner) {
+  // An intake slot whose id is already in history is a retained replay (e.g. against a compacted record of an
+  // unknown digest version), not a pending command: it must not become the dependency frontier for new commands.
+  let settled = new Set();
+  try { settled = new Set(coordinator.snapshot(owner).history.map(item => item.id)); } catch {}
   return [...coordinator.captures(owner), ...coordinator.failedCaptures(owner).map(captured => ({ captured }))]
     .sort((a, b) => a.captured.at - b.captured.at || a.captured.id.localeCompare(b.captured.id))
+    .filter(item => !settled.has(item.captured.id))
     .filter(item => item.captured.input.name !== 'hydrate-accounting' && item.captured.phase !== 'awaiting-source'
     && item.captured.phase !== 'provisional-observation'
     && (item.captured.phase !== 'source-result' || item.captured.result?.ok))

@@ -255,9 +255,15 @@
         }
         const known = [...state.queue, ...state.history].find(op => op.id === captured.id
           || (captured.eventKey && op.eventKey === captured.eventKey));
-        // A replay against a compacted record of a digest version this build cannot read stays in intake
-        // (retained evidence) instead of throwing on every drain.
-        if (known && unknownDigest(known.input)) continue;
+        if (known && unknownDigest(known.input)) {
+          // An exact replay against a compacted record of a digest version this build cannot read stays in
+          // intake (retained evidence) instead of throwing on every drain.
+          if (known.id === captured.id) continue;
+          // A NEW capture sharing an eventKey with such a record can be neither de-duplicated nor compared:
+          // it is held for resolution, never silently dropped or re-executed.
+          if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'digest-version-unknown' });
+          save(state); storage.removeItem(slot); continue;
+        }
         if (known?.id === captured.id && (!sameInput(known.input, captured.input)
           || !['owner', 'uid', 'device', 'generation', 'at', 'eventKey', 'dependsOn'].every(field => known[field] === captured[field]))) {
           throw Error('Accounting capture identity changed');
@@ -344,8 +350,8 @@
     // Storage-growth B (flag compaction.elideNoopHydrate, default off): a hydrate after the first commit that
     // changes nothing is settled without a history record or a generation bump. "Nothing" means the whole
     // projection (view fields included) equals committed.value, it carries no evidence, nothing depends on it,
-    // and every settled write equals the newest value history already holds for that path (the same
-    // first-seen-per-path rule the observation ancestry walk uses).
+    // and the server is unchanged since the last commit: every settled write equals the newest value history
+    // already holds for that path. (That last check is redundant with projection equality, and fail-safe.)
     function noopHydrate(state, operation, proposal) {
       if (operation.input.name !== 'hydrate-accounting' || !state.committed || proposal.evidence != null
         || dependedOn(state, operation.id) || !same(proposal.projection, state.committed.value)) return false;
@@ -429,7 +435,7 @@
       // A conflict found while planning (nothing sealed or sent) is planned again on the next drain, so it clears
       // once the data no longer conflicts. Intake, device and sealed-proposal conflicts stay held. Conflicts stored by
       // the first accounting release carry no flag, so they are judged by reason.
-      const heldReasons = ['occurrence-changed', 'source-result-changed', 'captured-owner-device', 'cyclic-command-dependency'];
+      const heldReasons = ['occurrence-changed', 'source-result-changed', 'captured-owner-device', 'cyclic-command-dependency', 'digest-version-unknown'];
       if (operation.phase === 'conflict' && (operation.proposal
         || !(operation.replannable || operation.replannable === undefined && !heldReasons.includes(operation.reason)))) return retained(operation);
       if (transport.enforcesAccounting !== true) {
@@ -602,9 +608,14 @@
       const operation = capture(input, options);
       options?.onCaptured?.(clone(operation));
       return drain().then(result => {
-        const ownApplied = load(operation.owner).history.some(item => item.id === operation.id && item.phase === 'local-applied');
-        // An elided no-op hydrate settled without a history record; it is settled, not retained.
-        return { ...result, capturedId: operation.id, ownApplied, ownSettled: ownApplied || elided.has(operation.id) };
+        const state = load(operation.owner);
+        const ownApplied = state.history.some(item => item.id === operation.id && item.phase === 'local-applied');
+        // An elided no-op hydrate settled without a history record; it is settled, not retained. Another tab
+        // may have elided it: a hydrate that is nowhere (queue, history, intake, page-held) was settled.
+        const nowhere = operation.input.name === 'hydrate-accounting'
+          && ![...state.queue, ...state.history, ...state.sources || [], ...captures(operation.owner).map(item => item.captured)].some(item => item.id === operation.id)
+          && !failed.has(operation.id);
+        return { ...result, capturedId: operation.id, ownApplied, ownSettled: ownApplied || elided.has(operation.id) || nowhere };
       });
     }
     function cancel(id) {

@@ -187,3 +187,31 @@ test('B: an echo hydrate while a command is held is settled (no "retained" outco
   assert.deepEqual(c.snapshot().queue.map(item => item.input.name), ['start-timer']);
   assert.ok(f.applied.length > appliedBefore);
 });
+
+test('R2: a NEW capture sharing an eventKey with an unknown-digest record is held as a conflict, never dropped or thrown', async () => {
+  const f = fixture({ stripFirstHydrate: true });
+  const c = f.create();
+  await c.submit({ ...firstHydrate(), eventKeyProbe: 1 }, { eventKey: 'probe:1' });
+  const state = envelope(f);
+  state.history[0].input.digestV = AC.DIGEST_V + 1;
+  f.values.set(`${BASE}:${OWNER}`, JSON.stringify(state));
+  const fresh = f.create();
+  const newcomer = fresh.capture({ name: 'automatic-log', observation: { facts: { n: 1 } } }, { eventKey: 'probe:1' });
+  const result = await fresh.drain();
+  assert.notEqual(result.status, 'drained');
+  const held = fresh.snapshot().queue.find(item => item.id === newcomer.id);
+  assert.equal(held.phase, 'conflict');
+  assert.equal(held.reason, 'digest-version-unknown');
+  assert.equal([...f.values.keys()].some(key => key.endsWith(newcomer.id)), false, 'the queue now owns it durably');
+});
+
+test('m2: a hydrate elided by ANOTHER tab is reported settled, not retained', async () => {
+  const f = fixture({ elideNoopHydrate: true });
+  const tabA = f.create(), tabB = f.create();
+  await tabA.submit({ name: 'hydrate-accounting', confirmedOnly: false });
+  const drainB = tabB.drain(); // tab B takes the lock first and elides tab A's capture
+  const outcome = await tabA.submit({ name: 'hydrate-accounting', confirmedOnly: false });
+  await drainB;
+  assert.equal(outcome.ownApplied, false);
+  assert.equal(outcome.ownSettled, true);
+});
