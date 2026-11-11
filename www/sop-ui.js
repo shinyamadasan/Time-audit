@@ -27,6 +27,7 @@ const randomId = () => {
 
 export function createSopUi({ repository = createSopRepository(), root = () => document.getElementById('sop-execution'), refreshMyDay = () => globalThis.refreshMyDayTimeline?.() } = {}) {
   let tasks = [];          // [{ itemId, dayId, title, done }] from the rendered My Day
+  let tasksLoaded = false; // My Day has handed over its rows at least once
   let editable = false;
   let openItemId = null;
   let error = '';
@@ -45,7 +46,9 @@ export function createSopUi({ repository = createSopRepository(), root = () => d
     return `<div class="sop-badge">${escape(summary)} <button type="button" class="btn sm ghost" data-sop-open="${escape(itemId)}">Open SOP</button></div>`;
   }
 
-  function render() {
+  // Every panel render also refreshes My Day's "Today's work" tile (read-only).
+  function render() { renderPanel(); globalThis.DailyCommandCenter?.refreshWork?.(); }
+  function renderPanel() {
     const el = root();
     if (!el) return;
     const state = read();
@@ -121,11 +124,20 @@ export function createSopUi({ repository = createSopRepository(), root = () => d
   return {
     badgeHtml,
     render,
+    /** My Day Command Center V1: read-only counts over today's My Day tasks; null until My Day has rendered or SOP storage is unreadable. */
+    summary() {
+      if (!tasksLoaded) return null;
+      const state = read();
+      if (!state) return null;
+      const runs = tasks.map(t => sopRunView(state, t.itemId)).filter(Boolean);
+      return { tasks: { total: tasks.length, done: tasks.filter(t => t.done).length }, sop: { linked: runs.length, complete: runs.filter(r => r.complete).length } };
+    },
     /** Called by index.html each time My Day's plan rows are rendered. */
     setMyDayTasks(rows, isEditable) {
       tasks = (Array.isArray(rows) ? rows : []).filter(row => row && row.itemId && row.sourceType !== 'commitment')
         .map(row => ({ itemId: String(row.itemId), dayId: String(row.dayId || ''), title: String(row.title || ''), done: !!row.done }));
       editable = !!isEditable;
+      tasksLoaded = true;
       if (openItemId && !tasks.some(t => t.itemId === openItemId)) openItemId = null;
       render();
     },

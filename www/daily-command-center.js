@@ -153,12 +153,45 @@
     byId('command-next').textContent = next ? `Next · ${next.task}${next.when ? ` · ${next.when}` : ' · Anytime'}` : 'Next · Nothing else planned';
     byId('command-next').hidden = !isViewingToday();
   }
+  // My Day Command Center V1: one read-only line each for tasks, learning and SOP runs, with a
+  // button that scrolls to the My Day section that already manages it. Never writes anything.
+  function refreshWork() {
+    const tile = byId('command-work');
+    const model = globalThis.MyDayWorkModel;
+    if (!tile || !model) return;
+    tile.hidden = !isViewingToday();
+    if (tile.hidden) return;
+    let sop = null, learning = null;
+    try { sop = globalThis.SopUI?.summary?.() ?? null; } catch { sop = null; }
+    try { learning = globalThis.DailyRoutinesUI?.todayLearning?.() ?? null; } catch { learning = null; }
+    const list = document.createElement('ul'); list.className = 'command-work-lines';
+    for (const line of model.workLines({tasks: sop && sop.tasks, learning, sop: sop && sop.sop})) {
+      const item = document.createElement('li'); item.dataset.workLine = line.key;
+      const text = document.createElement('span'); text.textContent = line.text;
+      item.append(text, button('Show', () => byId(line.target)?.scrollIntoView({behavior:'smooth',block:'start'}), 'ghost'));
+      list.append(item);
+    }
+    const old = tile.querySelector('.command-work-lines');
+    if (old) old.replaceWith(list); else tile.append(list);
+  }
+  function submitCapture(event) {
+    event.preventDefault();
+    const input = byId('command-capture-text');
+    const status = byId('command-capture-status');
+    const ui = globalThis.BrainDumpUI;
+    if (!input || !ui?.capture) { showToast('Brain Dump is still loading.'); return; }
+    let result;
+    try { result = ui.capture(input.value); } catch (err) { result = {ok:false}; showToast(err.message); }
+    if (result.ok) { input.value = ''; status.textContent = 'Captured. Triage it in Brain Dump or the plan tray.'; }
+    else { status.textContent = 'Type something to capture.'; input.focus(); }
+  }
   function refresh() {
     const context = `${accountLocalKey('command-center')}|${byId('timeline-date-label')?.textContent || ''}`;
     if (viewKey !== context) { selected = null; viewKey = context; }
     byId('timeline-blocks')?.querySelectorAll('.tl-row').forEach(enhanceRow);
     byId('timeline-anytime')?.querySelectorAll('.anytime-row').forEach(enhanceRow);
     refreshOverview();
+    refreshWork();
   }
   function initialize() {
     const today = byId('view-today');
@@ -171,14 +204,20 @@
       else showToast('Planning is still loading.');
     }));
     const capture = document.createElement('section'); capture.className = 'command-tile';
-    capture.innerHTML = '<h2>Brain Dump</h2><p>Capture ideas. Bring what matters into your plan.</p>';
+    capture.innerHTML = '<h2>Brain Dump</h2><p>Capture ideas. Bring what matters into your plan.</p>'
+      + '<form id="command-capture-form" class="command-capture">'
+      + '<input id="command-capture-text" type="text" maxlength="1000" aria-label="Capture to Brain Dump" autocomplete="off" placeholder="Capture a thought…">'
+      + '<button type="submit" class="btn sm primary">Capture</button></form><p id="command-capture-status" class="routine-meta" role="status"></p>';
+    capture.querySelector('form').addEventListener('submit', submitCapture);
     capture.append(button('Open Brain Dump', () => showView('braindump')));
+    const work = document.createElement('section'); work.id = 'command-work'; work.className = 'command-tile';
+    work.innerHTML = "<h2>Today’s work</h2>";
     const upNext = byId('up-next');
-    upNext.before(overview); overview.append(upNext,priorities,preparation,capture);
+    upNext.before(overview); overview.append(upNext,priorities,preparation,capture,work);
     const next = document.createElement('p'); next.id = 'command-next'; upNext.append(next);
     const brand = document.createElement('div'); brand.className = 'command-brand'; brand.innerHTML = 'Chrona<span>Sense</span>';
     today.prepend(brand);
-    globalThis.DailyCommandCenter = {refresh};
+    globalThis.DailyCommandCenter = {refresh, refreshWork};
     refresh();
   }
   initialize();

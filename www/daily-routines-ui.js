@@ -58,6 +58,21 @@ function button(action, id, label) {
 function learningPlanTitle(link) {
   return view.plans.find(p => p.id === link.planId)?.title || link.planTitle || 'Learning Plan';
 }
+// A learning routine's bound step still exists in its plan (the card's "Today's step" condition).
+function learningStepExists(r, link) {
+  return !!(link && link.planId === r.planId && view.plans.some(p => p.id === link.planId && p.phases.some(ph => ph.lessons.some(l => l.steps.some(s => s.id === link.stepId)))));
+}
+/** My Day Command Center V1: today's learning steps exactly as the cards show them; null until rendered. Read-only. */
+export function todayLearning() {
+  if (!view || view.browsingHistory) return null;
+  return view.instances.filter(item => item.routine.source === 'learning')
+    .map(item => ({ item, link: view.state.links[item.id] }))
+    .filter(({ item, link }) => learningStepExists(item.routine, link))
+    .map(({ item, link }) => {
+      const completion = matchCompletion(item, view.input, view.now);
+      return { planTitle: learningPlanTitle(link), stepTitle: link.stepTitle, complete: !!completion && completion.level !== 'incomplete' };
+    });
+}
 function renderCard(item, completion, status) {
   const r = item.routine;
   const link = view.state.links[item.id];
@@ -67,7 +82,7 @@ function renderCard(item, completion, status) {
     const result = matchCompletion(historical, view.input, view.now);
     return !!result && result.level !== 'incomplete';
   });
-  const hasStep = r.source !== 'learning' || (link && link.planId === r.planId && view.plans.some(p => p.id === link.planId && p.phases.some(ph => ph.lessons.some(l => l.steps.some(s => s.id === link.stepId)))));
+  const hasStep = r.source !== 'learning' || learningStepExists(r, link);
   let actions = !complete ? button('skip', r.id, 'Skip today') : '';
   if (!complete && r.source === 'manual') {
     actions = button('done', r.id, 'Done') + (r.minimumMinutes ? button('minimum', r.id, 'Minimum done') : '') + actions;
@@ -116,6 +131,7 @@ export function renderDailyRoutines() {
     if (html !== rendered) { list.innerHTML = html; rendered = html; }
     error.textContent = '';
     globalThis.renderTodayActionStrip?.();
+    globalThis.DailyCommandCenter?.refreshWork?.();
   } catch (err) { view = null; message(err); }
 }
 function updateFields() {
@@ -225,6 +241,7 @@ globalThis.onDailyRoutineFocusCompleted = (entry, startedAt, endedAt, capturedLi
   } catch (err) { message(err); globalThis.showToast(`Focus saved; routine completion could not be saved: ${err.message}`); return false; }
 };
 globalThis.renderDailyRoutines = renderDailyRoutines;
+globalThis.DailyRoutinesUI = { todayLearning };
 /** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Closes every
  *  routine dialog (an editor filled from the previous account included), drops the cached view, and
  *  re-renders from the new owner's slot. Called synchronously by storage.js. */

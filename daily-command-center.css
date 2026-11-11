@@ -262,3 +262,10 @@ body.view-today .nav-log{font-family:var(--ui);min-height:48px}
 #view-today #needs-you h2{display:flex;align-items:center;gap:var(--space-2)}
 #view-today #needs-you-count{font:500 12px/1.5 var(--ui);color:var(--muted)}
 #view-today #sleep-needs-item:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3)}
+/* My Day Command Center V1: inline Brain Dump capture and the "Today's work" lines. */
+.command-capture{display:flex;gap:6px;margin:6px 0 2px}
+.command-capture input{flex:1;min-width:0}
+.command-work-lines{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.command-work-lines li{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.command-work-lines li span{min-width:0;overflow-wrap:anywhere}
+#command-overview #command-work{grid-column:1/-1}

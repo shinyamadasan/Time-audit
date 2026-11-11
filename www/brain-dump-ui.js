@@ -283,16 +283,23 @@ export function render() {
   if (form) form.addEventListener('submit', e => { e.preventDefault(); submitCapture(); });
 }
 
+// The one capture path, shared by the Brain Dump view and My Day's inline capture
+// (My Day Command Center V1): same repository create, same sync, same re-render.
+export function capture(text) {
+  const result = repository().create({ text, now: Date.now(), updatedBy: deviceId() });
+  if (!result.ok) return { ok: false, reason: result.reason || 'invalid-input' };
+  if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
+  render();
+  return { ok: true };
+}
+
 function submitCapture() {
   const input = document.getElementById('bd-capture-text');
   const text = input ? input.value : '';
-  const result = repository().create({ text, now: Date.now(), updatedBy: deviceId() });
-  if (!result.ok) {
+  if (!capture(text).ok) {
     if (input) input.focus();
     return;
   }
-  if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
-  render();
   const freshInput = document.getElementById('bd-capture-text');
   if (freshInput) freshInput.focus();
 }
@@ -723,7 +730,7 @@ async function trayPlace(button, kind) {
 }
 
 if (typeof window !== 'undefined') {
-  window.BrainDumpUI = { render, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate, toggleHandledEdit, saveHandledEdit, reopen, openInPlan, renderTray, toggleTray, showAllTray, trayPlace };
+  window.BrainDumpUI = { render, capture, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate, toggleHandledEdit, saveHandledEdit, reopen, openInPlan, renderTray, toggleTray, showAllTray, trayPlace };
   // My Day's plan surfaces refresh on every authoritative plan change; the tray's
   // day labels and Tomorrow availability depend on that same state.
   globalThis.refreshBrainDumpTray = renderTray;
