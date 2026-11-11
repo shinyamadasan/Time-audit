@@ -184,7 +184,7 @@ const panel = page => page.locator('#sop-execution');
 async function createSop(page, title, steps) {
   await panel(page).locator('summary', { hasText: 'Procedures (SOPs)' }).click();
   await panel(page).locator('.sop-new summary').click();
-  await panel(page).locator('.sop-create-form [name=title]').fill(title);
+  await panel(page).locator('.sop-create-form [name="sop-title"]').fill(title);
   await panel(page).locator('.sop-create-form [name=steps]').fill(steps.join('\n'));
   await panel(page).getByRole('button', { name: 'Save SOP', exact: true }).click();
 }

@@ -67,7 +67,7 @@ export function createSopUi({ repository = createSopRepository(), root = () => d
         + ' <button type="submit" class="btn sm">Link SOP</button></form>';
     }
     html += '<details class="sop-new"><summary>New SOP</summary><form class="sop-create-form">'
-      + '<label>Title <input name="title" maxlength="200" required></label>'
+      + '<label>Title <input name="sop-title" maxlength="200" required></label>'
       + '<label>Steps (one per line) <textarea name="steps" rows="4" required></textarea></label>'
       + '<button type="submit" class="btn sm">Save SOP</button></form></details>';
     if (state.sops.length) {
@@ -107,7 +107,7 @@ export function createSopUi({ repository = createSopRepository(), root = () => d
     const data = new FormData(form);
     if (form.classList.contains('sop-create-form')) {
       try {
-        const sop = createSop(String(data.get('title') || ''), String(data.get('steps') || '').split('\n'), { randomId });
+        const sop = createSop(String(data.get('sop-title') || ''), String(data.get('steps') || '').split('\n'), { randomId });
         change(s => upsertSop(s, sop));
       } catch (e) { error = e.message; render(); }
     } else if (form.classList.contains('sop-link-form') && editable) {
