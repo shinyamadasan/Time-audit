@@ -2396,6 +2396,35 @@ constraints:
 verification:
   - Red then green specs; npm test; release-artifact suite; independent review.
 
+### TASK-040 - Claude connector requests plan write on connect
+status: in-progress
+owner: claude
+source: owner-direct
+priority: P2
+depends-on: none
+files: workers/chronasense-conversational-bridge/src/index.js, workers/chronasense-conversational-bridge/test/oauth.test.js (and other worker tests only if the change breaks them), workers/chronasense-conversational-bridge/README.md (scope note only), TASKS.md (this entry), CHANGELOG.md, TEST_REPORT.md
+context:
+  Owner messages 2026-11-13 (session claude/chronasense-schedule-t2kayk): the owner wants Claude to be able to add
+  schedule items ("2-4 pm pickleball"). Claude's connector asks only for the scope the worker's 401 challenge names, which
+  is `requiredScopes: [chronasense:read]` (index.js:18), so its consent page offers read only and Claude never steps up on
+  `insufficient_scope`. Owner chose, when offered three options, "Require write for everyone": make every connection
+  request read + plan write, accepting that no connection can be read-only afterwards.
+objective:
+  A new Claude connection requests and is offered `chronasense:read` + `chronasense:plan.write` on connect.
+acceptance:
+  - [ ] `requiredScopes` is `[chronasense:read, chronasense:plan.write]`; the connect-time challenge and protected-resource
+        metadata name both. Brain Dump write (`chronasense:brain-dump.write`) is NOT added.
+  - [ ] The consent page for a read + plan.write request states the plan-write grant (existing text path).
+  - [ ] Worker tests updated for the new default and still pass; the read-only-grant refusal is covered by a test.
+  - [ ] Impact documented: existing read-only grants must reconnect.
+constraints:
+  - Red-zone (auth/security): held at `approved` for the owner's merge. NO deploy, no Cloudflare change, no secret or
+    production data change. Deploy is a separate owner approval via scripts/deploy.mjs.
+  - No new tools, no change to tool behavior, no change to plan write semantics.
+  - STOP if the OAuth library cannot express this without a wider change.
+verification:
+  - [ ] `npm test` in the worker, `npm run check:bundle`, git diff --check.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

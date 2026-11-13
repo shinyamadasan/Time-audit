@@ -36,7 +36,8 @@ test('OAuth configuration is CIMD-enabled, DCR-disabled, read by default with di
   assert.deepEqual(options.scopesSupported, [READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE, OFFLINE_ACCESS_SCOPE]);
   assert.equal(options.accessTokenTTL, 15 * 60);
   assert.equal(options.refreshTokenTTL, 14 * 24 * 60 * 60);
-  assert.deepEqual(options.requiredScopes, [READ_SCOPE]);
+  // TASK-040: the connect-time challenge names read + plan write so Claude requests both up front.
+  assert.deepEqual(options.requiredScopes, [READ_SCOPE, PLAN_WRITE_SCOPE]);
   assert.equal(options.resourceMetadata.resource, RESOURCE);
   assert.equal(options.allowTokenExchangeGrant, false);
   assert.equal(ISSUER, 'https://chronasense-conversational-bridge.shinyamadasan.workers.dev');

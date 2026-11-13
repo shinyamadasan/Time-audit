@@ -3233,3 +3233,6 @@ red: new spec reproduced the production queue (legacy-source-needs-resolution, s
 green: new spec 8/8 (both accounts where applicable); required accounting suite 490/490 (2 workers, 17.6 min); npm test exit 0 (2,413 tests, 0 failed).
 review: independent fresh-context review APPROVE after two fix rounds (open-session settle, re-plan scope, legacy-time-ack and hydrate keep-server, runtime content check, slot queue check).
 not run locally: wider browser suite, packaged release spec (CI).
+### TASK-040 - Claude connector requests plan write on connect (November 13, 2026)
+green: worker npm test 55/55. The real OAuth library needs the Cloudflare runtime so it could not run in Node; its source (buildWwwAuthenticateHeader, withRequiredScopes) was read to confirm challenge and metadata scopes come from requiredScopes.
+not run: npm run check:bundle, live consent page, live Claude reconnect (needs approved deploy). Red-zone: held at approved.
