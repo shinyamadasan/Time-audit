@@ -2760,7 +2760,33 @@ function accountingFieldUnchanged(field, a, b) {
 // Storage-growth flags (release N+1 candidates). Both default OFF; unreadable storage means OFF.
 function accountingCompactionFlags() {
   const on = key => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
-  return { stripFirstHydrate: on('ta3-accounting-flag-strip-first-hydrate'), elideNoopHydrate: on('ta3-accounting-flag-elide-noop-hydrate') };
+  return { stripFirstHydrate: on('ta3-accounting-flag-strip-first-hydrate'), elideNoopHydrate: on('ta3-accounting-flag-elide-noop-hydrate'),
+    refFirstHydrate: on('ta3-accounting-flag-ref-first-hydrate') };
+}
+
+// Storage-growth A1b (flag ta3-accounting-flag-ref-first-hydrate, default OFF): a first hydrate captures each
+// large frame field and raw cache as a SHA-256 reference to the live value instead of a second full copy in its
+// intake slot (~414 chars per entry, held beside the envelope and the caches until import). A reference is only
+// read if the hydrate prepares with no committed projection; a referenced value that changed since capture is a
+// conflict, never a guess. Digests use the same canonical bytes as TimeAckCore.same(); raw caches hash exactly.
+const HYDRATE_REF_MIN = 2048;
+function hydrateRef(value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? null);
+  if (text.length < HYDRATE_REF_MIN) return value;
+  return { $hydrateRef: 1, chars: text.length,
+    digest: typeof value === 'string' ? 's:' + AccountingCommand.sha256Hex(value) : AccountingCommand.inputDigest(value) };
+}
+function hydrateDeref(value, live) {
+  if (!value?.$hydrateRef) return value;
+  if (hydrateRef(live)?.digest !== value.digest) throw Error('hydrate-reference-changed');
+  return live;
+}
+function hydrateHasRefs(record) {
+  return !!record && Object.values(record).some(value => value?.$hydrateRef === 1);
+}
+function hydrateSourceCaches(sourceCaches) {
+  return sourceCaches && Object.fromEntries(Object.entries(sourceCaches)
+    .map(([base, value]) => [base, hydrateDeref(value, localStorage.getItem(accountLocalKey(base)))]));
 }
 
 function accountingCoordinator() {
@@ -2799,7 +2825,13 @@ function accountingCoordinator() {
       if (timeAckOpenOperation(operation.owner)) return { status: 'wait', reason: 'legacy-undo-unresolved' };
       if (operation.input.name === 'hydrate-accounting') {
         if (raw.timer?.mode === 'focus' && typeof hydrateFocusAccountingFrame !== 'function') return { status: 'wait', reason: 'focus-hydration-unavailable' };
-        const base = committed?.value || operation.input.frame;
+        let frame = operation.input.frame;
+        if (!committed && hydrateHasRefs(frame)) {
+          const now = captureAccountingFrame();
+          try { frame = Object.fromEntries(Object.entries(frame).map(([field, value]) => [field, hydrateDeref(value, now[field])])); }
+          catch { return { status: 'conflict', reason: 'uncommitted-local-accounting' }; }
+        }
+        const base = committed?.value || frame;
         const confirmed = operation.input.confirmedOnly ? accountingConfirmedRead(raw, base, pending) : { raw, evidence: null };
         const live = captureAccountingFrame();
         for (const field of Object.keys(base)) {
@@ -2820,8 +2852,11 @@ function accountingCoordinator() {
             { ...accountingWithPreferences(base, live), entries: [], focusRedemptions: [], _lastLoggedEntryId: live._lastLoggedEntryId }, operation.owner, false);
         }
         if (retainedLegacy) {
+          let source;
+          try { source = hydrateSourceCaches(operation.input.sourceCaches); }
+          catch { return { status: 'conflict', reason: 'legacy-source-needs-resolution' }; }
           _accountingCoordinator.capture({ name: 'legacy-accounting-caches', attribution: 'unproven',
-            source: operation.input.sourceCaches, frame: operation.input.frame },
+            source, frame },
             { eventKey: `legacy-bootstrap:${operation.id}`, dependsOn: operation.id, at: operation.at });
         }
         return { localOnly: true, projection, evidence: confirmed.evidence,
@@ -3128,11 +3163,13 @@ function hydrateAccounting() {
   if ([...coordinator.snapshot().queue, ...coordinator.captures(roomCode).map(item => item.captured)]
     .some(operation => operation.input.name === 'hydrate-accounting')) return accountingOutcome(coordinator.drain());
   const committed = coordinator.snapshot().committed;
+  const ref = !committed && accountingCompactionFlags().refFirstHydrate
+    ? record => Object.fromEntries(Object.entries(record).map(([field, value]) => [field, hydrateRef(value)])) : record => record;
   return accountingOutcome(coordinator.submit({ name: 'hydrate-accounting',
     confirmedOnly: pending,
-    frame: committed ? null : captureAccountingFrame(), sourceCaches: committed ? null : Object.fromEntries(
+    frame: committed ? null : ref(captureAccountingFrame()), sourceCaches: committed ? null : ref(Object.fromEntries(
       ['ta3-entries', 'ta3-focus-redemptions', TIMER_STORAGE_KEY, AWAY_STORAGE_KEY, BREAK_STORAGE_KEY, 'ta3-focus-timer', 'ta3-heartbeat-ts']
-        .map(base => [base, localStorage.getItem(accountLocalKey(base))])) }));
+        .map(base => [base, localStorage.getItem(accountLocalKey(base))]))) }));
 }
 
 function syncAccountingCompatibility(name, requested = null, requestMatches = true) {
