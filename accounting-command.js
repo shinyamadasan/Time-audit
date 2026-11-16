@@ -71,6 +71,26 @@
     if (operation.input.name === 'scheduled-log' && facts.entry) delete facts.entry.updatedAt;
     return { name: operation.input.name, facts };
   }
+  // ── Bounded history (storage-growth C; flag compaction.historyCut, default off) ─────────────────
+  // Old settled records leave `history`. What readers still need survives as:
+  //   droppedIds[id]          -> id of a checkpoint record (phase fenced-reconciled, dependsOn null)
+  //   droppedEventKeys[key]   -> semantic digest of the dropped occurrence (a re-fire with other facts is a conflict)
+  // A checkpoint's settledWrites hold the observation-ancestry walk from its edge as DIGEST markers, because the
+  // walk's only consumers compare a value with the ancestor's write; they never read it.
+  const ANCESTOR_DIGEST = '$ancestorDigest';
+  const isAncestorDigest = value => !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === 1 && typeof value[ANCESTOR_DIGEST] === 'string';
+  const ancestorDigest = value => isAncestorDigest(value) ? value : { [ANCESTOR_DIGEST]: inputDigest(value) };
+  /** same() where the ancestor side may be a digest marker. */
+  function ancestorSameWith(same, ancestor, value) {
+    if (isAncestorDigest(ancestor)) return !isAncestorDigest(value) ? inputDigest(value) === ancestor[ANCESTOR_DIGEST]
+      : value[ANCESTOR_DIGEST] === ancestor[ANCESTOR_DIGEST];
+    if (isAncestorDigest(value)) return ancestorSameWith(same, value, ancestor);
+    return same(ancestor, value);
+  }
+  /** A dropped id resolves to its checkpoint; anything else to itself. */
+  const resolveDropped = (state, id) => id != null && state?.droppedIds && Object.hasOwn(state.droppedIds, id) ? state.droppedIds[id] : id;
+  const isCheckpoint = op => op?.input?.name === 'checkpoint';
   function sameSemanticWith(same, a, b) {
     if (!a.input?.compacted && !b.input?.compacted) return same(semanticInput(a), semanticInput(b));
     if (unknownDigest(a.input) || unknownDigest(b.input)) return false;
@@ -132,9 +152,25 @@
           || !state.history.some(op => op.id === effect.operationId && op.proposal?.effects?.some(original => same(effect, original)))))
         || state.effectReceipts != null && (typeof state.effectReceipts !== 'object' || Array.isArray(state.effectReceipts)
           || Object.entries(state.effectReceipts).some(([id, receipt]) => receipt?.v !== 1
-            || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))) throw Error('Unreadable accounting envelope');
+            || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))
+        || !validDropMaps(state)) throw Error('Unreadable accounting envelope');
       if (raw != null) validatedRaw.set(owner, raw);
       return state;
+    }
+    function validDropMaps(state) {
+      const plain = value => value == null || typeof value === 'object' && !Array.isArray(value);
+      if (!plain(state.droppedIds) || !plain(state.droppedEventKeys)) return false;
+      const checkpoints = new Set(state.history.filter(isCheckpoint).map(op => op.id));
+      for (const op of state.history.filter(isCheckpoint)) {
+        if (op.phase !== 'fenced-reconciled' || op.dependsOn != null || op.aliasOf != null || op.input.compacted !== 1
+          || op.input.digestV !== DIGEST_V || op.settledWrites == null || typeof op.settledWrites !== 'object'
+          || Object.values(op.settledWrites).some(value => !isAncestorDigest(value))) return false;
+      }
+      const live = new Set([...state.queue, ...state.history, ...state.sources || []].map(op => op.id));
+      for (const [id, target] of Object.entries(state.droppedIds || {})) {
+        if (!/^[A-Za-z0-9_-]{8,100}$/.test(id) || live.has(id) || checkpoints.has(id) || !checkpoints.has(target)) return false;
+      }
+      return Object.values(state.droppedEventKeys || {}).every(digest => typeof digest === 'string' && /^[0-9a-f]{64}$/.test(digest));
     }
     function save(state) {
       const raw = JSON.stringify(state);
@@ -201,6 +237,8 @@
       const state = load(reservation.owner);
       const original = [...state.sources || [], ...state.queue, ...state.history,
         ...captures(reservation.owner).map(item => item.captured)].find(item => item.id === reservation.id && item.source);
+      // C2: the original was settled and later dropped from history. Its result was already accounted for.
+      if (!original && Object.hasOwn(state.droppedIds || {}, reservation.id)) return null;
       if (!original || !sameInput(original.input, reservation.input)
         || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === reservation[field])
         || typeof result?.ok !== 'boolean') throw Error('Unproven accounting source reservation');
@@ -219,6 +257,7 @@
         if (captured.phase === 'provisional-observation') {
           const source = [...state.queue, ...state.history, ...captures(state.owner).map(item => item.captured)]
             .find(item => item.id === captured.input.sourceId);
+          if (!source && Object.hasOwn(state.droppedIds || {}, captured.input?.sourceId)) { storage.removeItem(slot); continue; } // C2
           if (captured.input.name !== 'ordinary-heartbeat' || source?.input.ordinary?.v !== 1
             || source.input.ordinary.kind !== 'start' || source.device !== captured.device || source.uid !== captured.uid
             || !Number.isSafeInteger(captured.at) || captured.at < source.at) throw Error('Unreadable provisional observation');
@@ -230,6 +269,7 @@
           state.sources ||= [];
           const originalId = captured.sourceId || captured.id;
           const original = [...state.sources, ...state.queue, ...state.history].find(item => item.id === originalId);
+          if (!original && Object.hasOwn(state.droppedIds || {}, originalId)) { storage.removeItem(slot); continue; }
           if (captured.phase === 'awaiting-source') {
             if (!original) state.sources.push(captured);
             else if (unknownDigest(original.input)) continue; // retained in intake, never thrown (see DIGEST_V)
@@ -252,6 +292,16 @@
             }
           }
           save(state); storage.removeItem(slot); continue;
+        }
+        if (Object.hasOwn(state.droppedIds || {}, captured.id)) { storage.removeItem(slot); continue; } // replay of a settled, dropped op
+        if (captured.eventKey && Object.hasOwn(state.droppedEventKeys || {}, captured.eventKey)
+          && ![...state.queue, ...state.history].some(op => op.eventKey === captured.eventKey)) {
+          // A re-fired occurrence of a dropped op: identical facts are settled; different facts are evidence.
+          if (state.droppedEventKeys[captured.eventKey] !== inputDigest(semanticInput(captured))) {
+            if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'occurrence-changed' });
+            save(state);
+          }
+          storage.removeItem(slot); continue;
         }
         const known = [...state.queue, ...state.history].find(op => op.id === captured.id
           || (captured.eventKey && op.eventKey === captured.eventKey));
@@ -361,7 +411,102 @@
           if (!Object.hasOwn(latest, path)) latest[path] = value;
         }
       }
-      return Object.entries(proposal.settledWrites || {}).every(([path, value]) => Object.hasOwn(latest, path) && same(latest[path], value));
+      return Object.entries(proposal.settledWrites || {}).every(([path, value]) => Object.hasOwn(latest, path) && ancestorSameWith(same, latest[path], value));
+    }
+    // Storage-growth C writer (flag compaction.historyCut.enabled, default off). Drops settled records older than
+    // the newest `keepOps`, ONLY when the page holds a verified archive copy of each one
+    // (compaction.historyCut.archived(owner) -> Set of ids read back equal from IndexedDB).
+    // Never dropped: the committed op, effect/receipt/provisional owners, the op that wrote the current server
+    // timer, legacy-* evidence, user resolutions, unsettled phases, and anything a queued, sourced, captured or
+    // page-held item names. Each kept record that names a dropped id gets a checkpoint holding the exact
+    // observation walk from that id (prepareAccountingObservation semantics), as digests. A walk that cannot
+    // complete (missing, cyclic, unsettled) aborts the whole cut, so nothing is dropped.
+    const SETTLED = ['local-applied', 'fenced-reconciled'];
+    function walkFrom(state, startId) {
+      const ancestry = {}, visited = [], chain = new Set();
+      let id = startId;
+      while (id) {
+        id = resolveDropped(state, id);
+        if (chain.has(id)) return null;
+        chain.add(id);
+        const parent = state.history.find(op => op.id === id);
+        if (!parent) return null;
+        visited.push(id);
+        if (parent.aliasOf) { id = parent.aliasOf; continue; }
+        if (!SETTLED.includes(parent.phase)) return null;
+        for (const [path, value] of Object.entries(parent.settledWrites || parent.proposal?.patch || {})) {
+          if (!Object.hasOwn(ancestry, path)) ancestry[path] = ancestorDigest(value);
+        }
+        id = parent.dependsOn;
+      }
+      return { ancestry, visited };
+    }
+    function cutHistory(state) {
+      const config = compaction.historyCut;
+      const keep = Math.max(50, Number.isSafeInteger(config.keepOps) ? config.keepOps : 200);
+      const batch = Number.isSafeInteger(config.batch) ? Math.max(1, config.batch) : 50;
+      const plain = state.history.filter(op => !isCheckpoint(op));
+      if (plain.length <= keep + batch) return 0;
+      const pinned = new Set([state.committed?.operationId, state.committed?.value?.serverTimer?._csWrite?.operationId,
+        ...(state.effects || []).map(effect => effect.operationId),
+        ...Object.values(state.effectReceipts || {}).map(receipt => receipt.operationId),
+        ...Object.keys(state.provisionalObserved || {})]);
+      for (const item of [...state.queue, ...state.sources || [], ...captures(state.owner).map(entry => entry.captured),
+        ...[...failed.values()].map(entry => entry.record)]) {
+        for (const id of [item.dependsOn, item.aliasOf, item.source?.requestDependency, item.sourceId, item.input?.sourceId]) if (id) pinned.add(id);
+      }
+      const nativeNewest = {};
+      for (const op of plain) {
+        if (op.input?.name === 'native-usage' && op.source?.result?.ok && (!nativeNewest[op.device] || op.at >= nativeNewest[op.device].at)) nativeNewest[op.device] = op;
+      }
+      for (const op of Object.values(nativeNewest)) pinned.add(op.id);
+      const newest = new Set(plain.slice(-keep).map(op => op.id));
+      const eligible = plain.filter(op => !newest.has(op.id) && !pinned.has(op.id) && !op.resolution
+        && !/^legacy-/.test(op.input?.name || '') && (SETTLED.includes(op.phase) || op.phase === 'coalesced' && !!op.aliasOf));
+      if (eligible.length < batch) return 0;
+      let archived = null;
+      try { archived = config.archived?.(state.owner) || null; } catch { archived = null; }
+      try { config.onCandidates?.(state.owner, clone(eligible.filter(op => !archived?.has(op.id)))); } catch {}
+      if (!archived) return 0;
+      const drop = new Set(eligible.filter(op => archived.has(op.id)).map(op => op.id));
+      if (drop.size < batch) return 0;
+      // Edges: kept records (old checkpoints never name anything) naming a dropped id.
+      const starts = [];
+      for (const op of state.history) {
+        if (drop.has(op.id)) continue;
+        for (const id of [op.dependsOn, op.aliasOf, op.source?.requestDependency]) if (id && drop.has(id) && !starts.includes(id)) starts.push(id);
+      }
+      const checkpoints = [], visitedBy = new Map();
+      for (const [n, start] of starts.entries()) {
+        const walk = walkFrom(state, start);
+        if (!walk) return 0; // fail safe: an incomplete walk means nothing is dropped
+        const id = `ckpt-${state.generation}-${n}`;
+        checkpoints.push({ v: VERSION, id, owner: state.owner, uid: state.owner.slice(4), device: 'checkpoint', at: Date.now(),
+          phase: 'fenced-reconciled', input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: walk.visited.length },
+          settledWrites: walk.ancestry, dependsOn: null });
+        for (const visited of walk.visited) if (!visitedBy.has(visited)) visitedBy.set(visited, id);
+      }
+      // A dropped record no edge reaches still needs a target: a later replay of it is retired against it.
+      // One sink for the envelope's lifetime: reuse the existing one so cuts never accumulate sinks.
+      let sink = state.history.find(op => isCheckpoint(op) && op.id.endsWith('-sink'))?.id || null;
+      const target = id => visitedBy.get(id) || (sink ||= (() => {
+        const record = { v: VERSION, id: `ckpt-${state.generation}-sink`, owner: state.owner, uid: state.owner.slice(4),
+          device: 'checkpoint', at: Date.now(), phase: 'fenced-reconciled',
+          input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: 0 }, settledWrites: {}, dependsOn: null };
+        checkpoints.push(record); return record.id;
+      })());
+      const droppedIds = { ...state.droppedIds || {} }, droppedEventKeys = { ...state.droppedEventKeys || {} };
+      // An old checkpoint that a new walk passed through is folded in: its ids are re-pointed and it is removed.
+      const folded = new Set(state.history.filter(op => isCheckpoint(op) && visitedBy.has(op.id)).map(op => op.id));
+      for (const [id, checkpoint] of Object.entries(droppedIds)) if (folded.has(checkpoint)) droppedIds[id] = visitedBy.get(checkpoint);
+      for (const op of state.history) {
+        if (!drop.has(op.id)) continue;
+        droppedIds[op.id] = target(op.id);
+        if (op.eventKey) droppedEventKeys[op.eventKey] = op.input.compacted ? op.input.semanticDigest : inputDigest(semanticInput(op));
+      }
+      state.history = [...checkpoints, ...state.history.filter(op => !drop.has(op.id) && !folded.has(op.id))];
+      state.droppedIds = droppedIds; state.droppedEventKeys = droppedEventKeys;
+      return drop.size;
     }
     function commitProjection(state, operation, projection, context, details) {
       validateProjection(clone(projection), operation.owner);
@@ -382,6 +527,7 @@
       const record = { ...clone(operation), ...clone(receipt), appliedGeneration: generation };
       if (compaction.stripFirstHydrate === true && strippableHydrate(next, operation, receipt)) record.input = compactedHydrateInput(operation);
       next.history.push(record);
+      if (compaction.historyCut?.enabled === true) cutHistory(next);
       save(next); Object.assign(state, next);
       if (attached(context)) apply(clone(projection), clone(committed));
       return generation;
@@ -446,7 +592,8 @@
       catch { return retained(update(state, operation, { reason: attached(context) ? 'inspection-unconfirmed' : 'account-detached' })); }
       if (!operation.proposal) {
         let proposal;
-        try { proposal = await prepare(clone(operation), clone(raw), clone(state.committed), clone(state.history), clone(state.queue)); }
+        try { proposal = await prepare(clone(operation), clone(raw), clone(state.committed), clone(state.history), clone(state.queue),
+          clone({ droppedIds: state.droppedIds || {}, droppedEventKeys: state.droppedEventKeys || {} })); }
         catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message, replannable: true })); }
         if (!attached(context)) return { status: 'detached', id: operation.id, retained: true };
         if (proposal?.status === 'wait') return retained(update(state, operation, { reason: proposal.reason }));
@@ -553,8 +700,9 @@
             .find(item => item.phase === 'captured' && item.input.name === 'hydrate-accounting'
               && item.input.confirmedOnly === true && !item.dependsOn);
           if (!refresh) throw error;
-          const settled = state.history.find(item => item.id === refresh.id);
-          if (settled) {
+          const settled = state.history.find(item => item.id === refresh.id)
+            || (Object.hasOwn(state.droppedIds || {}, refresh.id) ? { dropped: true } : null);
+          if (settled?.dropped) { /* settled and dropped: never re-run */ } else if (settled) {
             // A read-only refresh already settled under an unreadable digest version is not re-run or thrown on.
             if (!unknownDigest(settled.input) && !sameInput(settled.input, refresh.input)) throw Error('Accounting capture identity changed');
           } else if (!state.queue.some(item => item.id === refresh.id)) { state.queue.push(refresh); save(state); }
@@ -570,9 +718,10 @@
           const dependencies = new Set();
           const originalDependency = id => {
             const aliases = new Set();
+            id = resolveDropped(state, id);
             while (state.history.find(op => op.id === id)?.aliasOf) {
               if (aliases.has(id)) return null;
-              aliases.add(id); id = state.history.find(op => op.id === id).aliasOf;
+              aliases.add(id); id = resolveDropped(state, state.history.find(op => op.id === id).aliasOf);
             }
             return id;
           };
@@ -674,5 +823,6 @@
       submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)) };
   }
   root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, DIGEST_V, clone, pathValue, pathAllowed, createCoordinator,
+    ANCESTOR_DIGEST, isAncestorDigest, resolveDropped, ancestorSame: (a, b) => ancestorSameWith(root.TimeAckCore.same, a, b),
     sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b) };
 })(globalThis);
