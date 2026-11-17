@@ -10,6 +10,7 @@
   const pathAllowed = path => /^(timer|awayState|breakState)$/.test(path)
     || /^(entries|focusRedemptions)\/[^\x00-\x1f\x7f.#$\[\]/]+$/.test(path);
 
+<<<<<<< HEAD
   // ── Compacted inputs (storage-growth release N) ─────────────────────────────────────────────
   // A compacted history input keeps its name and a digest of the original input in place of large
   // bodies. The digest is SHA-256 over the exact bytes TimeAckCore.same() compares
@@ -99,6 +100,14 @@
   }
 
   function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {}, compaction = {} }) {
+=======
+  const isQuotaError = error => !!error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || error.code === 22 || error.code === 1014 || /quota/i.test(String(error.message || '')));
+
+  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {} }) {
+    // Storage fix F2: intake slots that could not be imported because local storage is full. Kept untouched.
+    const stuck = new Map();
+>>>>>>> accounting: a full local store never stalls sync (storage fix F2 only)
     const drains = new Map();
     const failed = new Map();
     // Perf (stabilization 2026-11-19): validation below is a pure function of the stored string, so a string
@@ -252,8 +261,27 @@
       if (readStored(slot) !== raw) throw Error('Accounting result readback failed');
       return clone(record);
     }
+    // Another tab may have imported and removed a slot this tab saw stuck: forget slots that no longer exist.
+    function pruneStuck() {
+      // A read failure keeps the entry: fail toward 'still stuck', never throw from a storage-full path.
+      for (const slot of [...stuck.keys()]) { try { if (readStored(slot) == null) stuck.delete(slot); } catch { /* keep */ } }
+      return [...stuck.values()];
+    }
     function importCaptures(state) {
-      for (const { slot, captured } of captures(state.owner)) {
+      pruneStuck();
+      for (const item of captures(state.owner)) {
+        try { importOne(state, item); stuck.delete(item.slot); }
+        catch (error) {
+          if (!isQuotaError(error)) throw error;
+          // save() failed, so nothing reached storage: reload the durable envelope and leave this slot as it is.
+          for (const field of Object.keys(state)) delete state[field];
+          Object.assign(state, load(state.owner || item.captured.owner));
+          stuck.set(item.slot, { id: item.captured.id, name: item.captured.input?.name || null, chars: (readStored(item.slot) || '').length });
+        }
+      }
+    }
+    function importOne(state, { slot, captured }) {
+      {
         if (captured.phase === 'provisional-observation') {
           const source = [...state.queue, ...state.history, ...captures(state.owner).map(item => item.captured)]
             .find(item => item.id === captured.input.sourceId);
@@ -263,7 +291,7 @@
             || !Number.isSafeInteger(captured.at) || captured.at < source.at) throw Error('Unreadable provisional observation');
           state.provisionalObserved ||= {};
           state.provisionalObserved[source.id] = Math.max(state.provisionalObserved[source.id] || source.at, captured.at);
-          save(state); storage.removeItem(slot); continue;
+          save(state); storage.removeItem(slot); return;
         }
         if (captured.phase === 'awaiting-source' || captured.phase === 'source-result') {
           state.sources ||= [];
@@ -291,7 +319,7 @@
               }
             }
           }
-          save(state); storage.removeItem(slot); continue;
+          save(state); storage.removeItem(slot); return;
         }
         if (Object.hasOwn(state.droppedIds || {}, captured.id)) { storage.removeItem(slot); continue; } // replay of a settled, dropped op
         if (captured.eventKey && Object.hasOwn(state.droppedEventKeys || {}, captured.eventKey)
@@ -690,6 +718,15 @@
     }
     function drainOnce(context) {
       return lock(context.owner, async () => {
+        try { return await drainLocked(context); }
+        catch (error) {
+          if (!isQuotaError(error)) throw error;
+          return { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: pruneStuck() };
+        }
+      });
+    }
+    function drainLocked(context) {
+      return (async () => {
         if (!attached(context)) return { status: 'detached', retained: true };
         const state = load(context.owner);
         try { flushFailedCaptures(context); }
@@ -750,8 +787,9 @@
           }
           importCaptures(state);
         }
+        if (pruneStuck().length) return { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: [...stuck.values()] };
         return { status: 'drained', generation: state.generation, retained: false };
-      });
+      })();
     }
     function submit(input, options) {
       const operation = capture(input, options);
@@ -820,9 +858,14 @@
       });
     }
     return { capture, failedCaptures, reserveSource: (input, options) => capture(input, { ...options, source: true }), completeSource,
-      submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)) };
+      submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)),
+      stuckCaptures: () => pruneStuck().map(clone) };
   }
+<<<<<<< HEAD
   root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, DIGEST_V, clone, pathValue, pathAllowed, createCoordinator,
     ANCESTOR_DIGEST, isAncestorDigest, resolveDropped, ancestorSame: (a, b) => ancestorSameWith(root.TimeAckCore.same, a, b),
     sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b) };
+=======
+  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, clone, pathValue, pathAllowed, createCoordinator, isQuotaError };
+>>>>>>> accounting: a full local store never stalls sync (storage fix F2 only)
 })(globalThis);

@@ -3402,11 +3402,21 @@ function buildAccountingInput(name, before, after, { timer = false, extra = {}, 
     ...auxiliary, auxGuards, auxBefore, conflict, effects: cloneUndoValue(effects) };
 }
 
+// Storage fix F2: a full local store is reported once in plain words; nothing is deleted and the rest keeps syncing.
+let _accountingStorageFullShownAt = 0;
+function showAccountingStorageFull(stuck) {
+  if (Date.now() - _accountingStorageFullShownAt < 10 * 60_000) return;
+  _accountingStorageFullShownAt = Date.now();
+  const count = Array.isArray(stuck) && stuck.length ? stuck.length : 1;
+  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely here and will sync once space is freed. Nothing was deleted.`);
+}
+
 function accountingOutcome(submitted) {
   const source = accountingIdentity();
   renderTimeAckStatus();
   return submitted.then(outcome => {
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
+    if (outcome.status === 'storage-full') { showAccountingStorageFull(outcome.stuck); return !!(outcome.ownSettled ?? outcome.ownApplied); }
     if (outcome.status !== 'drained' && !(outcome.ownSettled ?? outcome.ownApplied)) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
     return true;
   }).catch(error => {
