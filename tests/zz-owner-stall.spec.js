@@ -149,7 +149,7 @@ test(`owner stall shape (${MODE}): established device, 1.7M runtime-frame legacy
     return { entries: e.committed.value.entries.length, digest: JSON.stringify(e.committed.value.entries),
       slots: Object.keys(localStorage).filter(k => k.startsWith('ta3-accounting-capture-v1:')).map(k => [k.slice(-8), localStorage.getItem(k).length]),
       stuck: accountingCoordinator().stuckCaptures?.() || null }; }, `uid_${uid}`);
-  for (const x of [before, after]) x.digest = require('node:crypto').createHash('sha256').update(x.digest, 'utf8').digest('hex');
+  for (const x of [before, after]) x.digest = (await import('node:crypto')).createHash('sha256').update(x.digest, 'utf8').digest('hex');
   report.result = { queue: q, freshSubmit: fresh && (fresh.threw || { status: fresh.status, ownApplied: fresh.ownApplied }), before, after,
     quotaFailures: inv.writes.filter(w => !w.ok).length, total: inv.total, envelope: inv.envelope && { total: inv.envelope.total,
       history: inv.envelope.history.map(h => [h.name, h.phase, h.chars]) }, toasts: [...new Set(toasts)].slice(0, 5) };
