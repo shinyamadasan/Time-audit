@@ -10,7 +10,6 @@
   const pathAllowed = path => /^(timer|awayState|breakState)$/.test(path)
     || /^(entries|focusRedemptions)\/[^\x00-\x1f\x7f.#$\[\]/]+$/.test(path);
 
-<<<<<<< HEAD
   // ── Compacted inputs (storage-growth release N) ─────────────────────────────────────────────
   // A compacted history input keeps its name and a digest of the original input in place of large
   // bodies. The digest is SHA-256 over the exact bytes TimeAckCore.same() compares
@@ -99,15 +98,12 @@
     return digestOf(a) === digestOf(b);
   }
 
-  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {}, compaction = {} }) {
-=======
   const isQuotaError = error => !!error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
     || error.code === 22 || error.code === 1014 || /quota/i.test(String(error.message || '')));
 
-  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {} }) {
+  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {}, compaction = {} }) {
     // Storage fix F2: intake slots that could not be imported because local storage is full. Kept untouched.
     const stuck = new Map();
->>>>>>> accounting: a full local store never stalls sync (storage fix F2 only)
     const drains = new Map();
     const failed = new Map();
     // Perf (stabilization 2026-11-19): validation below is a pure function of the stored string, so a string
@@ -861,11 +857,7 @@
       submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)),
       stuckCaptures: () => pruneStuck().map(clone) };
   }
-<<<<<<< HEAD
   root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, DIGEST_V, clone, pathValue, pathAllowed, createCoordinator,
     ANCESTOR_DIGEST, isAncestorDigest, resolveDropped, ancestorSame: (a, b) => ancestorSameWith(root.TimeAckCore.same, a, b),
-    sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b) };
-=======
-  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, clone, pathValue, pathAllowed, createCoordinator, isQuotaError };
->>>>>>> accounting: a full local store never stalls sync (storage fix F2 only)
+    sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b), isQuotaError };
 })(globalThis);

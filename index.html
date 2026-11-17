@@ -3408,7 +3408,7 @@ function showAccountingStorageFull(stuck) {
   if (Date.now() - _accountingStorageFullShownAt < 10 * 60_000) return;
   _accountingStorageFullShownAt = Date.now();
   const count = Array.isArray(stuck) && stuck.length ? stuck.length : 1;
-  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely here and will sync once space is freed. Nothing was deleted.`);
+  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely on this device and could not be filed yet. Nothing was deleted.`);
 }
 
 function accountingOutcome(submitted) {

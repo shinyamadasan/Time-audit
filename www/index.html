@@ -3408,7 +3408,7 @@ function showAccountingStorageFull(stuck) {
   if (Date.now() - _accountingStorageFullShownAt < 10 * 60_000) return;
   _accountingStorageFullShownAt = Date.now();
   const count = Array.isArray(stuck) && stuck.length ? stuck.length : 1;
-  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely here and will sync once space is freed. Nothing was deleted.`);
+  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely on this device and could not be filed yet. Nothing was deleted.`);
 }
 
 function accountingOutcome(submitted) {
@@ -3416,12 +3416,8 @@ function accountingOutcome(submitted) {
   renderTimeAckStatus();
   return submitted.then(outcome => {
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
-<<<<<<< HEAD
+    if (outcome.status === 'storage-full') { showAccountingStorageFull(outcome.stuck); return !!(outcome.ownSettled ?? outcome.ownApplied); }
     if (outcome.status !== 'drained' && !(outcome.ownSettled ?? outcome.ownApplied)) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
-=======
-    if (outcome.status === 'storage-full') { showAccountingStorageFull(outcome.stuck); return !!outcome.ownApplied; }
-    if (outcome.status !== 'drained' && !outcome.ownApplied) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
->>>>>>> accounting: a full local store never stalls sync (storage fix F2 only)
     return true;
   }).catch(error => {
     console.warn('[accounting] retained operation', error.message);
