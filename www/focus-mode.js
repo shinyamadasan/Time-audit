@@ -1227,9 +1227,24 @@ function tryExitFocusMode() {
   confirmExitFocus();
 }
 
-function exitFocusConfirm() {
+async function exitFocusConfirm() {
   if (!confirm('Are you sure you want to be distracted?')) return;
-  confirmExitFocus();
+  const left = await confirmExitFocus();
+  // Ending the session can be refused while accounting is unresolved (that protects logged time);
+  // moving around the app never is: point at Hide, which leaves the session untouched.
+  if (left === false && document.getElementById('focus-overlay')?.classList.contains('open')) {
+    showToast("Focus can't end until your time is confirmed. Use Hide to keep it running and move around");
+  }
+}
+
+// Hide closes the Focus screen without ending anything: no timer stop, no accounting operation.
+// The way back is "Open focus" on My Day (or the Focus mode button), which reopens this overlay.
+function hideFocusOverlay() {
+  if (!isFocusSessionRunning()) return confirmExitFocus();
+  hideFocusSuggestions();
+  document.getElementById('focus-overlay')?.classList.remove('open');
+  if (typeof showView === 'function') showView('today');
+  return true;
 }
 
 async function confirmExitFocus() {

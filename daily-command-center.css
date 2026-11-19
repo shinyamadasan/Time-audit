@@ -95,7 +95,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 */
 /* Daily Command Center — scoped to My Day; existing Brain Dump/Eisenhower is unchanged. */
 @font-face{font-family:'Chrona Inter';src:url('./assets/fonts/InterVariable.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
-#view-today,#plan-tomorrow-overlay,#pt-exit,#pt-return,body.view-today .nav{
+#view-today,#plan-tomorrow-overlay,#pt-exit,#pt-return,.nav{
   --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;
   --ui:'Chrona Inter',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --head:var(--ui);--mono:var(--ui);--muted:var(--away);--muted2:var(--away);
@@ -172,20 +172,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 #view-today #timeline-date-label{font:600 18px/1.4 var(--ui);color:var(--text)}
 #view-today .timeline-section .section-label button{min-width:44px;min-height:44px;font-size:16px}
 #view-today :is(.pc-muted,.pc-row-meta,.pc-notice,#so-far-summary){font-size:13px;line-height:1.5}
-body.view-today .nav-btn{font-family:var(--ui);font-size:12px;min-height:48px}
-body.view-today .nav-log{font-family:var(--ui);min-height:48px}
+/* One nav shell on every page (stabilization 2026-11-19): these rules used to apply only under body.view-today,
+   so the nav jumped from a left sidebar (My Day) to a bottom bar (every other page). */
+.nav .nav-btn{font-family:var(--ui);font-size:12px;min-height:48px}
+.nav .nav-log{font-family:var(--ui);min-height:48px}
 @media(min-width:769px){
   body.view-today .app{max-width:none;width:100%}
   body.view-today #view-today{padding:var(--space-6) var(--space-8) 110px}
   #command-overview{grid-template-columns:minmax(300px,1.4fr) minmax(230px,1fr)}
 }
 @media(min-width:1200px){
-  body.view-today{padding-left:210px}
+  body{padding-left:210px}
   body.view-today #view-today{padding:var(--space-8) var(--space-8) 64px}
   body.view-today .command-brand{position:fixed;left:20px;top:28px;font-size:23px;z-index:60}
-  body.view-today .nav{left:12px;top:92px;bottom:auto;transform:none;max-width:none;width:188px;display:flex;flex-direction:column;align-items:stretch;padding:8px;gap:9px;border-radius:var(--r2);border:1px solid var(--border2)}
-  body.view-today .nav-btn{flex-direction:row;justify-content:flex-start;padding:13px 10px;font-size:12px;gap:14px;min-height:48px}
-  body.view-today .nav-log{min-height:48px}
+  .nav{left:12px;top:92px;bottom:auto;transform:none;max-width:none;width:188px;display:flex;flex-direction:column;align-items:stretch;padding:8px;gap:9px;border-radius:var(--r2);border:1px solid var(--border2)}
+  .nav .nav-btn{flex-direction:row;justify-content:flex-start;padding:13px 10px;font-size:12px;gap:14px;min-height:48px}
+  .nav .nav-log{min-height:48px}
   #command-overview{grid-template-columns:minmax(280px,1.5fr) repeat(3,minmax(150px,1fr))}
 }
 @media(max-width:768px){
@@ -216,7 +218,7 @@ body.view-today .nav-log{font-family:var(--ui);min-height:48px}
   #view-today .command-card-actions{display:grid;grid-template-columns:1fr 1fr}
   #view-today .command-card-actions button{padding-inline:8px}
   #view-today .command-card-actions .primary,#view-today .command-card-actions .command-delete{grid-column:1/-1}
-  body.view-today .nav-btn{font-size:11px;gap:4px;padding-inline:1px;min-width:0;line-height:1.3}
+  .nav .nav-btn{font-size:11px;gap:4px;padding-inline:1px;min-width:0;line-height:1.3}
 }
 
 /* TASK-033 visual refinement: one action first, alternatives disclosed. */
