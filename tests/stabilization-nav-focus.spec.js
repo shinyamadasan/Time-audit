@@ -212,7 +212,7 @@ for (const [w, h, where] of [[1280, 900, 'left'], [1000, 800, 'bottom'], [390, 8
     const box = JSON.parse(shapes[0]);
     if (where === 'left') expect(box.x).toBeLessThan(40); else expect(box.y + box.h).toBeGreaterThan(h - 4);
     if (where === 'left') { // content never sits under the sidebar
-      for (const view of ['braindump', 'learning']) {
+      for (const view of ['today', 'braindump', 'learning']) {
         await page.evaluate(v => showView(v), view);
         const left = await page.evaluate(v => document.getElementById('view-' + v).getBoundingClientRect().left, view);
         expect(left).toBeGreaterThanOrEqual(box.x + box.w);
