@@ -284,3 +284,29 @@ test('offline: a provisional Start shows as running, and Mark done stops it', as
   await expect(work(page, 'tasks')).toHaveText('Tasks · 1/1 done');
   expect(await page.evaluate(() => { try { return !!ordinaryProvisionalState()?.frame?.running; } catch { return 'error'; } })).toBe(false);
 });
+
+test('Plan Tomorrow keeps an unsaved draft across a trip to Brain Dump and back', async ({ page }) => {
+  await boot(page);
+  await page.goto(url);
+  await ready(page);
+  await page.locator('#command-capture-text').fill('Renew the passport');
+  await page.locator('#command-capture-text').press('Enter');
+  await page.getByRole('button', { name: 'Plan Tomorrow', exact: true }).click();
+  const overlay = page.locator('#plan-tomorrow-overlay');
+  await expect(overlay).toHaveClass(/open/);
+  const add = page.locator('#plan-tomorrow-add');
+  await add.locator('[name="task"]').fill('Water the plants');
+  await add.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(overlay).toContainText('Water the plants');
+  await expect(overlay.locator('.pt-consider > summary')).toHaveText('From Brain Dump 0 ideas · 1 to sort');
+  // Go sort the idea in Brain Dump (unsaved draft), then come back.
+  if (!(await overlay.locator('.pt-consider').evaluate(d => d.open))) await overlay.locator('.pt-consider > summary').click();
+  await overlay.getByRole('button', { name: 'Open Brain Dump', exact: true }).click();
+  await expect(overlay).not.toHaveClass(/open/);
+  await expect(page.locator('#view-braindump')).toBeVisible();
+  await expect(page.locator('#view-braindump')).toContainText('Renew the passport');
+  await page.locator('#pt-return').click();
+  await expect(overlay).toHaveClass(/open/);
+  await expect(overlay).toContainText('Water the plants');
+  await expect(page.locator('#pt-save-status')).toHaveText('Unsaved changes');
+});
