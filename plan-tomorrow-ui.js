@@ -7,7 +7,7 @@ import { createLearningPlanRepository } from './learning-plan-repository.js';
 import { findNextLearningPlanStep } from './learning-plan-next-action.js';
 import { createLocalLifeLedgerStore } from './life-ledger-runtime.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { quadrantOf } from './brain-dump-model.js';
+import { quadrantOf, untriagedCaptures } from './brain-dump-model.js';
 import { sameOnWire } from './plan-fence-sync.js';
 
 const routineRepository = createDailyRoutineRepository();
@@ -135,10 +135,15 @@ window.visualViewport?.addEventListener('resize', () => root?.style.setProperty(
 
 function considerationHtml() {
   const repository = globalThis.BrainDumpRepository;
-  const records = repository?.ownerRoomId() === draft.owner ? Object.values(repository.listAllRaw()) : [];
+  const raw = repository?.ownerRoomId() === draft.owner ? repository.listAllRaw() : {};
+  const records = Object.values(raw);
+  // Fresh captures are untriaged, so they are not Q1/Q2 candidates yet. Say they exist, with the
+  // same count as the Brain Dump tray, so a capture made tonight never looks lost here.
+  const unsorted = untriagedCaptures(raw).length;
+  const unsortedHtml = unsorted ? `<p class="pt-unsorted">${unsorted} new idea${unsorted === 1 ? '' : 's'} not sorted yet. Sort ${unsorted === 1 ? 'it' : 'them'} in Brain Dump to plan ${unsorted === 1 ? 'it' : 'them'}.</p>` : '';
   const groups = ['do-first', 'schedule'].map(q => records.filter(item => item.status === 'triaged' && quadrantOf(item) === q).sort((a,b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)));
   const rows = [0, 1].flatMap(index => groups.map(group => group[index]).filter(Boolean));
-  return `<details class="pt-consider" data-pt-fold="consider" ${window.innerWidth > 700 ? 'open' : ''}><summary>From Brain Dump <span>${rows.length} ideas</span></summary><p class="pt-muted">Ideas to consider. Review and schedule them in Brain Dump.</p>${rows.map(item => `<article class="pt-candidate"><small>${quadrantOf(item) === 'do-first' ? 'Q1 · Important & urgent' : 'Q2 · Important, not urgent'}</small><p>${escape(item.text)}</p>${item.promotionClaim ? '<p class="pt-muted">Waiting for the move to your plan to finish.</p>' : ''}<button type="button" class="btn sm ghost" data-pt-action="brain-dump">Review in Brain Dump</button></article>`).join('') || '<p class="pt-muted">No Q1 or Q2 ideas available on this device yet.</p>'}<p class="pt-muted">Up to two Q1 and two Q2 ideas saved on this device.</p><button type="button" class="btn sm" data-pt-action="brain-dump">Open Brain Dump</button></details>`;
+  return `<details class="pt-consider" data-pt-fold="consider" ${window.innerWidth > 700 ? 'open' : ''}><summary>From Brain Dump <span>${rows.length} ideas</span></summary><p class="pt-muted">Ideas to consider. Review and schedule them in Brain Dump.</p>${rows.map(item => `<article class="pt-candidate"><small>${quadrantOf(item) === 'do-first' ? 'Q1 · Important & urgent' : 'Q2 · Important, not urgent'}</small><p>${escape(item.text)}</p>${item.promotionClaim ? '<p class="pt-muted">Waiting for the move to your plan to finish.</p>' : ''}<button type="button" class="btn sm ghost" data-pt-action="brain-dump">Review in Brain Dump</button></article>`).join('') || (unsorted ? '' : '<p class="pt-muted">No Q1 or Q2 ideas available on this device yet.</p>')}${unsortedHtml}<p class="pt-muted">Up to two Q1 and two Q2 ideas saved on this device.</p><button type="button" class="btn sm" data-pt-action="brain-dump">Open Brain Dump</button></details>`;
 }
 
 function plannerStatus() {

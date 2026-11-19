@@ -89,6 +89,8 @@ function renderCard(item, completion, status) {
   }
   if (view.state.manual[item.id]) actions += button('undo', r.id, 'Undo manual Done');
   if (!complete && ['learning', 'focus'].includes(r.source) && hasStep) actions = button('start', r.id, 'Start Focus') + actions;
+  // The way to the plan itself: see or tick off steps, or pick up when no step is available today.
+  if (r.source === 'learning') actions += button('learning-plans', r.id, 'Open Learning Plans');
   let note = '';
   if (r.source === 'workout' && !complete) note = 'Completion appears when a matching workout is imported.';
   if (r.source === 'learning' && !hasStep) note = 'No unfinished step available today.';
@@ -191,6 +193,11 @@ document.addEventListener('click', async event => {
       document.getElementById('routine-manager-list').innerHTML = view.state.routines.map(r => `<p>${escape(r.title)} · ${r.enabled ? scheduleLabel(r) : 'Disabled'} ${button('edit', r.id, 'Edit')}</p>`).join('');
       document.getElementById('routine-day-dialog')?.close();
       document.getElementById('routine-manager').showModal();
+      return;
+    }
+    if (action === 'learning-plans') {
+      document.getElementById('routine-day-dialog')?.close();
+      globalThis.showView?.('learning');
       return;
     }
     if (action === 'edit' || action === 'add') { document.getElementById('routine-manager').close(); openEditor(id); return; }

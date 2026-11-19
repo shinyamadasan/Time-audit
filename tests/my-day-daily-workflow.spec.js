@@ -127,6 +127,20 @@ async function markDone(page, title) {
   await card.getByRole('button', { name: `Mark done: ${title}`, exact: true }).click();
 }
 
+async function addLearningRoutine(page) {
+  await page.evaluate(() => openRoutineDayDialog());
+  await page.getByRole('button', { name: 'Manage routines', exact: true }).click();
+  await page.getByRole('button', { name: 'Add routine', exact: true }).click();
+  const form = page.locator('#daily-routine-form');
+  await form.locator('[name=title]').fill('Spanish');
+  await form.locator('[name=mode]').selectOption('anytime');
+  await form.locator('[name=source]').selectOption('learning');
+  await form.locator('[name=planId]').selectOption('plan-es');
+  await form.locator('[name=minimumMinutes]').fill('10');
+  await form.getByRole('button', { name: 'Save routine', exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
 test('a whole day: night plan, morning dashboard, start, complete, learning', async ({ page }) => {
   test.setTimeout(120000);
   const errors = await boot(page);
@@ -140,21 +154,14 @@ test('a whole day: night plan, morning dashboard, start, complete, learning', as
     await page.locator('#command-capture-text').press('Enter');
     await expect(page.locator('#command-capture-status')).toHaveText('Captured. Triage it in Brain Dump or the plan tray.');
   }
-  await page.evaluate(() => openRoutineDayDialog());
-  await page.getByRole('button', { name: 'Manage routines', exact: true }).click();
-  await page.getByRole('button', { name: 'Add routine', exact: true }).click();
-  const form = page.locator('#daily-routine-form');
-  await form.locator('[name=title]').fill('Spanish');
-  await form.locator('[name=mode]').selectOption('anytime');
-  await form.locator('[name=source]').selectOption('learning');
-  await form.locator('[name=planId]').selectOption('plan-es');
-  await form.locator('[name=minimumMinutes]').fill('10');
-  await form.getByRole('button', { name: 'Save routine', exact: true }).click();
-  await page.keyboard.press('Escape');
+  await addLearningRoutine(page);
 
   await page.getByRole('button', { name: 'Plan Tomorrow', exact: true }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
   await expect(page.locator('#plan-tomorrow-date')).toContainText('Thursday, November 19');
+  // Tonight's captures are not lost here: the planner says they are waiting to be sorted.
+  await expect(page.locator('#plan-tomorrow-overlay .pt-unsorted')).toHaveText('2 new ideas not sorted yet. Sort them in Brain Dump to plan them.');
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toContainText('No Q1 or Q2 ideas available');
   const add = page.locator('#plan-tomorrow-add');
   await add.locator('[name="task"]').fill('Write the project brief');
   await add.locator('[name="when"]').fill('09:00');
@@ -200,6 +207,7 @@ test('a whole day: night plan, morning dashboard, start, complete, learning', as
   const dialog = page.locator('#routine-day-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("Spanish basics · Today's step: Learn 10 greetings");
+  await expect(dialog.getByRole('button', { name: 'Open Learning Plans', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Start Focus', exact: true }).click();
   await expect(page.locator('#focus-overlay')).toContainText('Learn 10 greetings');
   // The 15-minute session runs to its end (the app restores it from wall time on reopen).
@@ -221,4 +229,19 @@ test('a whole day: night plan, morning dashboard, start, complete, learning', as
   await expect(page.getByText(/timer was running/i).filter({ visible: true })).toHaveCount(0);
   expect((await entries(page)).filter(e => e.planItemId).length).toBe(2);
   expect(errors.filter(e => !/Failed to load resource/.test(e))).toEqual([]);
+});
+
+test("a learning card leads to the plan itself (Open Learning Plans)", async ({ page }) => {
+  await boot(page);
+  await page.goto(url);
+  await ready(page);
+  await addLearningRoutine(page);
+  await page.locator('#command-work [data-work-line="learning"]').getByRole('button', { name: 'Show', exact: true }).click();
+  const dialog = page.locator('#routine-day-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Open Learning Plans', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#view-learning')).toBeVisible();
+  await expect(page.locator('#view-learning')).toContainText('Spanish basics');
+  await expect(page.getByRole('checkbox', { name: 'Complete step: Learn 10 greetings' })).toBeVisible();
 });
