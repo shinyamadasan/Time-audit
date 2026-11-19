@@ -2,7 +2,8 @@
   refreshAuthoritativePlanSurfaces, showToast, getActiveTimerOwnerSnapshot, focusModeOn,
   running, breakActive, awayActive, enterFocusMode, _startTimer, settings, todayGuidedAction,
   planDisplayOrder, planItemKindOf, accountLocalKey, showView, currentTaskPlanItemId,
-  activeFocusPlanItemId, unworkedPlanItems, workedOnPlanItems, planItemsFor */
+  activeFocusPlanItemId, unworkedPlanItems, workedOnPlanItems, planItemsFor,
+  planRawItemsFor, createPlanItem */
 // Presentation over the existing My Day renderers; source records and timer ownership stay authoritative.
 (() => {
   let selected = null;
@@ -206,6 +207,64 @@
     if (result.ok) { input.value = ''; status.textContent = 'Captured. Sort it in Brain Dump to plan it.'; }
     else { status.textContent = 'Type something to capture.'; input.focus(); }
   }
+  // Owner decision (LOW 4): priorities left unfinished on the previous day appear in Needs you for
+  // triage, even if the evening plan was skipped, but they NEVER get a time on their own. Adding one
+  // to today is the user's explicit choice and reuses the planner's carry: the same deterministic id
+  // (so a carry made in Plan Tomorrow, on any device, is the same item) and when '' (Anytime). Once an
+  // item is carried (even if later removed from today) or done, it leaves this list.
+  function unfinishedFromYesterday() {
+    const carryId = globalThis.carryItemIdFor;
+    if (typeof carryId !== 'function' || !globalThis.PlanAuthority || !isViewingToday()) return null;
+    const today = PlanAuthority.current();
+    const prior = today && PlanAuthority.previous(today);
+    if (!prior) return null;
+    const triaged = new Set(planRawItemsFor(today).map(item => item.id));
+    const rows = [];
+    for (const item of planItemsFor(prior)) {
+      if (item.done || planItemKindOf(item) !== 'priority') continue;
+      let id; try { id = carryId(prior, item.id, today); } catch { continue; }
+      if (!triaged.has(id)) rows.push({ item, id });
+    }
+    return { prior, today, rows };
+  }
+  function addUnfinishedToToday(id) {
+    try {
+      const data = unfinishedFromYesterday();
+      const row = data?.rows.find(r => r.id === id);
+      if (!row) return;
+      const item = { ...createPlanItem(row.item.task, '', 'priority'), id: row.id, carriedFromId: row.item.id };
+      PlanAuthority.addItem({ destination: data.today, item });
+      refreshAuthoritativePlanSurfaces();
+      showToast(`Added to today · ${row.item.task} · Anytime`);
+    } catch (err) { showToast(err.message); }
+  }
+  function refreshUnfinished() {
+    const el = byId('unfinished-carry');
+    if (!el) return;
+    let data = null;
+    try { data = unfinishedFromYesterday(); } catch { data = null; }
+    const rows = data?.rows || [];
+    const wasHidden = el.hidden;
+    el.hidden = !rows.length;
+    el.textContent = '';
+    if (rows.length) {
+      const key = data.prior.dateKey || data.prior.ref?.boundaryStartDate;
+      let day = 'yesterday';
+      try { day = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: settings.timezone || undefined }).format(new Date(`${key}T12:00:00Z`)); } catch { /* keep 'yesterday' */ }
+      const head = document.createElement('span');
+      head.textContent = `${rows.length} unfinished ${rows.length === 1 ? 'priority' : 'priorities'} from ${day}. Add the ones you still want to today (no time is set).`;
+      const list = document.createElement('ul'); list.className = 'unfinished-carry-list';
+      for (const row of rows) {
+        const li = document.createElement('li');
+        const title = document.createElement('span'); title.textContent = row.item.task;
+        li.append(title, button('Add to today', () => addUnfinishedToToday(row.id), 'ghost'));
+        li.lastChild.setAttribute('aria-label', `Add to today: ${row.item.task}`);
+        list.append(li);
+      }
+      el.append(head, list);
+    }
+    if (wasHidden !== el.hidden) globalThis.renderNeedsYou?.();
+  }
   function refresh() {
     const context = `${accountLocalKey('command-center')}|${byId('timeline-date-label')?.textContent || ''}`;
     if (viewKey !== context) { selected = null; viewKey = context; }
@@ -213,6 +272,7 @@
     byId('timeline-anytime')?.querySelectorAll('.anytime-row').forEach(enhanceRow);
     refreshOverview();
     refreshWork();
+    refreshUnfinished();
   }
   function initialize() {
     const today = byId('view-today');

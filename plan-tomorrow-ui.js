@@ -1,5 +1,7 @@
 import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, isPriorityPlanItem, isSecondaryPlanItem, planItemEndTime, withPlanItemKind, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
 import { carryItemIdFor } from './plan-authority.js';
+// My Day's "unfinished from yesterday" triage carries with the planner's exact id rule (no duplicates).
+globalThis.carryItemIdFor = carryItemIdFor;
 import { describeDayStart } from './personal-day-boundary-live.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';

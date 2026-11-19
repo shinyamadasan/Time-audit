@@ -310,3 +310,70 @@ test('Plan Tomorrow keeps an unsaved draft across a trip to Brain Dump and back'
   await expect(overlay).toContainText('Water the plants');
   await expect(page.locator('#pt-save-status')).toHaveText('Unsaved changes');
 });
+
+test('skipped evening: yesterday\'s unfinished priorities appear for triage next morning, never with a time', async ({ page }) => {
+  await boot(page);
+  await page.goto(url);
+  await ready(page);
+  // Thursday: two priorities and a plain task; one priority gets done; no evening planning.
+  await moveClockTo(page, MORNING);
+  await page.evaluate(() => {
+    const target = PlanAuthority.current();
+    for (const [task, when, kind] of [['Fix login bug', '10:00', 'priority'], ['Call the plumber', '', 'priority'], ['Buy groceries', '', 'task']]) {
+      PlanAuthority.addItem({ destination: target, item: createPlanItem(task, when, kind) });
+    }
+    refreshAuthoritativePlanSurfaces();
+  });
+  await markDone(page, 'Call the plumber');
+  await expect(page.locator('#unfinished-carry')).toBeHidden();
+
+  // Friday morning.
+  await moveClockTo(page, MORNING + 24 * 3600000);
+  const triage = page.locator('#unfinished-carry');
+  await expect(page.locator('#needs-you')).toBeVisible();
+  await expect(triage).toBeVisible();
+  await expect(triage).toContainText('1 unfinished priority from Thursday');
+  await expect(triage.locator('li')).toHaveText(['Fix login bugAdd to today']);
+  // Nothing was put into today on its own: no item, and certainly no time slot.
+  const todayItems = () => page.evaluate(() => planItemsFor(PlanAuthority.current()).map(i => ({ task: i.task, when: i.when, carriedFromId: !!i.carriedFromId })));
+  expect(await todayItems()).toEqual([]);
+
+  await triage.getByRole('button', { name: 'Add to today: Fix login bug' }).click();
+  await expect(page.locator('#toast')).toContainText('Added to today · Fix login bug · Anytime');
+  expect(await todayItems()).toEqual([{ task: 'Fix login bug', when: '', carriedFromId: true }]);
+  await expect(triage).toBeHidden();
+  await page.reload();
+  await ready(page);
+  await expect(page.locator('#unfinished-carry')).toBeHidden();
+  expect(await todayItems()).toEqual([{ task: 'Fix login bug', when: '', carriedFromId: true }]);
+});
+
+test('a priority already carried in Plan Tomorrow is not offered again next morning (one item, no time)', async ({ page }) => {
+  await boot(page);
+  await page.goto(url);
+  await ready(page);
+  await moveClockTo(page, MORNING);
+  await page.evaluate(() => {
+    const target = PlanAuthority.current();
+    for (const task of ['Fix login bug', 'Renew the lease']) PlanAuthority.addItem({ destination: target, item: createPlanItem(task, '10:00', 'priority') });
+    refreshAuthoritativePlanSurfaces();
+  });
+  // Thursday evening: carry one of them in Plan Tomorrow, leave the other.
+  await moveClockTo(page, MORNING + 13 * 3600000);
+  await page.getByRole('button', { name: 'Plan Tomorrow', exact: true }).click();
+  const overlay = page.locator('#plan-tomorrow-overlay');
+  await expect(overlay).toHaveClass(/open/);
+  if (!(await overlay.locator('details[data-pt-fold="unfinished"]').evaluate(d => d.open))) await overlay.locator('details[data-pt-fold="unfinished"] > summary').click();
+  await overlay.locator('[data-pt-reconcile-item]').filter({ hasText: 'Fix login bug' }).getByRole('button', { name: 'Carry to tomorrow' }).click();
+  await page.getByRole('button', { name: 'Save plan', exact: true }).click();
+  await expect(overlay).not.toHaveClass(/open/);
+
+  await moveClockTo(page, MORNING + 24 * 3600000);
+  const triage = page.locator('#unfinished-carry');
+  await expect(triage).toContainText('1 unfinished priority from Thursday');
+  await expect(triage.locator('li span')).toHaveText(['Renew the lease']);
+  await triage.getByRole('button', { name: 'Add to today: Renew the lease' }).click();
+  await expect(triage).toBeHidden();
+  const today = await page.evaluate(() => planItemsFor(PlanAuthority.current()).map(i => [i.task, i.when]).sort());
+  expect(today).toEqual([['Fix login bug', ''], ['Renew the lease', '']]);
+});
