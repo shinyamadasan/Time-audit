@@ -3013,10 +3013,12 @@ function accountingConfirmedFrame(raw, base, owner, established) {
   const same = TimeAckCore.same, result = cloneUndoValue(base);
   const projection = EntryPhysicalKeys.project(raw.entries || {});
   if (projection.conflicts.length) throw Error('physical-source-unresolved');
+  // One pass per map instead of one full scan per entry (identical results; see EntryPhysicalKeys.indexById).
+  const rawIndex = EntryPhysicalKeys.indexById(raw.entries || {}), baseIndex = EntryPhysicalKeys.indexById(base.physicalEntries || {});
   for (const entry of base.entries) {
-    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
+    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id, 'app', rawIndex);
     if (actual.status === 'found' && same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(actual.record))) continue;
-    const previous = EntryPhysicalKeys.resolve(base.physicalEntries || {}, entry.id);
+    const previous = EntryPhysicalKeys.resolve(base.physicalEntries || {}, entry.id, 'app', baseIndex);
     if (!established || actual.status !== 'found' || previous.status !== 'found'
       || !same(Object.keys(previous.before).sort(), Object.keys(actual.before).sort())
       || !same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(previous.record))

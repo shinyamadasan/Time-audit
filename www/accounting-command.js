@@ -13,6 +13,9 @@
   function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {} }) {
     const drains = new Map();
     const failed = new Map();
+    // Perf (stabilization 2026-11-19): validation below is a pure function of the stored string, so a string
+    // that already passed it is not re-validated. Every caller still gets its own freshly parsed object.
+    const validatedRaw = new Map();
     function readStored(slot) {
       try { return storage.getItem(slot); }
       catch (error) { error.accountingStorageRead = true; throw error; }
@@ -33,6 +36,7 @@
     };
     function load(owner) {
       const raw = readStored(key(owner));
+      if (raw != null && validatedRaw.get(owner) === raw) return JSON.parse(raw);
       const state = raw == null ? { v: VERSION, owner, generation: 0, committed: null, queue: [], history: [] } : JSON.parse(raw);
       if (state?.v !== VERSION || state.owner !== owner || !Array.isArray(state.queue)
         || !Array.isArray(state.history) || !Number.isSafeInteger(state.generation) || state.generation < 0
@@ -59,6 +63,7 @@
         || state.effectReceipts != null && (typeof state.effectReceipts !== 'object' || Array.isArray(state.effectReceipts)
           || Object.entries(state.effectReceipts).some(([id, receipt]) => receipt?.v !== 1
             || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))) throw Error('Unreadable accounting envelope');
+      if (raw != null) validatedRaw.set(owner, raw);
       return state;
     }
     function save(state) {
@@ -528,7 +533,7 @@
       apply(clone(state.committed.value), clone(state.committed));
       return true;
     }
-    function snapshot(owner = identity()?.owner) { return owner ? clone(load(owner)) : null; }
+    function snapshot(owner = identity()?.owner) { return owner ? load(owner) : null; }
     function observeProvisional(sourceId, at = Date.now()) {
       const observation = capture({ name: 'ordinary-heartbeat', sourceId }, { at, provisionalObservation: true });
       return lock(observation.owner, () => {

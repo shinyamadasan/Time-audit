@@ -27,7 +27,21 @@
       || Object.keys(meta).some(key => !['v', 'protocol', 'revision', 'baseRevision', 'baseExists', 'operationId'].includes(key))) throw Error('Unknown entry revision');
     return meta.revision;
   }
-  function resolve(raw, id, prefer = 'app') {
+  // Perf (stabilization 2026-11-19): resolving every entry of an account scanned the whole raw map once per
+  // entry (quadratic). indexById groups the map in ONE pass, in the same Object.entries order, keyed exactly
+  // like the scan below (String(value.id) for every truthy value); passing it to resolve gives identical results.
+  function indexById(raw) {
+    const index = new Map();
+    for (const entry of Object.entries(raw || {})) {
+      const value = entry[1];
+      if (!value) continue;
+      const id = String(value.id);
+      if (!index.has(id)) index.set(id, []);
+      index.get(id).push(entry);
+    }
+    return index;
+  }
+  function resolve(raw, id, prefer = 'app', index = null) {
     const identity = String(id);
     if (!validKey(identity) || !['string', 'number'].includes(typeof id)
       || (typeof id === 'number' && (!Number.isSafeInteger(id) || id <= 0))) return { status: 'unknown', reason: 'invalid-identity', id };
@@ -36,7 +50,8 @@
         return { status: 'unknown', reason: 'physical-key-occupied', id, physical: [[key, copy(raw[key])]] };
       }
     }
-    const matches = Object.entries(raw || {}).filter(([, value]) => value && String(value.id) === identity);
+    const matches = index ? (index.get(identity) || []).slice()
+      : Object.entries(raw || {}).filter(([, value]) => value && String(value.id) === identity);
     const before = {};
     for (const [key, value] of matches) {
       if (![identity, `e_${identity}`].includes(key) || value.id !== id) {
@@ -75,9 +90,9 @@
   }
   function project(raw) {
     const ids = [...new Map(Object.values(raw || {}).filter(record => record && record.id != null).map(record => [String(record.id), record.id])).values()];
-    const entries = [], conflicts = [];
+    const entries = [], conflicts = [], index = indexById(raw);
     for (const id of ids) {
-      const basis = resolve(raw, id);
+      const basis = resolve(raw, id, 'app', index);
       if (basis.status === 'found') entries.push(basis.record);
       else conflicts.push(basis);
     }
@@ -85,5 +100,5 @@
     if (malformed.length) conflicts.push({ status: 'unknown', reason: 'malformed-physical-record', physical: copy(malformed) });
     return { entries, conflicts };
   }
-  root.EntryPhysicalKeys = { PROTOCOL, copy, wire, same, content, resolve, prepare, unchanged, project };
+  root.EntryPhysicalKeys = { PROTOCOL, copy, wire, same, content, resolve, prepare, unchanged, project, indexById };
 })(globalThis);
