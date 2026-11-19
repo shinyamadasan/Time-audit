@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20261101-task039-shipped-capability-v1">
+<meta name="pdb-release" content="20261111-my-day-command-center-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,16 +13,16 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="style.css?v=20261111-my-day-command-center-v1">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
-<link rel="stylesheet" href="plan-tomorrow.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="plan-tomorrow.css?v=20261111-my-day-command-center-v1">
 <link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
-<link rel="stylesheet" href="planning-continuity.css?v=20261101-task039-shipped-capability-v1">
-<link rel="stylesheet" href="brain-dump-tray.css?v=20261026-task031-source-guard-v1">
-<link rel="stylesheet" href="daily-command-center.css?v=20261101-task039-shipped-capability-v1">
+<link rel="stylesheet" href="planning-continuity.css?v=20261111-my-day-command-center-v1">
+<link rel="stylesheet" href="brain-dump-tray.css?v=20261111-my-day-capture-v1">
+<link rel="stylesheet" href="daily-command-center.css?v=20261111-my-day-command-center-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -158,6 +158,7 @@
     <h2>Needs you <span id="needs-you-count"></span></h2>
     <div id="needs-you-items">
       <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
+      <div id="unfinished-carry" hidden></div>
       <div id="sleep-needs-item" hidden><span>Your configured sleep reminder is due.</span> <button class="btn sm ghost" id="today-sleep-reminder" onclick="openSleepReminder()" hidden>Log sleep</button></div>
       <div id="routine-needs-item" hidden><span id="routine-needs-copy"></span> <button class="btn sm ghost" onclick="inspectRoutineDetails()">Inspect routines</button></div>
       <p id="daily-routines-error" class="routine-error" role="alert"></p>
@@ -468,6 +469,7 @@
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
     </div>
     <div id="timeline-anytime" hidden></div>
+    <section id="sop-execution" class="sop-execution" aria-label="Procedures (SOPs)"></section>
     <div id="timeline-blocks"></div>
   </div>
 
@@ -1726,11 +1728,26 @@
   </div>
 </div></div>
 
-<div style="position:fixed;bottom:calc(124px + var(--safe-bottom));left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:8px;z-index:998">
+<div id="status-dock" style="position:fixed;bottom:calc(124px + var(--safe-bottom));left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));max-height:35vh;overflow:auto;display:flex;flex-direction:column;gap:8px;z-index:998">
 <div class="time-ack-status" id="time-ack-status" role="status" aria-live="polite" hidden style="position:static;transform:none;width:100%"></div>
 <aside id="ordinary-provisional" role="status" aria-live="polite" hidden style="box-sizing:border-box;white-space:pre-line;padding:12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg2);color:var(--text)"></aside>
 <aside class="time-ack-status" id="focus-recovery-status" role="status" aria-live="polite" hidden style="position:static;transform:none;width:100%"></aside>
 </div>
+<script>
+// The status dock (accounting / offline / focus recovery notices) is fixed over the page. Reserve the
+// screen height it covers so every card and button can still be scrolled clear of it.
+(() => {
+  const dock = document.getElementById('status-dock');
+  if (!dock || typeof ResizeObserver !== 'function') return;
+  const apply = () => {
+    const covered = dock.offsetHeight ? Math.max(0, Math.ceil(window.innerHeight - dock.getBoundingClientRect().top)) + 8 : 0;
+    document.documentElement.style.setProperty('--status-dock-h', `${covered}px`);
+  };
+  new ResizeObserver(apply).observe(dock);
+  window.addEventListener('resize', apply);
+  apply();
+})();
+</script>
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
 <audio id="focus-music">
@@ -1740,7 +1757,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261101-task039-shipped-capability-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261111-my-day-command-center-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1759,86 +1776,89 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261101-task039-shipped-capability-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20261101-task039-shipped-capability-v1",
-    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-model.js": "./commitments-model.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261101-task039-shipped-capability-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-item-origin.js": "./plan-item-origin.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-model.js": "./task-completion-model.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-repository.js": "./task-completion-repository.js?v=20261101-task039-shipped-capability-v1",
-    "./task-completion-sync.js": "./task-completion-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261101-task039-shipped-capability-v1",
-    "./brain-dump-model.js": "./brain-dump-model.js?v=20261026-task031-source-guard-v1",
-    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261026-task031-source-guard-v1",
-    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261026-task031-source-guard-v1",
-    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261026-task031-source-guard-v1",
-    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261026-task031-source-guard-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-wire.js": "./personal-day-boundary-wire.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261111-my-day-command-center-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261111-my-day-command-center-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20261111-my-day-command-center-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261111-my-day-command-center-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261111-my-day-command-center-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20261111-my-day-command-center-v1",
+    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261111-my-day-command-center-v1",
+    "./commitments-model.js": "./commitments-model.js?v=20261111-my-day-command-center-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20261111-my-day-command-center-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20261111-my-day-command-center-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261111-my-day-command-center-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261111-my-day-command-center-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261111-my-day-command-center-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261111-my-day-command-center-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20261111-my-day-command-center-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261111-my-day-command-center-v1",
+    "./sop-model.js": "./sop-model.js?v=20261111-my-day-command-center-v1",
+    "./sop-repository.js": "./sop-repository.js?v=20261111-my-day-command-center-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261111-my-day-command-center-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261111-my-day-command-center-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261111-my-day-command-center-v1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261111-my-day-command-center-v1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261111-my-day-command-center-v1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261111-my-day-command-center-v1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261111-my-day-command-center-v1",
+    "./plan-item-origin.js": "./plan-item-origin.js?v=20261111-my-day-command-center-v1",
+    "./task-completion-model.js": "./task-completion-model.js?v=20261111-my-day-command-center-v1",
+    "./task-completion-repository.js": "./task-completion-repository.js?v=20261111-my-day-command-center-v1",
+    "./task-completion-sync.js": "./task-completion-sync.js?v=20261111-my-day-command-center-v1",
+    "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261111-my-day-command-center-v1",
+    "./brain-dump-model.js": "./brain-dump-model.js?v=20261111-my-day-capture-v1",
+    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261111-my-day-capture-v1",
+    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261111-my-day-capture-v1",
+    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261111-my-day-capture-v1",
+    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261111-my-day-capture-v1"
   }
 }
 </script>
-<script src="storage.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="time-ack.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="browser-extension/entry-physical-keys.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="accounting-command.js?v=20261101-task039-shipped-capability-v1"></script>
-<script src="accounting-capability.js?v=20261101-task039-shipped-capability-v1"></script>
+<script src="storage.js?v=20261111-my-day-command-center-v1"></script>
+<script src="time-ack.js?v=20261111-my-day-command-center-v1"></script>
+<script src="browser-extension/entry-physical-keys.js?v=20261111-my-day-command-center-v1"></script>
+<script src="accounting-command.js?v=20261111-my-day-command-center-v1"></script>
+<script src="accounting-capability.js?v=20261111-my-day-command-center-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="plan-tomorrow-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="sop-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="plan-tomorrow-ui.js?v=20261111-my-day-command-center-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20261111-my-day-command-center-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
-<script type="module" src="windows-hud-bridge.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="windows-hud-bridge.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20261111-my-day-command-center-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20261111-my-day-command-center-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261101-task039-shipped-capability-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261111-my-day-command-center-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="commitments-sync.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="planning-continuity-ui.js?v=20261101-task039-shipped-capability-v1"></script>
-<script type="module" src="brain-dump-sync.js?v=20261026-task031-source-guard-v1"></script>
-<script type="module" src="brain-dump-ui.js?v=20261026-task031-source-guard-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="commitments-sync.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20261111-my-day-command-center-v1"></script>
+<script type="module" src="brain-dump-sync.js?v=20261111-my-day-capture-v1"></script>
+<script type="module" src="brain-dump-ui.js?v=20261111-my-day-capture-v1"></script>
 <script type="module" src="intelligence-ui.js?v=20261008-intelligence-int001"></script>
 
 <script>
@@ -3453,8 +3473,8 @@ function renderOrdinaryProvisional() {
     panel.textContent = (paused ? 'Tracking paused — original offline time retained.' : active
       ? 'Started offline — awaiting sync.' : 'Saved on this device — awaiting sync.')
       + '\nProvisional only. Excluded from confirmed totals, exports and Undo.'
-      + `\n${({ start: 'Start', stop: 'Stop', resume: 'Resume' })[view.command.kind]} · ${view.command.task || 'Work block'} · ${new Date(view.command.endpoint).toISOString()}`
-      + view.pendingEntries.map(entry => `\n${entry.activity}: ${new Date(entry.tsStart).toISOString()} → ${new Date(entry.ts).toISOString()} · ${entry.blockIntervalMin} min pending`).join('');
+      + `\n${({ start: 'Start', stop: 'Stop', resume: 'Resume' })[view.command.kind]} · ${view.command.task || 'Work block'} · ${tzTime(view.command.endpoint)}`
+      + view.pendingEntries.map(entry => `\n${entry.activity}: ${tzTime(entry.tsStart)} → ${tzTime(entry.ts)} · ${entry.blockIntervalMin} min pending`).join('');
   }
   showHeroState(active ? 'active' : 'idle');
   document.getElementById('hero-task-name').textContent = view.frame.currentTask || view.frame.lastTaskForRepeat || '';
@@ -6452,9 +6472,16 @@ function renderPlannedTimelineRow(row, editable, { completable = editable, toggl
   return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}${row.carryIn ? ' tl-carry-in' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}">
     <div class="tl-time">${timelineRowEscape(startLabel)}</div><div class="tl-bar-col tl-bar-plan"></div>
     <button class="tl-plan-check" onclick="${toggleFn}('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${completable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
-    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · Planned time only</div></div>
+    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · Planned time only</div>${sopBadgeHtml(row)}</div>
     ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
   </div>`;
+}
+
+/** My Day execution task: the linked SOP's run line for a plan row, or '' (unlinked rows unchanged).
+ *  Read-only over sop-ui.js's device-local SOP store; never writes the plan item. */
+function sopBadgeHtml(row) {
+  if (!row || !row.itemId || !globalThis.SopUI) return '';
+  try { return globalThis.SopUI.badgeHtml(String(row.itemId)); } catch { return ''; }
 }
 
 function renderAnytimeLane(rows, editable) {
@@ -6466,7 +6493,7 @@ function renderAnytimeLane(rows, editable) {
     const title = timelineRowEscape(row.title);
     if (row.sourceType === 'commitment') return `<div class="anytime-row" data-commitment-id="${timelineRowEscape(row.commitmentId)}"><span class="anytime-marker" aria-hidden="true">◆</span><div class="anytime-title">${title}</div><span class="anytime-type">Commitment · date only</span>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}</div>`;
     const star = row.planKind === 'priority' ? '<span class="anytime-star" aria-label="Top Priority">★</span>' : '';
-    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
+    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${sopBadgeHtml(row)}${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
   }).join('');
   const more = rows.length > 4 ? `<button class="pc-more" onclick="toggleTimelineAnytime()">${timelineAnytimeExpanded ? 'Show less' : `Show ${rows.length - 4} more`}</button>` : '';
   root.hidden = false;
@@ -6479,12 +6506,34 @@ function toggleTimelineAnytime() {
   renderToday();
 }
 
-function toggleTimelinePlanDone(dayId, itemId) {
+/** Marking the task you are timing as done also stops and logs its timer (My Day daily-workflow
+ *  run, HIGH): otherwise the session ran on, and the next morning asked to log it up to device
+ *  close. Only the ordinary timer of THIS plan item; a Focus session keeps its own end flow, and
+ *  Away/Break are left alone. Returns false when the timer could not be stopped: the caller then
+ *  does NOT mark the task done, so the two never disagree. */
+function timerRunsForPlanItem(itemId) {
+  if (!itemId || focusModeOn || awayActive || breakActive) return false;
+  if (running) return currentTaskPlanItemId === itemId;
+  // Offline, a Start is provisional until it syncs; it still runs and must stop too.
+  try { const frame = ordinaryProvisionalState()?.frame; return !!frame?.running && frame.currentTaskPlanItemId === itemId; } catch { return false; }
+}
+async function stopTimerForCompletedPlanItem(itemId) {
+  if (!timerRunsForPlanItem(itemId)) return true;
+  if ((await stopAndLog()) !== false) return true;
+  showToast('The timer could not be stopped, so the task was not marked done. Stop it, then mark it done.');
+  return false;
+}
+
+function toggleTimelinePlanDone(dayId, itemId, timerHandled = false) {
   if (!globalThis.PlanAuthority) return;
   const target = globalThis.PlanAuthority.targetById(dayId);
   if (!target || !isTimelineTargetEditable(target)) return;
   const item = globalThis.PlanAuthority.items(target).find(candidate => candidate.id === itemId);
   if (!item) return;
+  // Synchronous unless a timer must be stopped first (callers and tests read the result at once).
+  if (!timerHandled && !item.done && timerRunsForPlanItem(itemId)) {
+    return stopTimerForCompletedPlanItem(itemId).then(ok => { if (ok) toggleTimelinePlanDone(dayId, itemId, true); });
+  }
   const done = !item.done;
   globalThis.PlanAuthority.updateItem({ sourceTarget: target, itemId, changes: { done, doneAt: done ? Date.now() : null }, stamp: stampPlanItemMutation });
   _todayRenderKey = '__FORCE__';
@@ -7094,7 +7143,11 @@ function renderTodayActionStrip() {
   const state = todayGuidedAction();
   const remote = !!getActiveTimerOwnerSnapshot();
   const focus = typeof focusModeOn !== 'undefined' && focusModeOn;
-  const active = remote || focus || breakActive || awayActive || running;
+  // An offline Start is provisional (not `running` until it syncs). Show it as running anyway,
+  // with Stop, so nobody thinks Start failed and presses it again.
+  let offline = null;
+  if (!running && !remote && !focus) { try { const view = ordinaryProvisionalState(); offline = view?.frame?.running ? view.frame : null; } catch { offline = null; } }
+  const active = remote || focus || breakActive || awayActive || running || !!offline;
   const free = !active && !state.task;
   const shell = document.getElementById('up-next');
   const previousState = shell.dataset.state;
@@ -7103,7 +7156,10 @@ function renderTodayActionStrip() {
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const nativeControls = !remote && !focus && (breakActive || awayActive || running);
   el.style.display = 'flex';
-  el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Now' : 'Up next'}</div>
+  if (offline) {
+    el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">Now</div><div class="today-action-title" id="today-action-title">${esc(offline.currentTask || 'Work block')}</div><div class="today-action-sub" id="today-action-sub">Started offline — waiting to sync</div></div>
+    <button type="button" class="today-action-btn" id="today-action-primary" onclick="stopAndLog()">Stop</button>`;
+  } else el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Now' : 'Up next'}</div>
     ${nativeControls || free ? '' : `<div class="today-action-title" id="today-action-title">${esc(state.title.replace(/^Next: /, ''))}</div><div class="today-action-sub" id="today-action-sub">${esc(state.sub)}</div>`}</div>
     ${nativeControls || free ? '' : `<button type="button" class="today-action-btn" id="today-action-primary" onclick="${state.action}">${esc(active ? state.button : state.button === 'Done' ? 'Done' : 'Start')}</button>`}`;
   document.getElementById('execution-options').hidden = active;
@@ -8018,6 +8074,7 @@ function renderToday() {
     }
     const editable = isTimelineTargetEditable(timelineTarget);
     renderAnytimeLane(projection.anytime, editable);
+    globalThis.SopUI?.setMyDayTasks([...projection.anytime, ...projection.positioned], editable);
     const base = assembleTodayTimeline(displayTimelineE, myDay, { includeGaps: viewingCurrentTimeline, templateEntries: dailyViewTemplates });
     const sourceOrder = item => item._timelinePlanned ? (item.sourceType === 'planned-task' ? 0 : 1) : item.template ? 2 : item.isGap ? 4 : 3;
     const rowId = item => String(item.id || item.templateId || '');
@@ -9525,10 +9582,13 @@ function setPlanItemKind(id, kind) {
   }
 }
 
-function togglePlanDone(id) {
+function togglePlanDone(id, timerHandled = false) {
   if (!isViewingToday()) return;
   const target = currentPlanTarget();
   if (!target) return;
+  if (!timerHandled && planRawItemsFor(target).find(i => i.id === id)?.done === false && timerRunsForPlanItem(id)) {
+    return stopTimerForCompletedPlanItem(id).then(ok => { if (ok) togglePlanDone(id, true); });
+  }
   const raw = planRawItemsFor(target).map(i => {
     if (i.id !== id) return i;
     const done = !i.done;
@@ -14529,7 +14589,7 @@ if (!localStorage.getItem('ta3-onboarded')) {
   setTimeout(openOnboarding, 400);
 }
 </script>
-<script src="focus-mode.js?v=20261101-task039-shipped-capability-v1"></script>
+<script src="focus-mode.js?v=20261111-my-day-command-center-v1"></script>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="ob-overlay" id="ob-overlay">
@@ -14846,6 +14906,7 @@ function buildSessions(events) {
 initPhoneUsageTracking();
 </script>
 
-<script defer src="daily-command-center.js?v=20261101-task039-shipped-capability-v1"></script>
+<script defer src="my-day-work-model.js?v=20261111-my-day-command-center-v1"></script>
+<script defer src="daily-command-center.js?v=20261111-my-day-command-center-v1"></script>
 </body>
 </html>

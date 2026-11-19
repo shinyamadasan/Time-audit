@@ -53,6 +53,26 @@ function scheduleLabel(r) {
 function button(action, id, label) {
   return `<button type="button" class="btn sm" data-routine-action="${action}" data-routine-id="${escape(id)}" data-routine-owner="${escape(appRoomOwner() || '')}">${label}</button>`;
 }
+// The Learning Plan a learning routine's instance is bound to, by its CURRENT title (renames show up);
+// falls back to the title captured when the instance was bound. Read-only: no new association.
+function learningPlanTitle(link) {
+  return view.plans.find(p => p.id === link.planId)?.title || link.planTitle || 'Learning Plan';
+}
+// A learning routine's bound step still exists in its plan (the card's "Today's step" condition).
+function learningStepExists(r, link) {
+  return !!(link && link.planId === r.planId && view.plans.some(p => p.id === link.planId && p.phases.some(ph => ph.lessons.some(l => l.steps.some(s => s.id === link.stepId)))));
+}
+/** My Day Command Center V1: today's learning steps exactly as the cards show them; null until rendered. Read-only. */
+export function todayLearning() {
+  if (!view || view.browsingHistory) return null;
+  return view.instances.filter(item => item.routine.source === 'learning')
+    .map(item => ({ item, link: view.state.links[item.id] }))
+    .filter(({ item, link }) => learningStepExists(item.routine, link))
+    .map(({ item, link }) => {
+      const completion = matchCompletion(item, view.input, view.now);
+      return { planTitle: learningPlanTitle(link), stepTitle: link.stepTitle, complete: !!completion && completion.level !== 'incomplete' };
+    });
+}
 function renderCard(item, completion, status) {
   const r = item.routine;
   const link = view.state.links[item.id];
@@ -62,13 +82,15 @@ function renderCard(item, completion, status) {
     const result = matchCompletion(historical, view.input, view.now);
     return !!result && result.level !== 'incomplete';
   });
-  const hasStep = r.source !== 'learning' || (link && link.planId === r.planId && view.plans.some(p => p.id === link.planId && p.phases.some(ph => ph.lessons.some(l => l.steps.some(s => s.id === link.stepId)))));
+  const hasStep = r.source !== 'learning' || learningStepExists(r, link);
   let actions = !complete ? button('skip', r.id, 'Skip today') : '';
   if (!complete && r.source === 'manual') {
     actions = button('done', r.id, 'Done') + (r.minimumMinutes ? button('minimum', r.id, 'Minimum done') : '') + actions;
   }
   if (view.state.manual[item.id]) actions += button('undo', r.id, 'Undo manual Done');
   if (!complete && ['learning', 'focus'].includes(r.source) && hasStep) actions = button('start', r.id, 'Start Focus') + actions;
+  // The way to the plan itself: see or tick off steps, or pick up when no step is available today.
+  if (r.source === 'learning') actions += button('learning-plans', r.id, 'Open Learning Plans');
   let note = '';
   if (r.source === 'workout' && !complete) note = 'Completion appears when a matching workout is imported.';
   if (r.source === 'learning' && !hasStep) note = 'No unfinished step available today.';
@@ -76,7 +98,7 @@ function renderCard(item, completion, status) {
   if (completion?.level === 'incomplete' && completion.duration) note = `${completion.duration} min recorded · below minimum/target.`;
   return `<article class="daily-routine-card" data-instance-id="${escape(item.id)}">
     <div><strong>${complete ? '✓ ' : ''}${escape(r.title)}</strong>
-    ${r.source === 'learning' && hasStep ? `<div>${escape(link.stepTitle)}</div>` : ''}
+    ${r.source === 'learning' && hasStep ? `<div class="routine-learning">${escape(learningPlanTitle(link))} · Today's step: ${escape(link.stepTitle)}</div>` : ''}
     <div class="routine-meta">${escape(scheduleLabel(r))} · Target ${r.targetMinutes} min${r.minimumMinutes ? ` · Minimum ${r.minimumMinutes} min` : ''}</div>
     <div class="routine-meta">${escape(status.label)}${completion ? ` · ${completion.source === 'manual' ? 'Manual assertion' : 'Source completion'}` : ''}${streak ? ` · ${streak} consecutive calendar day${streak === 1 ? '' : 's'}` : ''}</div>
     ${note ? `<div class="routine-meta">${escape(note)}</div>` : ''}</div><div class="routine-actions">${actions}</div></article>`;
@@ -111,6 +133,7 @@ export function renderDailyRoutines() {
     if (html !== rendered) { list.innerHTML = html; rendered = html; }
     error.textContent = '';
     globalThis.renderTodayActionStrip?.();
+    globalThis.DailyCommandCenter?.refreshWork?.();
   } catch (err) { view = null; message(err); }
 }
 function updateFields() {
@@ -172,6 +195,11 @@ document.addEventListener('click', async event => {
       document.getElementById('routine-manager').showModal();
       return;
     }
+    if (action === 'learning-plans') {
+      document.getElementById('routine-day-dialog')?.close();
+      globalThis.showView?.('learning');
+      return;
+    }
     if (action === 'edit' || action === 'add') { document.getElementById('routine-manager').close(); openEditor(id); return; }
     await performRoutineAction(action, id, control.closest('[data-instance-id]')?.dataset.instanceId);
     renderDailyRoutines();
@@ -220,6 +248,7 @@ globalThis.onDailyRoutineFocusCompleted = (entry, startedAt, endedAt, capturedLi
   } catch (err) { message(err); globalThis.showToast(`Focus saved; routine completion could not be saved: ${err.message}`); return false; }
 };
 globalThis.renderDailyRoutines = renderDailyRoutines;
+globalThis.DailyRoutinesUI = { todayLearning };
 /** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Closes every
  *  routine dialog (an editor filled from the previous account included), drops the cached view, and
  *  re-renders from the new owner's slot. Called synchronously by storage.js. */
