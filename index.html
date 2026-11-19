@@ -1727,11 +1727,26 @@
   </div>
 </div></div>
 
-<div style="position:fixed;bottom:calc(124px + var(--safe-bottom));left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:8px;z-index:998">
+<div id="status-dock" style="position:fixed;bottom:calc(124px + var(--safe-bottom));left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));max-height:35vh;overflow:auto;display:flex;flex-direction:column;gap:8px;z-index:998">
 <div class="time-ack-status" id="time-ack-status" role="status" aria-live="polite" hidden style="position:static;transform:none;width:100%"></div>
 <aside id="ordinary-provisional" role="status" aria-live="polite" hidden style="box-sizing:border-box;white-space:pre-line;padding:12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg2);color:var(--text)"></aside>
 <aside class="time-ack-status" id="focus-recovery-status" role="status" aria-live="polite" hidden style="position:static;transform:none;width:100%"></aside>
 </div>
+<script>
+// The status dock (accounting / offline / focus recovery notices) is fixed over the page. Reserve the
+// screen height it covers so every card and button can still be scrolled clear of it.
+(() => {
+  const dock = document.getElementById('status-dock');
+  if (!dock || typeof ResizeObserver !== 'function') return;
+  const apply = () => {
+    const covered = dock.offsetHeight ? Math.max(0, Math.ceil(window.innerHeight - dock.getBoundingClientRect().top)) + 8 : 0;
+    document.documentElement.style.setProperty('--status-dock-h', `${covered}px`);
+  };
+  new ResizeObserver(apply).observe(dock);
+  window.addEventListener('resize', apply);
+  apply();
+})();
+</script>
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
 <audio id="focus-music">

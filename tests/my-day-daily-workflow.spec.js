@@ -261,6 +261,19 @@ test('offline: a provisional Start shows as running, and Mark done stops it', as
   await page.locator('#up-next').getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.locator('#today-action-strip')).toContainText('Started offline — waiting to sync');
   await expect(page.locator('#today-action-primary')).toHaveText('Stop');
+  // The fixed status dock (offline notice) never hides the page: scrolled to the end, the last
+  // content of My Day sits above it, so no card's buttons are stuck underneath.
+  await expect(page.locator('#ordinary-provisional')).toBeVisible();
+  const gap = await page.evaluate(async () => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise(r => setTimeout(r, 400));
+    const view = document.querySelector('.view.active');
+    const last = [...view.querySelectorAll('*')].filter(el => el.offsetParent && el.getBoundingClientRect().height > 0)
+      .reduce((max, el) => Math.max(max, el.getBoundingClientRect().bottom), 0);
+    return document.getElementById('status-dock').getBoundingClientRect().top - last;
+  });
+  expect(gap).toBeGreaterThanOrEqual(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
   const panel = page.locator('#ordinary-provisional');
   if (await panel.isVisible()) await expect(panel).not.toContainText(/\d{4}-\d\d-\d\dT\d\d:\d\d/);
   await page.evaluate(() => window.__e2eShift(20 * 60000));

@@ -1140,7 +1140,9 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
    ══════════════════════════════════════════════════════ */
 
 /* Smooth scrolling globally */
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-bottom: var(--status-dock-h, 0px); }
+/* Room for the fixed status dock (set by index.html when it shows), on top of each view's own padding. */
+body { padding-bottom: var(--status-dock-h, 0px); }
 
 /* Scrollable views — momentum scroll + contain bounce */
 .view {
