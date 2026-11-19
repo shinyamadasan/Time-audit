@@ -153,8 +153,21 @@
     byId('command-next').textContent = next ? `Next · ${next.task}${next.when ? ` · ${next.when}` : ' · Anytime'}` : 'Next · Nothing else planned';
     byId('command-next').hidden = !isViewingToday();
   }
+  // "Show" goes to the section that manages a line. The routines section (learning steps) lives
+  // in the Routines dialog, not on the page, so scrolling to it did nothing: open that dialog with
+  // the full routine cards (and their Start Focus) expanded instead. Any other dialog: just open it.
+  function showWorkTarget(id) {
+    const target = byId(id);
+    if (!target) return;
+    const dialog = target.closest('dialog');
+    if (dialog && !dialog.open) {
+      if (dialog.id === 'routine-day-dialog' && typeof globalThis.inspectRoutineDetails === 'function') { globalThis.inspectRoutineDetails(); return; }
+      dialog.showModal();
+    }
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+  }
   // My Day Command Center V1: one read-only line each for tasks, learning and SOP runs, with a
-  // button that scrolls to the My Day section that already manages it. Never writes anything.
+  // button that goes to the My Day section that already manages it. Never writes anything.
   function refreshWork() {
     const tile = byId('command-work');
     const model = globalThis.MyDayWorkModel;
@@ -168,7 +181,7 @@
     for (const line of model.workLines({tasks: sop && sop.tasks, learning, sop: sop && sop.sop})) {
       const item = document.createElement('li'); item.dataset.workLine = line.key;
       const text = document.createElement('span'); text.textContent = line.text;
-      item.append(text, button('Show', () => byId(line.target)?.scrollIntoView({behavior:'smooth',block:'start'}), 'ghost'));
+      item.append(text, button('Show', () => showWorkTarget(line.target), 'ghost'));
       list.append(item);
     }
     const old = tile.querySelector('.command-work-lines');

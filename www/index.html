@@ -6490,12 +6490,31 @@ function toggleTimelineAnytime() {
   renderToday();
 }
 
-function toggleTimelinePlanDone(dayId, itemId) {
+/** Marking the task you are timing as done also stops and logs its timer (My Day daily-workflow
+ *  run, HIGH): otherwise the session ran on, and the next morning asked to log it up to device
+ *  close. Only the ordinary timer of THIS plan item; a Focus session keeps its own end flow, and
+ *  Away/Break are left alone. Returns false when the timer could not be stopped: the caller then
+ *  does NOT mark the task done, so the two never disagree. */
+function timerRunsForPlanItem(itemId) {
+  return !!itemId && running && !focusModeOn && !awayActive && !breakActive && currentTaskPlanItemId === itemId;
+}
+async function stopTimerForCompletedPlanItem(itemId) {
+  if (!timerRunsForPlanItem(itemId)) return true;
+  if ((await stopAndLog()) !== false) return true;
+  showToast('The timer could not be stopped, so the task was not marked done. Stop it, then mark it done.');
+  return false;
+}
+
+function toggleTimelinePlanDone(dayId, itemId, timerHandled = false) {
   if (!globalThis.PlanAuthority) return;
   const target = globalThis.PlanAuthority.targetById(dayId);
   if (!target || !isTimelineTargetEditable(target)) return;
   const item = globalThis.PlanAuthority.items(target).find(candidate => candidate.id === itemId);
   if (!item) return;
+  // Synchronous unless a timer must be stopped first (callers and tests read the result at once).
+  if (!timerHandled && !item.done && timerRunsForPlanItem(itemId)) {
+    return stopTimerForCompletedPlanItem(itemId).then(ok => { if (ok) toggleTimelinePlanDone(dayId, itemId, true); });
+  }
   const done = !item.done;
   globalThis.PlanAuthority.updateItem({ sourceTarget: target, itemId, changes: { done, doneAt: done ? Date.now() : null }, stamp: stampPlanItemMutation });
   _todayRenderKey = '__FORCE__';
@@ -9537,10 +9556,13 @@ function setPlanItemKind(id, kind) {
   }
 }
 
-function togglePlanDone(id) {
+function togglePlanDone(id, timerHandled = false) {
   if (!isViewingToday()) return;
   const target = currentPlanTarget();
   if (!target) return;
+  if (!timerHandled && planRawItemsFor(target).find(i => i.id === id)?.done === false && timerRunsForPlanItem(id)) {
+    return stopTimerForCompletedPlanItem(id).then(ok => { if (ok) togglePlanDone(id, true); });
+  }
   const raw = planRawItemsFor(target).map(i => {
     if (i.id !== id) return i;
     const done = !i.done;
