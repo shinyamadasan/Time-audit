@@ -152,7 +152,7 @@ test('a whole day: night plan, morning dashboard, start, complete, learning', as
   for (const idea of ['Book dentist appointment', 'Call the bank']) {
     await page.locator('#command-capture-text').fill(idea);
     await page.locator('#command-capture-text').press('Enter');
-    await expect(page.locator('#command-capture-status')).toHaveText('Captured. Triage it in Brain Dump or the plan tray.');
+    await expect(page.locator('#command-capture-status')).toHaveText('Captured. Sort it in Brain Dump to plan it.');
   }
   await addLearningRoutine(page);
 
@@ -162,6 +162,8 @@ test('a whole day: night plan, morning dashboard, start, complete, learning', as
   // Tonight's captures are not lost here: the planner says they are waiting to be sorted.
   await expect(page.locator('#plan-tomorrow-overlay .pt-unsorted')).toHaveText('2 new ideas not sorted yet. Sort them in Brain Dump to plan them.');
   await expect(page.locator('#plan-tomorrow-overlay')).not.toContainText('No Q1 or Q2 ideas available');
+  // Visible even when the section is folded (phones): the summary carries the count.
+  await expect(page.locator('#plan-tomorrow-overlay .pt-consider > summary')).toHaveText('From Brain Dump 0 ideas · 2 to sort');
   const add = page.locator('#plan-tomorrow-add');
   await add.locator('[name="task"]').fill('Write the project brief');
   await add.locator('[name="when"]').fill('09:00');

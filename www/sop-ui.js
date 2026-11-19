@@ -142,6 +142,8 @@ export function createSopUi({ repository = createSopRepository(), root = () => d
       render();
     },
     open(itemId) { openItemId = itemId; render(); },
+    /** Today's work > Show: open the (closed by default) panel, keeping any open run, and bring it into view. */
+    reveal() { panelOpen = true; render(); root()?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); },
     attach(doc = document) {
       doc.addEventListener('click', onClick);
       doc.addEventListener('change', onChange);

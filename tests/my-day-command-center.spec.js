@@ -198,6 +198,9 @@ test("Today's work shows tasks, learning and procedures in one tile and follows 
   await expect(work(page)).toBeVisible();
   await expect(line(page, 'tasks')).toHaveText('Tasks · none planned today');
   await expect(line(page, 'learning')).toHaveText('Learning · no learning step today');
+  // No learning card exists yet: the line says how to get one and leads to the plans.
+  await expect(work(page).locator('[data-work-line="learning"] .command-work-hint')).toContainText('add a Learning routine');
+  await expect(work(page).locator('[data-work-line="learning"]').getByRole('button', { name: 'Open Learning Plans', exact: true })).toBeVisible();
   await expect(line(page, 'sop')).toHaveText('Procedures · no task linked to an SOP');
   const [execId] = await addTasks(page, ['Weekly review', 'Laundry']);
   await expect(line(page, 'tasks')).toHaveText('Tasks · 0/2 done');
@@ -211,7 +214,11 @@ test("Today's work shows tasks, learning and procedures in one tile and follows 
   // A finished SOP run never completes the task (unchanged rule), so the task line stays 0/2.
   await expect(line(page, 'tasks')).toHaveText('Tasks · 0/2 done');
   expect(await planStore(page)).toBe(before);
+  // Close the Procedures panel, then Show must open it again (not only scroll to its title).
+  await panel(page).locator('details.sop-panel > summary').click();
+  await expect(panel(page).locator('details.sop-panel')).not.toHaveAttribute('open', '');
   await work(page).locator('[data-work-line="sop"]').getByRole('button', { name: 'Show', exact: true }).click();
+  await expect(panel(page).locator('details.sop-panel')).toHaveAttribute('open', '');
   await expect(page.locator('#sop-execution')).toBeInViewport();
 });
 
@@ -242,7 +249,7 @@ test('inline capture files into Brain Dump through the same path as the Brain Du
   expect(await count()).toBe(start);
   await page.locator('#command-capture-text').fill('Call the plumber <b>soon</b>');
   await page.locator('#command-capture-text').press('Enter');
-  await expect(page.locator('#command-capture-status')).toHaveText('Captured. Triage it in Brain Dump or the plan tray.');
+  await expect(page.locator('#command-capture-status')).toHaveText('Captured. Sort it in Brain Dump to plan it.');
   await expect(page.locator('#command-capture-text')).toHaveValue('');
   await page.evaluate(() => showView('braindump'));
   await expect(page.locator('#bd-root')).toContainText('Call the plumber <b>soon</b>');

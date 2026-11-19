@@ -159,6 +159,8 @@
   function showWorkTarget(id) {
     const target = byId(id);
     if (!target) return;
+    // The Procedures panel is a closed <details> by default: open it, not just scroll to its title.
+    if (id === 'sop-execution' && typeof globalThis.SopUI?.reveal === 'function') { globalThis.SopUI.reveal(); return; }
     const dialog = target.closest('dialog');
     if (dialog && !dialog.open) {
       if (dialog.id === 'routine-day-dialog' && typeof globalThis.inspectRoutineDetails === 'function') { globalThis.inspectRoutineDetails(); return; }
@@ -181,7 +183,13 @@
     for (const line of model.workLines({tasks: sop && sop.tasks, learning, sop: sop && sop.sop})) {
       const item = document.createElement('li'); item.dataset.workLine = line.key;
       const text = document.createElement('span'); text.textContent = line.text;
-      item.append(text, button('Show', () => showWorkTarget(line.target), 'ghost'));
+      // No learning step today usually means no learning routine yet: there is no card to show,
+      // so say how to get one and go to the plans instead.
+      if (line.key === 'learning' && Array.isArray(learning) && !learning.length) {
+        const hint = document.createElement('small'); hint.className = 'command-work-hint';
+        hint.textContent = 'To get a daily step, add a Learning routine (Routines › Manage) linked to a plan.';
+        item.append(text, hint, button('Open Learning Plans', () => globalThis.showView?.('learning'), 'ghost'));
+      } else item.append(text, button('Show', () => showWorkTarget(line.target), 'ghost'));
       list.append(item);
     }
     const old = tile.querySelector('.command-work-lines');
@@ -195,7 +203,7 @@
     if (!input || !ui?.capture) { showToast('Brain Dump is still loading.'); return; }
     let result;
     try { result = ui.capture(input.value); } catch (err) { result = {ok:false}; showToast(err.message); }
-    if (result.ok) { input.value = ''; status.textContent = 'Captured. Triage it in Brain Dump or the plan tray.'; }
+    if (result.ok) { input.value = ''; status.textContent = 'Captured. Sort it in Brain Dump to plan it.'; }
     else { status.textContent = 'Type something to capture.'; input.focus(); }
   }
   function refresh() {
