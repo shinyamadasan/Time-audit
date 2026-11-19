@@ -3457,8 +3457,8 @@ function renderOrdinaryProvisional() {
     panel.textContent = (paused ? 'Tracking paused — original offline time retained.' : active
       ? 'Started offline — awaiting sync.' : 'Saved on this device — awaiting sync.')
       + '\nProvisional only. Excluded from confirmed totals, exports and Undo.'
-      + `\n${({ start: 'Start', stop: 'Stop', resume: 'Resume' })[view.command.kind]} · ${view.command.task || 'Work block'} · ${new Date(view.command.endpoint).toISOString()}`
-      + view.pendingEntries.map(entry => `\n${entry.activity}: ${new Date(entry.tsStart).toISOString()} → ${new Date(entry.ts).toISOString()} · ${entry.blockIntervalMin} min pending`).join('');
+      + `\n${({ start: 'Start', stop: 'Stop', resume: 'Resume' })[view.command.kind]} · ${view.command.task || 'Work block'} · ${tzTime(view.command.endpoint)}`
+      + view.pendingEntries.map(entry => `\n${entry.activity}: ${tzTime(entry.tsStart)} → ${tzTime(entry.ts)} · ${entry.blockIntervalMin} min pending`).join('');
   }
   showHeroState(active ? 'active' : 'idle');
   document.getElementById('hero-task-name').textContent = view.frame.currentTask || view.frame.lastTaskForRepeat || '';
@@ -6496,7 +6496,10 @@ function toggleTimelineAnytime() {
  *  Away/Break are left alone. Returns false when the timer could not be stopped: the caller then
  *  does NOT mark the task done, so the two never disagree. */
 function timerRunsForPlanItem(itemId) {
-  return !!itemId && running && !focusModeOn && !awayActive && !breakActive && currentTaskPlanItemId === itemId;
+  if (!itemId || focusModeOn || awayActive || breakActive) return false;
+  if (running) return currentTaskPlanItemId === itemId;
+  // Offline, a Start is provisional until it syncs; it still runs and must stop too.
+  try { const frame = ordinaryProvisionalState()?.frame; return !!frame?.running && frame.currentTaskPlanItemId === itemId; } catch { return false; }
 }
 async function stopTimerForCompletedPlanItem(itemId) {
   if (!timerRunsForPlanItem(itemId)) return true;
@@ -7124,7 +7127,11 @@ function renderTodayActionStrip() {
   const state = todayGuidedAction();
   const remote = !!getActiveTimerOwnerSnapshot();
   const focus = typeof focusModeOn !== 'undefined' && focusModeOn;
-  const active = remote || focus || breakActive || awayActive || running;
+  // An offline Start is provisional (not `running` until it syncs). Show it as running anyway,
+  // with Stop, so nobody thinks Start failed and presses it again.
+  let offline = null;
+  if (!running && !remote && !focus) { try { const view = ordinaryProvisionalState(); offline = view?.frame?.running ? view.frame : null; } catch { offline = null; } }
+  const active = remote || focus || breakActive || awayActive || running || !!offline;
   const free = !active && !state.task;
   const shell = document.getElementById('up-next');
   const previousState = shell.dataset.state;
@@ -7133,7 +7140,10 @@ function renderTodayActionStrip() {
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const nativeControls = !remote && !focus && (breakActive || awayActive || running);
   el.style.display = 'flex';
-  el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Now' : 'Up next'}</div>
+  if (offline) {
+    el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">Now</div><div class="today-action-title" id="today-action-title">${esc(offline.currentTask || 'Work block')}</div><div class="today-action-sub" id="today-action-sub">Started offline — waiting to sync</div></div>
+    <button type="button" class="today-action-btn" id="today-action-primary" onclick="stopAndLog()">Stop</button>`;
+  } else el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">${active ? 'Now' : 'Up next'}</div>
     ${nativeControls || free ? '' : `<div class="today-action-title" id="today-action-title">${esc(state.title.replace(/^Next: /, ''))}</div><div class="today-action-sub" id="today-action-sub">${esc(state.sub)}</div>`}</div>
     ${nativeControls || free ? '' : `<button type="button" class="today-action-btn" id="today-action-primary" onclick="${state.action}">${esc(active ? state.button : state.button === 'Done' ? 'Done' : 'Start')}</button>`}`;
   document.getElementById('execution-options').hidden = active;

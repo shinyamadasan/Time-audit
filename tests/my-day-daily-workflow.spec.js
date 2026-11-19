@@ -85,7 +85,7 @@ async function boot(page) {
   const errors = [];
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
   page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 300)}`); });
-  await acknowledgingServer(page);
+  await acknowledgingServer(page, { offlineKey: '__e2e-net' });
   await page.route('https://www.gstatic.com/firebasejs/**', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
   await page.route(/^https:\/\/(?!www\.gstatic\.com\/firebasejs)/, r => r.abort());
   await page.addInitScript(({ uid, night, learning }) => {
@@ -244,4 +244,28 @@ test("a learning card leads to the plan itself (Open Learning Plans)", async ({ 
   await expect(page.locator('#view-learning')).toBeVisible();
   await expect(page.locator('#view-learning')).toContainText('Spanish basics');
   await expect(page.getByRole('checkbox', { name: 'Complete step: Learn 10 greetings' })).toBeVisible();
+});
+
+test('offline: a provisional Start shows as running, and Mark done stops it', async ({ page }) => {
+  await boot(page);
+  await page.goto(url);
+  await ready(page);
+  await page.evaluate(() => {
+    const item = createPlanItem('Pay the electricity bill', '');
+    PlanAuthority.addItem({ destination: PlanAuthority.current(), item });
+    refreshAuthoritativePlanSurfaces();
+  });
+  await expect(page.locator('#up-next')).toContainText('Pay the electricity bill');
+  // The connection drops: sync attempts fail, so a Start is provisional.
+  await page.evaluate(() => localStorage.setItem('__e2e-net', JSON.stringify({ failWrites: true })));
+  await page.locator('#up-next').getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(page.locator('#today-action-strip')).toContainText('Started offline — waiting to sync');
+  await expect(page.locator('#today-action-primary')).toHaveText('Stop');
+  const panel = page.locator('#ordinary-provisional');
+  if (await panel.isVisible()) await expect(panel).not.toContainText(/\d{4}-\d\d-\d\dT\d\d:\d\d/);
+  await page.evaluate(() => window.__e2eShift(20 * 60000));
+  await markDone(page, 'Pay the electricity bill');
+  await expect(page.locator('#today-action-strip')).not.toContainText('Started offline');
+  await expect(work(page, 'tasks')).toHaveText('Tasks · 1/1 done');
+  expect(await page.evaluate(() => { try { return !!ordinaryProvisionalState()?.frame?.running; } catch { return 'error'; } })).toBe(false);
 });
