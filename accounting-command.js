@@ -10,9 +10,107 @@
   const pathAllowed = path => /^(timer|awayState|breakState)$/.test(path)
     || /^(entries|focusRedemptions)\/[^\x00-\x1f\x7f.#$\[\]/]+$/.test(path);
 
-  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {} }) {
+  // ── Compacted inputs (storage-growth release N) ─────────────────────────────────────────────
+  // A compacted history input keeps its name and a digest of the original input in place of large
+  // bodies. The digest is SHA-256 over the exact bytes TimeAckCore.same() compares
+  // (JSON.stringify(canonical(stored(x)))), so "same()" and "equal digest" agree. A digest version this
+  // build does not know is never equal to anything (fail closed). Callers that would otherwise throw on
+  // inequality must check unknownDigest() first and retain instead of throwing.
+  const DIGEST_V = 1;
+  const SHA_K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+  /** Synchronous SHA-256 of a string's UTF-8 bytes, as lowercase hex. */
+  function sha256Hex(text) {
+    const bytes = new TextEncoder().encode(text);
+    const length = bytes.length, padded = new Uint8Array(((length + 9 + 63) >> 6) << 6);
+    padded.set(bytes); padded[length] = 0x80;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 8, Math.floor(length / 0x20000000)); view.setUint32(padded.length - 4, (length << 3) >>> 0);
+    const h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const w = new Uint32Array(64), rotr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let offset = 0; offset < padded.length; offset += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      }
+      let [a, b, c, d, e, f, g, k] = h;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + SHA_K[i] + w[i]) >>> 0;
+        const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+        k = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      [a, b, c, d, e, f, g, k].forEach((value, i) => { h[i] = (h[i] + value) >>> 0; });
+    }
+    return h.map(value => value.toString(16).padStart(8, '0')).join('');
+  }
+  function inputDigest(input) {
+    const core = root.TimeAckCore;
+    if (!core?.stored || !core?.canonical) throw Error('Accounting digest unavailable');
+    return sha256Hex(JSON.stringify(core.canonical(core.stored(input))));
+  }
+  const unknownDigest = input => !!input?.compacted && input.digestV !== DIGEST_V;
+  /** same() over two operation inputs, where either may be compacted (compared by digest). */
+  function sameInputWith(same, a, b) {
+    if (!a?.compacted && !b?.compacted) return same(a, b);
+    if (unknownDigest(a) || unknownDigest(b)) return false;
+    const digestOf = input => input.compacted ? input.digest : inputDigest(input);
+    return digestOf(a) === digestOf(b);
+  }
+  /** The facts a repeated eventKey must agree on; compacted inputs carry it as semanticDigest. */
+  function semanticInput(operation) {
+    const facts = clone(operation.input.observation?.facts);
+    if (!facts) return operation.input;
+    if (operation.input.name === 'scheduled-log' && facts.entry) delete facts.entry.updatedAt;
+    return { name: operation.input.name, facts };
+  }
+  // ── Bounded history (storage-growth C; flag compaction.historyCut, default off) ─────────────────
+  // Old settled records leave `history`. What readers still need survives as:
+  //   droppedIds[id]          -> id of a checkpoint record (phase fenced-reconciled, dependsOn null)
+  //   droppedEventKeys[key]   -> semantic digest of the dropped occurrence (a re-fire with other facts is a conflict)
+  // A checkpoint's settledWrites hold the observation-ancestry walk from its edge as DIGEST markers, because the
+  // walk's only consumers compare a value with the ancestor's write; they never read it.
+  const ANCESTOR_DIGEST = '$ancestorDigest';
+  const isAncestorDigest = value => !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === 1 && typeof value[ANCESTOR_DIGEST] === 'string';
+  const ancestorDigest = value => isAncestorDigest(value) ? value : { [ANCESTOR_DIGEST]: inputDigest(value) };
+  /** same() where the ancestor side may be a digest marker. */
+  function ancestorSameWith(same, ancestor, value) {
+    if (isAncestorDigest(ancestor)) return !isAncestorDigest(value) ? inputDigest(value) === ancestor[ANCESTOR_DIGEST]
+      : value[ANCESTOR_DIGEST] === ancestor[ANCESTOR_DIGEST];
+    if (isAncestorDigest(value)) return ancestorSameWith(same, value, ancestor);
+    return same(ancestor, value);
+  }
+  /** A dropped id resolves to its checkpoint; anything else to itself. */
+  const resolveDropped = (state, id) => id != null && state?.droppedIds && Object.hasOwn(state.droppedIds, id) ? state.droppedIds[id] : id;
+  const isCheckpoint = op => op?.input?.name === 'checkpoint';
+  function sameSemanticWith(same, a, b) {
+    if (!a.input?.compacted && !b.input?.compacted) return same(semanticInput(a), semanticInput(b));
+    if (unknownDigest(a.input) || unknownDigest(b.input)) return false;
+    const digestOf = op => op.input.compacted ? op.input.semanticDigest : inputDigest(semanticInput(op));
+    return digestOf(a) === digestOf(b);
+  }
+
+  const isQuotaError = error => !!error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || error.code === 22 || error.code === 1014 || /quota/i.test(String(error.message || '')));
+
+  function createCoordinator({ storage, lock, transport, identity, randomId, same, prepare, project, reconcile, apply, validateLocal = () => {}, validateProjection = () => {}, compaction = {} }) {
+    // Storage fix F2: intake slots that could not be imported because local storage is full. Kept untouched.
+    const stuck = new Map();
     const drains = new Map();
     const failed = new Map();
+    // Perf (stabilization 2026-11-19): validation below is a pure function of the stored string, so a string
+    // that already passed it is not re-validated. Every caller still gets its own freshly parsed object.
+    const validatedRaw = new Map();
+    const elided = new Set(); // no-op hydrates settled by this coordinator without a history record
+    const sameInput = (a, b) => sameInputWith(same, a, b);
     function readStored(slot) {
       try { return storage.getItem(slot); }
       catch (error) { error.accountingStorageRead = true; throw error; }
@@ -33,6 +131,7 @@
     };
     function load(owner) {
       const raw = readStored(key(owner));
+      if (raw != null && validatedRaw.get(owner) === raw) return JSON.parse(raw);
       const state = raw == null ? { v: VERSION, owner, generation: 0, committed: null, queue: [], history: [] } : JSON.parse(raw);
       if (state?.v !== VERSION || state.owner !== owner || !Array.isArray(state.queue)
         || !Array.isArray(state.history) || !Number.isSafeInteger(state.generation) || state.generation < 0
@@ -58,8 +157,25 @@
           || !state.history.some(op => op.id === effect.operationId && op.proposal?.effects?.some(original => same(effect, original)))))
         || state.effectReceipts != null && (typeof state.effectReceipts !== 'object' || Array.isArray(state.effectReceipts)
           || Object.entries(state.effectReceipts).some(([id, receipt]) => receipt?.v !== 1
-            || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))) throw Error('Unreadable accounting envelope');
+            || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))
+        || !validDropMaps(state)) throw Error('Unreadable accounting envelope');
+      if (raw != null) validatedRaw.set(owner, raw);
       return state;
+    }
+    function validDropMaps(state) {
+      const plain = value => value == null || typeof value === 'object' && !Array.isArray(value);
+      if (!plain(state.droppedIds) || !plain(state.droppedEventKeys)) return false;
+      const checkpoints = new Set(state.history.filter(isCheckpoint).map(op => op.id));
+      for (const op of state.history.filter(isCheckpoint)) {
+        if (op.phase !== 'fenced-reconciled' || op.dependsOn != null || op.aliasOf != null || op.input.compacted !== 1
+          || op.input.digestV !== DIGEST_V || op.settledWrites == null || typeof op.settledWrites !== 'object'
+          || Object.values(op.settledWrites).some(value => !isAncestorDigest(value))) return false;
+      }
+      const live = new Set([...state.queue, ...state.history, ...state.sources || []].map(op => op.id));
+      for (const [id, target] of Object.entries(state.droppedIds || {})) {
+        if (!/^[A-Za-z0-9_-]{8,100}$/.test(id) || live.has(id) || checkpoints.has(id) || !checkpoints.has(target)) return false;
+      }
+      return Object.values(state.droppedEventKeys || {}).every(digest => typeof digest === 'string' && /^[0-9a-f]{64}$/.test(digest));
     }
     function save(state) {
       const raw = JSON.stringify(state);
@@ -126,7 +242,9 @@
       const state = load(reservation.owner);
       const original = [...state.sources || [], ...state.queue, ...state.history,
         ...captures(reservation.owner).map(item => item.captured)].find(item => item.id === reservation.id && item.source);
-      if (!original || !same(original.input, reservation.input)
+      // C2: the original was settled and later dropped from history. Its result was already accounted for.
+      if (!original && Object.hasOwn(state.droppedIds || {}, reservation.id)) return null;
+      if (!original || !sameInput(original.input, reservation.input)
         || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === reservation[field])
         || typeof result?.ok !== 'boolean') throw Error('Unproven accounting source reservation');
       const id = randomId();
@@ -139,27 +257,50 @@
       if (readStored(slot) !== raw) throw Error('Accounting result readback failed');
       return clone(record);
     }
+    // Another tab may have imported and removed a slot this tab saw stuck: forget slots that no longer exist.
+    function pruneStuck() {
+      // A read failure keeps the entry: fail toward 'still stuck', never throw from a storage-full path.
+      for (const slot of [...stuck.keys()]) { try { if (readStored(slot) == null) stuck.delete(slot); } catch { /* keep */ } }
+      return [...stuck.values()];
+    }
     function importCaptures(state) {
-      for (const { slot, captured } of captures(state.owner)) {
+      pruneStuck();
+      for (const item of captures(state.owner)) {
+        try { importOne(state, item); stuck.delete(item.slot); }
+        catch (error) {
+          if (!isQuotaError(error)) throw error;
+          // save() failed, so nothing reached storage: reload the durable envelope and leave this slot as it is.
+          for (const field of Object.keys(state)) delete state[field];
+          Object.assign(state, load(state.owner || item.captured.owner));
+          stuck.set(item.slot, { id: item.captured.id, name: item.captured.input?.name || null, chars: (readStored(item.slot) || '').length });
+        }
+      }
+    }
+    function importOne(state, { slot, captured }) {
+      {
         if (captured.phase === 'provisional-observation') {
           const source = [...state.queue, ...state.history, ...captures(state.owner).map(item => item.captured)]
             .find(item => item.id === captured.input.sourceId);
+          if (!source && Object.hasOwn(state.droppedIds || {}, captured.input?.sourceId)) { storage.removeItem(slot); return; } // C2
           if (captured.input.name !== 'ordinary-heartbeat' || source?.input.ordinary?.v !== 1
             || source.input.ordinary.kind !== 'start' || source.device !== captured.device || source.uid !== captured.uid
             || !Number.isSafeInteger(captured.at) || captured.at < source.at) throw Error('Unreadable provisional observation');
           state.provisionalObserved ||= {};
           state.provisionalObserved[source.id] = Math.max(state.provisionalObserved[source.id] || source.at, captured.at);
-          save(state); storage.removeItem(slot); continue;
+          save(state); storage.removeItem(slot); return;
         }
         if (captured.phase === 'awaiting-source' || captured.phase === 'source-result') {
           state.sources ||= [];
           const originalId = captured.sourceId || captured.id;
           const original = [...state.sources, ...state.queue, ...state.history].find(item => item.id === originalId);
+          if (!original && Object.hasOwn(state.droppedIds || {}, originalId)) { storage.removeItem(slot); return; }
           if (captured.phase === 'awaiting-source') {
             if (!original) state.sources.push(captured);
-            else if (!same(original.input, captured.input)) throw Error('Accounting source identity changed');
+            else if (unknownDigest(original.input)) return; // retained in intake, never thrown (see DIGEST_V)
+            else if (!sameInput(original.input, captured.input)) throw Error('Accounting source identity changed');
           } else {
-            if (!original?.source || !same(original.input, captured.input)
+            if (original && unknownDigest(original.input)) return;
+            if (!original?.source || !sameInput(original.input, captured.input)
               || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === captured[field])
               || typeof captured.result?.ok !== 'boolean') throw Error('Unreadable accounting source result');
             if (!original.source.outcomes.some(item => item.id === captured.id)) {
@@ -174,21 +315,34 @@
               }
             }
           }
-          save(state); storage.removeItem(slot); continue;
+          save(state); storage.removeItem(slot); return;
+        }
+        if (Object.hasOwn(state.droppedIds || {}, captured.id)) { storage.removeItem(slot); return; } // replay of a settled, dropped op
+        if (captured.eventKey && Object.hasOwn(state.droppedEventKeys || {}, captured.eventKey)
+          && ![...state.queue, ...state.history].some(op => op.eventKey === captured.eventKey)) {
+          // A re-fired occurrence of a dropped op: identical facts are settled; different facts are evidence.
+          if (state.droppedEventKeys[captured.eventKey] !== inputDigest(semanticInput(captured))) {
+            if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'occurrence-changed' });
+            save(state);
+          }
+          storage.removeItem(slot); return;
         }
         const known = [...state.queue, ...state.history].find(op => op.id === captured.id
           || (captured.eventKey && op.eventKey === captured.eventKey));
-        const semantic = operation => {
-          const facts = clone(operation.input.observation?.facts);
-          if (!facts) return operation.input;
-          if (operation.input.name === 'scheduled-log' && facts.entry) delete facts.entry.updatedAt;
-          return { name: operation.input.name, facts };
-        };
-        if (known?.id === captured.id && (!same(known.input, captured.input)
+        if (known && unknownDigest(known.input)) {
+          // An exact replay against a compacted record of a digest version this build cannot read stays in
+          // intake (retained evidence) instead of throwing on every drain.
+          if (known.id === captured.id) return;
+          // A NEW capture sharing an eventKey with such a record can be neither de-duplicated nor compared:
+          // it is held for resolution, never silently dropped or re-executed.
+          if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'digest-version-unknown' });
+          save(state); storage.removeItem(slot); return;
+        }
+        if (known?.id === captured.id && (!sameInput(known.input, captured.input)
           || !['owner', 'uid', 'device', 'generation', 'at', 'eventKey', 'dependsOn'].every(field => known[field] === captured[field]))) {
           throw Error('Accounting capture identity changed');
         }
-        if (known && captured.eventKey && !same(semantic(known), semantic(captured))) {
+        if (known && captured.eventKey && !sameSemanticWith(same, known, captured)) {
           // A repeated source identity with different facts is evidence, never silent deduplication.
           if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'occurrence-changed' });
         } else if (!known) state.queue.push(captured);
@@ -248,6 +402,143 @@
         || new Set(proposal.effects.map(effect => effect.id)).size !== proposal.effects.length)) throw Error('Invalid accounting effects');
       return proposal;
     }
+    // Storage-growth A1 (flag compaction.stripFirstHydrate, default off): a first hydrate's frame and raw
+    // source caches are read only by its own prepare. Once it commits with a coherent account read they are
+    // replaced by a digest in the SAME save, unless any queued, sourced, captured or page-held operation
+    // still depends on it (e.g. the legacy-bootstrap capture made during its prepare).
+    function dependedOn(state, id) {
+      return [...state.queue, ...state.sources || [], ...captures(state.owner).map(item => item.captured),
+        ...[...failed.values()].map(item => item.record)].some(item => item.dependsOn === id);
+    }
+    function strippableHydrate(state, operation, receipt) {
+      return operation.input.name === 'hydrate-accounting' && receipt.phase === 'local-applied'
+        && receipt.authority === 'coherent-account-read' && !operation.input.compacted
+        && (operation.input.frame != null || operation.input.sourceCaches != null) && !dependedOn(state, operation.id);
+    }
+    function compactedHydrateInput(operation) {
+      const input = operation.input, length = value => value == null ? 0 : JSON.stringify(value).length;
+      return { name: input.name, confirmedOnly: input.confirmedOnly, compacted: 1, digestV: DIGEST_V,
+        digest: inputDigest(input), semanticDigest: inputDigest(semanticInput(operation)),
+        bytes: { frame: length(input.frame), sourceCaches: Object.fromEntries(Object.entries(input.sourceCaches || {}).map(([key, raw]) => [key, length(raw)])) } };
+    }
+    // Storage-growth B (flag compaction.elideNoopHydrate, default off): a hydrate after the first commit that
+    // changes nothing is settled without a history record or a generation bump. "Nothing" means the whole
+    // projection (view fields included) equals committed.value, it carries no evidence, nothing depends on it,
+    // and the server is unchanged since the last commit: every settled write equals the newest value history
+    // already holds for that path. (That last check is redundant with projection equality, and fail-safe.)
+    function noopHydrate(state, operation, proposal) {
+      if (operation.input.name !== 'hydrate-accounting' || !state.committed || proposal.evidence != null
+        || dependedOn(state, operation.id) || !same(proposal.projection, state.committed.value)) return false;
+      const latest = {};
+      for (const item of [...state.history].reverse()) {
+        for (const [path, value] of Object.entries(item.settledWrites || item.proposal?.patch || {})) {
+          if (!Object.hasOwn(latest, path)) latest[path] = value;
+        }
+      }
+      return Object.entries(proposal.settledWrites || {}).every(([path, value]) => Object.hasOwn(latest, path) && ancestorSameWith(same, latest[path], value));
+    }
+    // Storage-growth C writer (flag compaction.historyCut.enabled, default off). Drops settled records older than
+    // the newest `keepOps`, ONLY when the page holds a verified archive copy of each one
+    // (compaction.historyCut.archived(owner) -> Set of ids read back equal from IndexedDB).
+    // Never dropped: the committed op, effect/receipt/provisional owners, the op that wrote the current server
+    // timer, legacy-* evidence, user resolutions, unsettled phases, and anything a queued, sourced, captured or
+    // page-held item names. Each kept record that names a dropped id gets a checkpoint holding the exact
+    // observation walk from that id (prepareAccountingObservation semantics), as digests. A walk that cannot
+    // complete (missing, cyclic, unsettled) aborts the whole cut, so nothing is dropped.
+    const SETTLED = ['local-applied', 'fenced-reconciled'];
+    function walkFrom(state, startId) {
+      const ancestry = {}, visited = [], chain = new Set();
+      let id = startId;
+      while (id) {
+        id = resolveDropped(state, id);
+        if (chain.has(id)) return null;
+        chain.add(id);
+        const parent = state.history.find(op => op.id === id);
+        if (!parent) return null;
+        visited.push(id);
+        if (parent.aliasOf) { id = parent.aliasOf; continue; }
+        if (!SETTLED.includes(parent.phase)) return null;
+        for (const [path, value] of Object.entries(parent.settledWrites || parent.proposal?.patch || {})) {
+          if (!Object.hasOwn(ancestry, path)) ancestry[path] = ancestorDigest(value);
+        }
+        id = parent.dependsOn;
+      }
+      return { ancestry, visited };
+    }
+    // A record may leave history only if the page holds an archived copy EQUAL to it now. The page passes a Map of
+    // id -> archived copy; a mismatched, stale or late-mutated copy fails here and is offered for re-archiving.
+    // (A plain Set of ids is accepted for the unit harness only.)
+    function archivedCopyMatches(archived, op) {
+      if (archived instanceof Map) return archived.has(op.id) && same(archived.get(op.id), op);
+      return typeof archived.has === 'function' && archived.has(op.id);
+    }
+    function cutHistory(state) {
+      const config = compaction.historyCut;
+      const keep = Math.max(50, Number.isSafeInteger(config.keepOps) ? config.keepOps : 200);
+      const batch = Number.isSafeInteger(config.batch) ? Math.max(1, config.batch) : 50;
+      const plain = state.history.filter(op => !isCheckpoint(op));
+      if (plain.length <= keep + batch) return 0;
+      const pinned = new Set([state.committed?.operationId, state.committed?.value?.serverTimer?._csWrite?.operationId,
+        ...(state.effects || []).map(effect => effect.operationId),
+        ...Object.values(state.effectReceipts || {}).map(receipt => receipt.operationId),
+        ...Object.keys(state.provisionalObserved || {})]);
+      for (const item of [...state.queue, ...state.sources || [], ...captures(state.owner).map(entry => entry.captured),
+        ...[...failed.values()].map(entry => entry.record)]) {
+        for (const id of [item.dependsOn, item.aliasOf, item.source?.requestDependency, item.sourceId, item.input?.sourceId]) if (id) pinned.add(id);
+      }
+      const nativeNewest = {};
+      for (const op of plain) {
+        if (op.input?.name === 'native-usage' && op.source?.result?.ok && (!nativeNewest[op.device] || op.at >= nativeNewest[op.device].at)) nativeNewest[op.device] = op;
+      }
+      for (const op of Object.values(nativeNewest)) pinned.add(op.id);
+      const newest = new Set(plain.slice(-keep).map(op => op.id));
+      const eligible = plain.filter(op => !newest.has(op.id) && !pinned.has(op.id) && !op.resolution
+        && !/^legacy-/.test(op.input?.name || '') && (SETTLED.includes(op.phase) || op.phase === 'coalesced' && !!op.aliasOf));
+      if (eligible.length < batch) return 0;
+      let archived = null;
+      try { archived = config.archived?.(state.owner) || null; } catch { archived = null; }
+      try { config.onCandidates?.(state.owner, clone(eligible.filter(op => !archived || !archivedCopyMatches(archived, op)))); } catch {}
+      if (!archived) return 0;
+      const drop = new Set(eligible.filter(op => archivedCopyMatches(archived, op)).map(op => op.id));
+      if (drop.size < batch) return 0;
+      // Edges: kept records (old checkpoints never name anything) naming a dropped id.
+      const starts = [];
+      for (const op of state.history) {
+        if (drop.has(op.id)) continue;
+        for (const id of [op.dependsOn, op.aliasOf, op.source?.requestDependency]) if (id && drop.has(id) && !starts.includes(id)) starts.push(id);
+      }
+      const checkpoints = [], visitedBy = new Map();
+      for (const [n, start] of starts.entries()) {
+        const walk = walkFrom(state, start);
+        if (!walk) return 0; // fail safe: an incomplete walk means nothing is dropped
+        const id = `ckpt-${state.generation}-${n}`;
+        checkpoints.push({ v: VERSION, id, owner: state.owner, uid: state.owner.slice(4), device: 'checkpoint', at: Date.now(),
+          phase: 'fenced-reconciled', input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: walk.visited.length },
+          settledWrites: walk.ancestry, dependsOn: null });
+        for (const visited of walk.visited) if (!visitedBy.has(visited)) visitedBy.set(visited, id);
+      }
+      // A dropped record no edge reaches still needs a target: a later replay of it is retired against it.
+      // One sink for the envelope's lifetime: reuse the existing one so cuts never accumulate sinks.
+      let sink = state.history.find(op => isCheckpoint(op) && op.id.endsWith('-sink'))?.id || null;
+      const target = id => visitedBy.get(id) || (sink ||= (() => {
+        const record = { v: VERSION, id: `ckpt-${state.generation}-sink`, owner: state.owner, uid: state.owner.slice(4),
+          device: 'checkpoint', at: Date.now(), phase: 'fenced-reconciled',
+          input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: 0 }, settledWrites: {}, dependsOn: null };
+        checkpoints.push(record); return record.id;
+      })());
+      const droppedIds = { ...state.droppedIds || {} }, droppedEventKeys = { ...state.droppedEventKeys || {} };
+      // An old checkpoint that a new walk passed through is folded in: its ids are re-pointed and it is removed.
+      const folded = new Set(state.history.filter(op => isCheckpoint(op) && visitedBy.has(op.id)).map(op => op.id));
+      for (const [id, checkpoint] of Object.entries(droppedIds)) if (folded.has(checkpoint)) droppedIds[id] = visitedBy.get(checkpoint);
+      for (const op of state.history) {
+        if (!drop.has(op.id)) continue;
+        droppedIds[op.id] = target(op.id);
+        if (op.eventKey) droppedEventKeys[op.eventKey] = op.input.compacted ? op.input.semanticDigest : inputDigest(semanticInput(op));
+      }
+      state.history = [...checkpoints, ...state.history.filter(op => !drop.has(op.id) && !folded.has(op.id))];
+      state.droppedIds = droppedIds; state.droppedEventKeys = droppedEventKeys;
+      return drop.size;
+    }
     function commitProjection(state, operation, projection, context, details) {
       validateProjection(clone(projection), operation.owner);
       const generation = state.generation + 1;
@@ -264,7 +555,10 @@
         }
       }
       const { effectName, deliverEffects, ...receipt } = details;
-      next.history.push({ ...clone(operation), ...clone(receipt), appliedGeneration: generation });
+      const record = { ...clone(operation), ...clone(receipt), appliedGeneration: generation };
+      if (compaction.stripFirstHydrate === true && strippableHydrate(next, operation, receipt)) record.input = compactedHydrateInput(operation);
+      next.history.push(record);
+      if (compaction.historyCut?.enabled === true) cutHistory(next);
       save(next); Object.assign(state, next);
       if (attached(context)) apply(clone(projection), clone(committed));
       return generation;
@@ -318,7 +612,7 @@
       // A conflict found while planning (nothing sealed or sent) is planned again on the next drain, so it clears
       // once the data no longer conflicts. Intake, device and sealed-proposal conflicts stay held. Conflicts stored by
       // the first accounting release carry no flag, so they are judged by reason.
-      const heldReasons = ['occurrence-changed', 'source-result-changed', 'captured-owner-device', 'cyclic-command-dependency'];
+      const heldReasons = ['occurrence-changed', 'source-result-changed', 'captured-owner-device', 'cyclic-command-dependency', 'digest-version-unknown'];
       if (operation.phase === 'conflict' && (operation.proposal
         || !(operation.replannable || operation.replannable === undefined && !heldReasons.includes(operation.reason)))) return retained(operation);
       if (transport.enforcesAccounting !== true) {
@@ -329,7 +623,8 @@
       catch { return retained(update(state, operation, { reason: attached(context) ? 'inspection-unconfirmed' : 'account-detached' })); }
       if (!operation.proposal) {
         let proposal;
-        try { proposal = await prepare(clone(operation), clone(raw), clone(state.committed), clone(state.history), clone(state.queue)); }
+        try { proposal = await prepare(clone(operation), clone(raw), clone(state.committed), clone(state.history), clone(state.queue),
+          clone({ droppedIds: state.droppedIds || {}, droppedEventKeys: state.droppedEventKeys || {} })); }
         catch (error) { return retained(update(state, operation, { phase: 'conflict', reason: error.message, replannable: true })); }
         if (!attached(context)) return { status: 'detached', id: operation.id, retained: true };
         if (proposal?.status === 'wait') return retained(update(state, operation, { reason: proposal.reason }));
@@ -338,6 +633,14 @@
           return retained(update(state, operation, { phase: 'conflict', reason: 'confirmed-refresh-must-be-read-only' }));
         }
         if (['hydrate-accounting', 'native-usage', 'legacy-accounting-caches'].includes(operation.input.name) && proposal?.localOnly === true && proposal.projection) {
+          if (compaction.elideNoopHydrate === true && noopHydrate(state, operation, proposal)) {
+            validateProjection(clone(proposal.projection), operation.owner);
+            const next = clone(state);
+            next.queue = next.queue.filter(item => item.id !== operation.id);
+            save(next); Object.assign(state, next); elided.add(operation.id);
+            if (attached(context)) apply(clone(proposal.projection), clone(state.committed));
+            return { status: 'applied', id: operation.id, generation: state.generation, noop: true };
+          }
           const generation = commitProjection(state, operation, proposal.projection, context, { phase: 'local-applied',
             authority: operation.input.name === 'native-usage' ? 'retained-native-result-and-coherent-read'
               : operation.input.name === 'legacy-accounting-caches' ? 'legacy-caches-on-server' : 'coherent-account-read',
@@ -418,6 +721,15 @@
     }
     function drainOnce(context) {
       return lock(context.owner, async () => {
+        try { return await drainLocked(context); }
+        catch (error) {
+          if (!isQuotaError(error)) throw error;
+          return { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: pruneStuck() };
+        }
+      });
+    }
+    function drainLocked(context) {
+      return (async () => {
         if (!attached(context)) return { status: 'detached', retained: true };
         const state = load(context.owner);
         try { flushFailedCaptures(context); }
@@ -428,9 +740,11 @@
             .find(item => item.phase === 'captured' && item.input.name === 'hydrate-accounting'
               && item.input.confirmedOnly === true && !item.dependsOn);
           if (!refresh) throw error;
-          const settled = state.history.find(item => item.id === refresh.id);
-          if (settled) {
-            if (!same(settled.input, refresh.input)) throw Error('Accounting capture identity changed');
+          const settled = state.history.find(item => item.id === refresh.id)
+            || (Object.hasOwn(state.droppedIds || {}, refresh.id) ? { dropped: true } : null);
+          if (settled?.dropped) { /* settled and dropped: never re-run */ } else if (settled) {
+            // A read-only refresh already settled under an unreadable digest version is not re-run or thrown on.
+            if (!unknownDigest(settled.input) && !sameInput(settled.input, refresh.input)) throw Error('Accounting capture identity changed');
           } else if (!state.queue.some(item => item.id === refresh.id)) { state.queue.push(refresh); save(state); }
           // The queue/history now durably owns this read; its intake cannot replay the receipt.
           storage.removeItem(prefix(context.owner) + refresh.id);
@@ -444,9 +758,10 @@
           const dependencies = new Set();
           const originalDependency = id => {
             const aliases = new Set();
+            id = resolveDropped(state, id);
             while (state.history.find(op => op.id === id)?.aliasOf) {
               if (aliases.has(id)) return null;
-              aliases.add(id); id = state.history.find(op => op.id === id).aliasOf;
+              aliases.add(id); id = resolveDropped(state, state.history.find(op => op.id === id).aliasOf);
             }
             return id;
           };
@@ -475,14 +790,23 @@
           }
           importCaptures(state);
         }
+        if (pruneStuck().length) return { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: [...stuck.values()] };
         return { status: 'drained', generation: state.generation, retained: false };
-      });
+      })();
     }
     function submit(input, options) {
       const operation = capture(input, options);
       options?.onCaptured?.(clone(operation));
-      return drain().then(result => ({ ...result, capturedId: operation.id,
-        ownApplied: load(operation.owner).history.some(item => item.id === operation.id && item.phase === 'local-applied') }));
+      return drain().then(result => {
+        const state = load(operation.owner);
+        const ownApplied = state.history.some(item => item.id === operation.id && item.phase === 'local-applied');
+        // An elided no-op hydrate settled without a history record; it is settled, not retained. Another tab
+        // may have elided it: a hydrate that is nowhere (queue, history, intake, page-held) was settled.
+        const nowhere = operation.input.name === 'hydrate-accounting'
+          && ![...state.queue, ...state.history, ...state.sources || [], ...captures(operation.owner).map(item => item.captured)].some(item => item.id === operation.id)
+          && !failed.has(operation.id);
+        return { ...result, capturedId: operation.id, ownApplied, ownSettled: ownApplied || elided.has(operation.id) || nowhere };
+      });
     }
     function cancel(id) {
       const context = clone(identity());
@@ -528,7 +852,7 @@
       apply(clone(state.committed.value), clone(state.committed));
       return true;
     }
-    function snapshot(owner = identity()?.owner) { return owner ? clone(load(owner)) : null; }
+    function snapshot(owner = identity()?.owner) { return owner ? load(owner) : null; }
     function observeProvisional(sourceId, at = Date.now()) {
       const observation = capture({ name: 'ordinary-heartbeat', sourceId }, { at, provisionalObservation: true });
       return lock(observation.owner, () => {
@@ -537,7 +861,10 @@
       });
     }
     return { capture, failedCaptures, reserveSource: (input, options) => capture(input, { ...options, source: true }), completeSource,
-      submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)) };
+      submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)),
+      stuckCaptures: () => pruneStuck().map(clone) };
   }
-  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, clone, pathValue, pathAllowed, createCoordinator };
+  root.AccountingCommand = { VERSION, PROTOCOL, BASE, INTAKE, DIGEST_V, clone, pathValue, pathAllowed, createCoordinator,
+    ANCESTOR_DIGEST, isAncestorDigest, resolveDropped, ancestorSame: (a, b) => ancestorSameWith(root.TimeAckCore.same, a, b),
+    sha256Hex, inputDigest, unknownDigest, sameInput: (a, b) => sameInputWith(root.TimeAckCore.same, a, b), isQuotaError };
 })(globalThis);
