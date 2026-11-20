@@ -177,8 +177,13 @@ test('(a)(b)(c) archive integrity, restoration and headroom: archived + live his
   console.log('BH-RESTORE ' + JSON.stringify({ pairs: PAIRS, keep: KEEP, dropped: dropped.length, archived: arch.length, liveHistory: state.history.length, maxHistory, envelopeChars: sizes }));
   // reload: the archive's verified set is rebuilt and the envelope still loads
   await page.reload(); await page.waitForFunction(() => window._accountingSourcesSeen?.size === 4, null, { timeout: 180_000 });
-  const reloaded = (await env(page, uid)).state; // a reload adds its own hydrate record, nothing else
-  expect(reloaded.history.length).toBeLessThanOrEqual(state.history.length + 1);
+  const reloaded = (await env(page, uid)).state;
+  // A reload adds only its own hydrate refreshes (one or two, depending on when the confirmed refresh lands);
+  // nothing is removed and no other record appears.
+  const before = new Set(state.history.map(op => op.id));
+  const added = reloaded.history.filter(op => !before.has(op.id));
+  expect(added.map(op => op.input?.name).filter(name => name !== 'hydrate-accounting')).toEqual([]);
+  expect(state.history.filter(op => !reloaded.history.some(r => r.id === op.id)).map(op => op.id)).toEqual([]);
   for (const op of reloaded.history) expect(Object.hasOwn(reloaded.droppedIds || {}, op.id), `dropped ${op.id} back after reload`).toBe(false);
   expect(Object.keys(reloaded.droppedIds || {}).length).toBe(dropped.length);
 });
