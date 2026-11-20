@@ -465,6 +465,13 @@
       }
       return { ancestry, visited };
     }
+    // A record may leave history only if the page holds an archived copy EQUAL to it now. The page passes a Map of
+    // id -> archived copy; a mismatched, stale or late-mutated copy fails here and is offered for re-archiving.
+    // (A plain Set of ids is accepted for the unit harness only.)
+    function archivedCopyMatches(archived, op) {
+      if (archived instanceof Map) return archived.has(op.id) && same(archived.get(op.id), op);
+      return typeof archived.has === 'function' && archived.has(op.id);
+    }
     function cutHistory(state) {
       const config = compaction.historyCut;
       const keep = Math.max(50, Number.isSafeInteger(config.keepOps) ? config.keepOps : 200);
@@ -490,9 +497,9 @@
       if (eligible.length < batch) return 0;
       let archived = null;
       try { archived = config.archived?.(state.owner) || null; } catch { archived = null; }
-      try { config.onCandidates?.(state.owner, clone(eligible.filter(op => !archived?.has(op.id)))); } catch {}
+      try { config.onCandidates?.(state.owner, clone(eligible.filter(op => !archived || !archivedCopyMatches(archived, op)))); } catch {}
       if (!archived) return 0;
-      const drop = new Set(eligible.filter(op => archived.has(op.id)).map(op => op.id));
+      const drop = new Set(eligible.filter(op => archivedCopyMatches(archived, op)).map(op => op.id));
       if (drop.size < batch) return 0;
       // Edges: kept records (old checkpoints never name anything) naming a dropped id.
       const starts = [];
