@@ -281,7 +281,7 @@
         if (captured.phase === 'provisional-observation') {
           const source = [...state.queue, ...state.history, ...captures(state.owner).map(item => item.captured)]
             .find(item => item.id === captured.input.sourceId);
-          if (!source && Object.hasOwn(state.droppedIds || {}, captured.input?.sourceId)) { storage.removeItem(slot); continue; } // C2
+          if (!source && Object.hasOwn(state.droppedIds || {}, captured.input?.sourceId)) { storage.removeItem(slot); return; } // C2
           if (captured.input.name !== 'ordinary-heartbeat' || source?.input.ordinary?.v !== 1
             || source.input.ordinary.kind !== 'start' || source.device !== captured.device || source.uid !== captured.uid
             || !Number.isSafeInteger(captured.at) || captured.at < source.at) throw Error('Unreadable provisional observation');
@@ -293,13 +293,13 @@
           state.sources ||= [];
           const originalId = captured.sourceId || captured.id;
           const original = [...state.sources, ...state.queue, ...state.history].find(item => item.id === originalId);
-          if (!original && Object.hasOwn(state.droppedIds || {}, originalId)) { storage.removeItem(slot); continue; }
+          if (!original && Object.hasOwn(state.droppedIds || {}, originalId)) { storage.removeItem(slot); return; }
           if (captured.phase === 'awaiting-source') {
             if (!original) state.sources.push(captured);
-            else if (unknownDigest(original.input)) continue; // retained in intake, never thrown (see DIGEST_V)
+            else if (unknownDigest(original.input)) return; // retained in intake, never thrown (see DIGEST_V)
             else if (!sameInput(original.input, captured.input)) throw Error('Accounting source identity changed');
           } else {
-            if (original && unknownDigest(original.input)) continue;
+            if (original && unknownDigest(original.input)) return;
             if (!original?.source || !sameInput(original.input, captured.input)
               || !['owner', 'uid', 'device', 'generation', 'at'].every(field => original[field] === captured[field])
               || typeof captured.result?.ok !== 'boolean') throw Error('Unreadable accounting source result');
@@ -317,7 +317,7 @@
           }
           save(state); storage.removeItem(slot); return;
         }
-        if (Object.hasOwn(state.droppedIds || {}, captured.id)) { storage.removeItem(slot); continue; } // replay of a settled, dropped op
+        if (Object.hasOwn(state.droppedIds || {}, captured.id)) { storage.removeItem(slot); return; } // replay of a settled, dropped op
         if (captured.eventKey && Object.hasOwn(state.droppedEventKeys || {}, captured.eventKey)
           && ![...state.queue, ...state.history].some(op => op.eventKey === captured.eventKey)) {
           // A re-fired occurrence of a dropped op: identical facts are settled; different facts are evidence.
@@ -325,18 +325,18 @@
             if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'occurrence-changed' });
             save(state);
           }
-          storage.removeItem(slot); continue;
+          storage.removeItem(slot); return;
         }
         const known = [...state.queue, ...state.history].find(op => op.id === captured.id
           || (captured.eventKey && op.eventKey === captured.eventKey));
         if (known && unknownDigest(known.input)) {
           // An exact replay against a compacted record of a digest version this build cannot read stays in
           // intake (retained evidence) instead of throwing on every drain.
-          if (known.id === captured.id) continue;
+          if (known.id === captured.id) return;
           // A NEW capture sharing an eventKey with such a record can be neither de-duplicated nor compared:
           // it is held for resolution, never silently dropped or re-executed.
           if (!state.queue.some(op => op.id === captured.id)) state.queue.push({ ...captured, phase: 'conflict', reason: 'digest-version-unknown' });
-          save(state); storage.removeItem(slot); continue;
+          save(state); storage.removeItem(slot); return;
         }
         if (known?.id === captured.id && (!sameInput(known.input, captured.input)
           || !['owner', 'uid', 'device', 'generation', 'at', 'eventKey', 'dependsOn'].every(field => known[field] === captured[field]))) {
