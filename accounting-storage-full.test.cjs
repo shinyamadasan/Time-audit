@@ -114,13 +114,14 @@ test('non-quota errors still surface (fail closed), no silent swallowing', async
   await assert.rejects(() => coordinator(storage).drain());
 });
 
-test('isolation: this build carries no F1/F3 code (no slim form, no digest equality)', () => {
+// Combined with bounded history (release N), digest equality (inputDigest/sameInput) is expected; F1 (slim legacy
+// captures) stays out: the owner paused it until F2 ships and real measurements exist.
+test('isolation: this build carries no F1 code (no slim legacy form)', () => {
   const fs = require('node:fs'), path = require('node:path');
   for (const f of ['accounting-command.js', 'index.html']) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
-    for (const marker of ['$slim', 'fullDigest', '$entriesRef', 'slimCapture', 'accountingSlimLegacy', 'inputDigest', 'ta3-accounting-flag-slim-legacy'])
+    for (const marker of ['$slim', 'fullDigest', '$entriesRef', 'slimCapture', 'accountingSlimLegacy', 'ta3-accounting-flag-slim-legacy'])
       assert.ok(!src.includes(marker), `${f} must not contain ${marker}`);
   }
-  assert.equal(AC.sameInput, undefined);
   assert.equal(typeof AC.isQuotaError, 'function');
 });
