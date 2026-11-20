@@ -2553,7 +2553,7 @@ function restoreUnifiedAccounting() {
         const input = { name: 'legacy-accounting-caches', attribution: 'unproven', source };
         if (meaningful && ![...coordinator.snapshot().queue, ...coordinator.snapshot().history,
           ...coordinator.captures(owner).map(item => item.captured), ...coordinator.failedCaptures(owner)]
-          .some(operation => TimeAckCore.same(operation.input, input))) coordinator.capture(input);
+          .some(operation => AccountingCommand.sameInput(operation.input, input))) coordinator.capture(input);
       } finally {
         // Legacy caches are evidence. Only a canonical receipt may populate confirmed fields.
         entries = []; focusRedemptions = []; detachTimerAwayRuntime(owner);
@@ -2636,7 +2636,7 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
     unknown.heartbeat = read('ta3-heartbeat-ts');
     const source = { name: 'legacy-accounting-caches', attribution: 'unproven', source: unknown };
     if (![...state.queue, ...state.history, ...coordinator.captures(roomCode).map(item => item.captured)]
-      .some(operation => same(operation.input, source))) coordinator.capture(source);
+      .some(operation => AccountingCommand.sameInput(operation.input, source))) coordinator.capture(source);
   }
 }
 
@@ -2682,8 +2682,16 @@ function phoneUsageDependency(coordinator, owner) {
 }
 
 function accountingCapturedCommands(coordinator, owner) {
+  // An intake slot whose id is already in history is a retained replay (e.g. against a compacted record of an
+  // unknown digest version), not a pending command: it must not become the dependency frontier for new commands.
+  let settled = new Set();
+  try {
+    const state = coordinator.snapshot(owner);
+    settled = new Set([...state.history.map(item => item.id), ...Object.keys(state.droppedIds || {})]);
+  } catch {}
   return [...coordinator.captures(owner), ...coordinator.failedCaptures(owner).map(captured => ({ captured }))]
     .sort((a, b) => a.captured.at - b.captured.at || a.captured.id.localeCompare(b.captured.id))
+    .filter(item => !settled.has(item.captured.id))
     .filter(item => item.captured.input.name !== 'hydrate-accounting' && item.captured.phase !== 'awaiting-source'
     && item.captured.phase !== 'provisional-observation'
     && (item.captured.phase !== 'source-result' || item.captured.result?.ok))
@@ -2753,6 +2761,109 @@ function accountingFieldUnchanged(field, a, b) {
   return TimeAckCore.same(byId(a), byId(b));
 }
 
+// Storage-growth flags (release N+1 candidates). Both default OFF; unreadable storage means OFF.
+function accountingCompactionFlags() {
+  const on = key => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+  const keepOps = (() => { try { return Number.parseInt(localStorage.getItem('ta3-accounting-history-keep-ops') || '', 10); } catch { return NaN; } })();
+  return { stripFirstHydrate: on('ta3-accounting-flag-strip-first-hydrate'), elideNoopHydrate: on('ta3-accounting-flag-elide-noop-hydrate'),
+    refFirstHydrate: on('ta3-accounting-flag-ref-first-hydrate'),
+    historyCut: { enabled: on('ta3-accounting-flag-history-cut'), ...(Number.isSafeInteger(keepOps) ? { keepOps } : {}),
+      archived: owner => AccountingHistoryArchive.verified(owner), onCandidates: (owner, records) => AccountingHistoryArchive.store(owner, records) } };
+}
+
+// Storage-growth C, preservation step (flag ta3-accounting-flag-history-cut, default OFF). Before the coordinator may
+// drop a settled history record, a full copy is written to IndexedDB and read back equal (TimeAckCore.same). Only
+// ids in this owner's VERIFIED set can be dropped; with IndexedDB missing, failing or full, nothing is dropped and
+// history behaves exactly as before. The archive is local to this device, like history itself.
+const AccountingHistoryArchive = (() => {
+  const DB = 'chronasense-accounting-archive', STORE = 'history';
+  const verifiedByOwner = new Map(), pending = new Set();
+  let opened = null;
+  const open = () => opened ||= new Promise((resolve, reject) => {
+    if (!globalThis.indexedDB) { reject(Error('indexeddb-unavailable')); return; }
+    const request = indexedDB.open(DB, 1);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore(STORE, { keyPath: 'key' });
+      store.createIndex('owner', 'owner');
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || Error('indexeddb-open-failed'));
+  }).catch(error => { opened = null; throw error; });
+  const done = tx => new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error || Error('indexeddb-tx-failed')); });
+  async function store(owner, records) {
+    const fresh = (records || []).filter(record => record?.owner === owner && !pending.has(`${owner}\u0000${record.id}`));
+    if (!fresh.length) return;
+    fresh.forEach(record => pending.add(`${owner}\u0000${record.id}`));
+    try {
+      const db = await open();
+      const write = db.transaction(STORE, 'readwrite');
+      for (const record of fresh) write.objectStore(STORE).put({ key: `${owner}\u0000${record.id}`, owner, id: record.id, archivedAt: Date.now(), record });
+      await done(write);
+      // Read back in a fresh transaction; only exact copies become droppable.
+      const read = db.transaction(STORE, 'readonly'), got = [];
+      for (const record of fresh) {
+        const request = read.objectStore(STORE).get(`${owner}\u0000${record.id}`);
+        request.onsuccess = () => got.push([record, request.result]);
+      }
+      await done(read);
+      const verified = verifiedByOwner.get(owner) || new Set();
+      for (const [record, row] of got) if (row && TimeAckCore.same(row.record, record)) verified.add(record.id);
+      verifiedByOwner.set(owner, verified);
+    } catch (error) {
+      console.warn('[accounting] history archive unavailable; nothing will be dropped', error?.message || error);
+    } finally {
+      fresh.forEach(record => pending.delete(`${owner}\u0000${record.id}`));
+    }
+  }
+  // Rebuild the verified set after a reload: ids whose archived copy is still readable.
+  async function warm(owner) {
+    try {
+      const db = await open(), tx = db.transaction(STORE, 'readonly'), ids = [];
+      const request = tx.objectStore(STORE).index('owner').openCursor(IDBKeyRange.only(owner));
+      request.onsuccess = () => { const cursor = request.result; if (cursor) { ids.push(cursor.value.id); cursor.continue(); } };
+      await done(tx);
+      const verified = verifiedByOwner.get(owner) || new Set();
+      ids.forEach(id => verified.add(id));
+      verifiedByOwner.set(owner, verified);
+    } catch {}
+  }
+  // Restoration: every archived record for this owner, oldest first. Archived history + live history is the full
+  // operational history; nothing here writes, so reading can never disturb the live store.
+  async function read(owner) {
+    const db = await open(), tx = db.transaction(STORE, 'readonly'), rows = [];
+    const request = tx.objectStore(STORE).index('owner').openCursor(IDBKeyRange.only(owner));
+    request.onsuccess = () => { const cursor = request.result; if (cursor) { rows.push(cursor.value); cursor.continue(); } };
+    await done(tx);
+    return rows.sort((a, b) => (a.record.at || 0) - (b.record.at || 0) || String(a.id).localeCompare(String(b.id))).map(row => row.record);
+  }
+  return { store, warm, read, verified: owner => verifiedByOwner.get(owner) || null };
+})();
+
+// Storage-growth A1b (flag ta3-accounting-flag-ref-first-hydrate, default OFF): a first hydrate captures each
+// large frame field and raw cache as a SHA-256 reference to the live value instead of a second full copy in its
+// intake slot (~414 chars per entry, held beside the envelope and the caches until import). A reference is only
+// read if the hydrate prepares with no committed projection; a referenced value that changed since capture is a
+// conflict, never a guess. Digests use the same canonical bytes as TimeAckCore.same(); raw caches hash exactly.
+const HYDRATE_REF_MIN = 2048;
+function hydrateRef(value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? null);
+  if (text.length < HYDRATE_REF_MIN) return value;
+  return { $hydrateRef: 1, chars: text.length,
+    digest: typeof value === 'string' ? 's:' + AccountingCommand.sha256Hex(value) : AccountingCommand.inputDigest(value) };
+}
+function hydrateDeref(value, live) {
+  if (!value?.$hydrateRef) return value;
+  if (hydrateRef(live)?.digest !== value.digest) throw Error('hydrate-reference-changed');
+  return live;
+}
+function hydrateHasRefs(record) {
+  return !!record && Object.values(record).some(value => value?.$hydrateRef === 1);
+}
+function hydrateSourceCaches(sourceCaches) {
+  return sourceCaches && Object.fromEntries(Object.entries(sourceCaches)
+    .map(([base, value]) => [base, hydrateDeref(value, localStorage.getItem(accountLocalKey(base)))]));
+}
+
 function accountingCoordinator() {
   if (_accountingCoordinator) { retainLegacyTimeAck(_accountingCoordinator); return _accountingCoordinator; }
   if (!globalThis.AccountingCommand || !globalThis.EntryPhysicalKeys || !accountingIdentity()) return null;
@@ -2765,6 +2876,7 @@ function accountingCoordinator() {
   _accountingTransport = globalThis.AccountingCapability?.createTransport({ rest: rawTransport }) || null;
   const transport = _accountingTransport || { enforcesAccounting: false, enforcesCancellation: false };
   _accountingCoordinator = AccountingCommand.createCoordinator({ storage: localStorage, lock: TimeAckCore.webLock,
+    compaction: (() => { const flags = accountingCompactionFlags(); if (flags.historyCut.enabled && roomCode) AccountingHistoryArchive.warm(roomCode); return flags; })(),
     identity: accountingIdentity, randomId: TimeAckCore.randomOperationId, same, transport,
     validateLocal(local, owner, operation) {
       validateAccountingFrame(local.before, owner); validateAccountingFrame(local.after, owner);
@@ -2774,7 +2886,7 @@ function accountingCoordinator() {
       }
     },
     validateProjection: validateAccountingFrame,
-    prepare(operation, raw, committed, history, pending) {
+    prepare(operation, raw, committed, history, pending, maps = {}) {
       if (window._accountingLegacyLoadError) return { status: 'wait', reason: 'accounting-cache-unreadable' };
       if (operation.input.name === 'legacy-accounting-caches' && legacyCachesOnServer(operation.input, raw)) {
         // Every cached record is already on the server and no cached session is running: the server copy wins.
@@ -2788,7 +2900,13 @@ function accountingCoordinator() {
       if (timeAckOpenOperation(operation.owner)) return { status: 'wait', reason: 'legacy-undo-unresolved' };
       if (operation.input.name === 'hydrate-accounting') {
         if (raw.timer?.mode === 'focus' && typeof hydrateFocusAccountingFrame !== 'function') return { status: 'wait', reason: 'focus-hydration-unavailable' };
-        const base = committed?.value || operation.input.frame;
+        let frame = operation.input.frame;
+        if (!committed && hydrateHasRefs(frame)) {
+          const now = captureAccountingFrame();
+          try { frame = Object.fromEntries(Object.entries(frame).map(([field, value]) => [field, hydrateDeref(value, now[field])])); }
+          catch { return { status: 'conflict', reason: 'uncommitted-local-accounting' }; }
+        }
+        const base = committed?.value || frame;
         const confirmed = operation.input.confirmedOnly ? accountingConfirmedRead(raw, base, pending) : { raw, evidence: null };
         const live = captureAccountingFrame();
         for (const field of Object.keys(base)) {
@@ -2809,8 +2927,11 @@ function accountingCoordinator() {
             { ...accountingWithPreferences(base, live), entries: [], focusRedemptions: [], _lastLoggedEntryId: live._lastLoggedEntryId }, operation.owner, false);
         }
         if (retainedLegacy) {
+          let source;
+          try { source = hydrateSourceCaches(operation.input.sourceCaches); }
+          catch { return { status: 'conflict', reason: 'legacy-source-needs-resolution' }; }
           _accountingCoordinator.capture({ name: 'legacy-accounting-caches', attribution: 'unproven',
-            source: operation.input.sourceCaches, frame: operation.input.frame },
+            source, frame },
             { eventKey: `legacy-bootstrap:${operation.id}`, dependsOn: operation.id, at: operation.at });
         }
         return { localOnly: true, projection, evidence: confirmed.evidence,
@@ -2818,7 +2939,7 @@ function accountingCoordinator() {
       }
       if (operation.input.name === 'native-usage' && typeof preparePhoneUsageObservation !== 'function') return { status: 'wait', reason: 'native-recovery-unavailable' };
       const input = operation.input.ordinary ? prepareOrdinaryAccounting(operation, raw, history)
-        : operation.input.observation ? prepareAccountingObservation(operation, raw, committed, history) : operation.input;
+        : operation.input.observation ? prepareAccountingObservation(operation, raw, committed, history, maps) : operation.input;
       if (input.status) return input;
       if (operation.input.name === 'native-usage' && input.localOnly) return input;
       if (input.conflict) return { status: 'conflict', reason: input.conflict };
@@ -2951,7 +3072,7 @@ function retainLegacyTimeAck(coordinator, observed = null) {
     while (jobs.length) {
       const input = jobs[0], state = coordinator.snapshot(owner);
       if (![...state.queue, ...state.history, ...coordinator.captures(owner).map(item => item.captured), ...coordinator.failedCaptures(owner)]
-        .some(operation => TimeAckCore.same(operation.input, input))) coordinator.capture(input);
+        .some(operation => AccountingCommand.sameInput(operation.input, input))) coordinator.capture(input);
       jobs.shift();
     }
     _accountingLegacyCaptureJobs.delete(owner);
@@ -3014,10 +3135,12 @@ function accountingConfirmedFrame(raw, base, owner, established) {
   const same = TimeAckCore.same, result = cloneUndoValue(base);
   const projection = EntryPhysicalKeys.project(raw.entries || {});
   if (projection.conflicts.length) throw Error('physical-source-unresolved');
+  // One pass per map instead of one full scan per entry (identical results; see EntryPhysicalKeys.indexById).
+  const rawIndex = EntryPhysicalKeys.indexById(raw.entries || {}), baseIndex = EntryPhysicalKeys.indexById(base.physicalEntries || {});
   for (const entry of base.entries) {
-    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id);
+    const actual = EntryPhysicalKeys.resolve(raw.entries || {}, entry.id, 'app', rawIndex);
     if (actual.status === 'found' && same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(actual.record))) continue;
-    const previous = EntryPhysicalKeys.resolve(base.physicalEntries || {}, entry.id);
+    const previous = EntryPhysicalKeys.resolve(base.physicalEntries || {}, entry.id, 'app', baseIndex);
     if (!established || actual.status !== 'found' || previous.status !== 'found'
       || !same(Object.keys(previous.before).sort(), Object.keys(actual.before).sort())
       || !same(EntryPhysicalKeys.content(entry), EntryPhysicalKeys.content(previous.record))
@@ -3115,11 +3238,13 @@ function hydrateAccounting() {
   if ([...coordinator.snapshot().queue, ...coordinator.captures(roomCode).map(item => item.captured)]
     .some(operation => operation.input.name === 'hydrate-accounting')) return accountingOutcome(coordinator.drain());
   const committed = coordinator.snapshot().committed;
+  const ref = !committed && accountingCompactionFlags().refFirstHydrate
+    ? record => Object.fromEntries(Object.entries(record).map(([field, value]) => [field, hydrateRef(value)])) : record => record;
   return accountingOutcome(coordinator.submit({ name: 'hydrate-accounting',
     confirmedOnly: pending,
-    frame: committed ? null : captureAccountingFrame(), sourceCaches: committed ? null : Object.fromEntries(
+    frame: committed ? null : ref(captureAccountingFrame()), sourceCaches: committed ? null : ref(Object.fromEntries(
       ['ta3-entries', 'ta3-focus-redemptions', TIMER_STORAGE_KEY, AWAY_STORAGE_KEY, BREAK_STORAGE_KEY, 'ta3-focus-timer', 'ta3-heartbeat-ts']
-        .map(base => [base, localStorage.getItem(accountLocalKey(base))])) }));
+        .map(base => [base, localStorage.getItem(accountLocalKey(base))]))) }));
 }
 
 function syncAccountingCompatibility(name, requested = null, requestMatches = true) {
@@ -3278,12 +3403,22 @@ function buildAccountingInput(name, before, after, { timer = false, extra = {}, 
     ...auxiliary, auxGuards, auxBefore, conflict, effects: cloneUndoValue(effects) };
 }
 
+// Storage fix F2: a full local store is reported once in plain words; nothing is deleted and the rest keeps syncing.
+let _accountingStorageFullShownAt = 0;
+function showAccountingStorageFull(stuck) {
+  if (Date.now() - _accountingStorageFullShownAt < 10 * 60_000) return;
+  _accountingStorageFullShownAt = Date.now();
+  const count = Array.isArray(stuck) && stuck.length ? stuck.length : 1;
+  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely on this device and could not be filed yet. Nothing was deleted.`);
+}
+
 function accountingOutcome(submitted) {
   const source = accountingIdentity();
   renderTimeAckStatus();
   return submitted.then(outcome => {
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
-    if (outcome.status !== 'drained' && !outcome.ownApplied) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
+    if (outcome.status === 'storage-full') { showAccountingStorageFull(outcome.stuck); return !!(outcome.ownSettled ?? outcome.ownApplied); }
+    if (outcome.status !== 'drained' && !(outcome.ownSettled ?? outcome.ownApplied)) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
     return true;
   }).catch(error => {
     console.warn('[accounting] retained operation', error.message);
@@ -3297,6 +3432,8 @@ function accountingExistingEvent(coordinator, eventKey, onCaptured = null) {
   const settled = coordinator.snapshot().history.find(operation => operation.eventKey === eventKey
     && ['local-applied', 'fenced-reconciled'].includes(operation.phase));
   if (settled) { onCaptured?.(cloneUndoValue(settled), { settled: true }); return Promise.resolve(false); }
+  const dropped = coordinator.snapshot().droppedEventKeys;
+  if (dropped && Object.hasOwn(dropped, eventKey)) { onCaptured?.(null, { settled: true, dropped: true }); return Promise.resolve(false); }
   const pending = [...coordinator.snapshot().queue, ...coordinator.captures(roomCode).map(item => item.captured)]
     .find(operation => operation.eventKey === eventKey);
   if (pending) { onCaptured?.(cloneUndoValue(pending)); return accountingOutcome(coordinator.drain()); }
@@ -3347,19 +3484,19 @@ function ordinaryProvisionalState() {
     if (i && item.dependsOn !== ordered[i - 1].id) throw Error('Unproven provisional predecessor');
   }
   const first = ordered[0], last = ordered.at(-1);
-  const parent = state.history.find(item => item.id === first.dependsOn);
-  const expected = parent?.proposal?.patch?.timer || first.input.timerBefore;
+  const parent = state.history.find(item => item.id === AccountingCommand.resolveDropped(state, first.dependsOn));
+  const expected = parent?.proposal?.patch?.timer || parent?.settledWrites?.timer || first.input.timerBefore;
   const conflict = ordered.some(item => item.input.conflict || ['conflict', 'cancelling'].includes(item.phase))
-    || state.committed && !TimeAckCore.same(state.committed.value.serverTimer, expected);
+    || state.committed && !AccountingCommand.ancestorSame(expected, state.committed.value.serverTimer);
   const frame = cloneUndoValue(last.input.after);
   const lineage = [], ancestry = new Set(), targetAnchor = frame.taskStartTime || last.input.before.taskStartTime;
   let start = null, cursor = last;
   while (cursor) {
     if (ancestry.has(cursor.id)) throw Error('Cyclic provisional source');
     ancestry.add(cursor.id); lineage.push(cursor);
-    if (cursor.input.ordinary?.kind === 'start' && cursor.input.after.taskStartTime === targetAnchor) { start = cursor; break; }
+    if (cursor.input.ordinary?.kind === 'start' && !cursor.input.compacted && cursor.input.after.taskStartTime === targetAnchor) { start = cursor; break; }
     if (!cursor.dependsOn) break;
-    cursor = [...ordered, ...state.history].find(item => item.id === cursor.dependsOn);
+    cursor = [...ordered, ...state.history].find(item => item.id === AccountingCommand.resolveDropped(state, cursor.dependsOn));
     if (!cursor) throw Error('Missing provisional source');
   }
   const observations = coordinator.captures(context.owner).map(item => item.captured)
@@ -3379,7 +3516,7 @@ function transferOrdinaryRecovery(frame) {
   if (!recovery || ordinaryProvisionalState()) return;
   const original = _accountingCoordinator.snapshot().history.find(item => item.id === recovery.operationId);
   _ordinaryProvisionalRecovery = null;
-  if (original?.phase === 'local-applied' && frame.running && frame._timerStateOwner === original.owner
+  if (original?.phase === 'local-applied' && !original.input.compacted && frame.running && frame._timerStateOwner === original.owner
     && frame.timerOwnerDeviceId === original.device && frame.taskStartTime === original.input.after.taskStartTime) {
     window._timerRecoveryState = { ownerRoom: original.owner, ownerDeviceId: original.device,
       task: frame.currentTask, taskStartTime: frame.taskStartTime, timerStartedAt: frame.timerStartedAt,
@@ -3413,7 +3550,7 @@ function prepareOrdinaryAccounting(operation, raw, history) {
   let parent;
   if (operation.dependsOn) {
     parent = history.find(item => item.id === operation.dependsOn);
-    if (!parent || parent.phase !== 'local-applied' || parent.device !== operation.device || !parent.input.ordinary) {
+    if (!parent || parent.phase !== 'local-applied' || parent.device !== operation.device || !parent.input.ordinary || parent.input.compacted) {
       return { status: 'conflict', reason: 'ordinary-predecessor-unproven' };
     }
     expected = parent.proposal.patch.timer;
@@ -3612,7 +3749,7 @@ function stageAccountingObservation(name, facts, { eventKey, at = Date.now(), pr
   }
 }
 
-function prepareAccountingObservation(operation, raw, committed, history) {
+function prepareAccountingObservation(operation, raw, committed, history, maps = {}) {
   const { facts, frame, source } = operation.input.observation;
   const ancestry = {};
   const seen = new Set();
@@ -3624,6 +3761,7 @@ function prepareAccountingObservation(operation, raw, committed, history) {
     let parentId = dependency;
     const chain = new Set();
     while (parentId) {
+      parentId = AccountingCommand.resolveDropped(maps, parentId);
       if (chain.has(parentId)) return { status: 'conflict', reason: 'cyclic-observation-dependency' };
       if (seen.has(parentId)) break;
       chain.add(parentId); seen.add(parentId);
@@ -3638,7 +3776,7 @@ function prepareAccountingObservation(operation, raw, committed, history) {
     }
   }
   const allowed = (path, original) => TimeAckCore.same(AccountingCommand.pathValue(raw, path), original)
-    || (Object.hasOwn(ancestry, path) && TimeAckCore.same(AccountingCommand.pathValue(raw, path), ancestry[path]));
+    || (Object.hasOwn(ancestry, path) && AccountingCommand.ancestorSame(ancestry[path], AccountingCommand.pathValue(raw, path)));
   const projection = EntryPhysicalKeys.project(raw.entries || {});
   if (projection.conflicts.length) return { status: 'conflict', reason: 'physical-source-unresolved' };
   const before = cloneUndoValue(operation.dependsOn && committed ? committed.value : frame);
@@ -3670,7 +3808,7 @@ function prepareAccountingObservation(operation, raw, committed, history) {
       const captured = source.candidate?.before;
       const exactFact = TimeAckCore.same(EntryPhysicalKeys.content(previous), EntryPhysicalKeys.content(entry));
       if (!exactFact && !TimeAckCore.same(basis.before, captured)
-        && !Object.entries(basis.before).every(([path, value]) => Object.hasOwn(ancestry, path) && TimeAckCore.same(ancestry[path], value))) {
+        && !Object.entries(basis.before).every(([path, value]) => Object.hasOwn(ancestry, path) && AccountingCommand.ancestorSame(ancestry[path], value))) {
         return { status: 'conflict', reason: 'observation-entry-source-changed' };
       }
     }
@@ -14790,7 +14928,7 @@ function preparePhoneUsageObservation(operation, raw, before, ancestry, establis
   for (const key of new Set([...Object.keys(original), ...Object.keys(raw.entries || {})])) {
     const path = `entries/${key}`, current = raw.entries?.[key] || null;
     if (!TimeAckCore.same(current, original[key] || null)
-      && !(Object.hasOwn(ancestry, path) && TimeAckCore.same(current, ancestry[path]))) {
+      && !(Object.hasOwn(ancestry, path) && AccountingCommand.ancestorSame(ancestry[path], current))) {
       return { status: 'conflict', reason: 'native-classification-source-changed' };
     }
   }
@@ -14836,6 +14974,9 @@ async function syncPhoneUsage(UsageStats) {
     if (sources.some(source => source.phase === 'conflict')) { renderTimeAckStatus(); return false; }
     reservation ||= job ? sources.find(source => source.eventKey === job.options.eventKey)
       : sources.find(source => source.phase === 'awaiting-source');
+    if (!reservation && job && Object.hasOwn(coordinator.snapshot().droppedEventKeys || {}, job.options.eventKey)) {
+      _phoneUsageCaptureFailures.delete(sourceKey); return accountingOutcome(coordinator.drain());
+    }
     if (!reservation && job) reservation = coordinator.reserveSource(job.input, job.options);
     if (!reservation) {
       const latest = sources.filter(source => source.source?.result?.ok).sort((a, b) => b.at - a.at)[0];
