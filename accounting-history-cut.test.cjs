@@ -142,6 +142,36 @@ test('no verified archive -> nothing is dropped; partial archive -> only verifie
   }
 });
 
+// Priya R1 (d041dba): an archived id is not proof. After a reload the page loads archived copies; a copy that failed
+// readback, or a live record that changed after archiving, must never let the original leave history.
+test('archived copies are checked by CONTENT at cut time: a wrong or stale copy never drops the original', async () => {
+  const storage = memoryStorage(); seed(storage, 300);
+  const live = new Map(envelope(storage).history.map(record => [record.id, record]));
+  const copies = new Map();
+  for (let i = 10; i <= 20; i++) copies.set(`op-${pad(i)}`, JSON.parse(JSON.stringify(live.get(`op-${pad(i)}`))));
+  copies.get('op-000012').input = { ...copies.get('op-000012').input, n: 999 }; // copy differs from the original (failed readback)
+  const state = envelope(storage); // the live record changes after it was archived (late mutation)
+  state.history.find(record => record.id === 'op-000013').settledWrites.timer.n = 4242;
+  storage.setItem(`${AC.BASE}:${OWNER}`, JSON.stringify(state));
+  const offered = [];
+  let counter = 0;
+  const c = AC.createCoordinator({ storage, lock: (_, fn) => fn(), identity: () => ({ ...CTX }), randomId: () => `new-${pad(++counter)}`,
+    same, transport: { enforcesAccounting: true, inspect: async () => ({}) },
+    prepare: async () => ({ localOnly: true, projection: { entries: [], focusRedemptions: [] }, settledWrites: {} }),
+    project: () => null, reconcile: null, apply: () => {},
+    compaction: { historyCut: { enabled: true, keepOps: 50, batch: 1, archived: () => copies,
+      onCandidates: (owner, records) => records.forEach(record => offered.push(record.id)) } } });
+  await hydrate(c);
+  const after = envelope(storage), dropped = Object.keys(after.droppedIds || {}).sort();
+  const expected = [10, 11, 14, 15, 16, 17, 18, 19, 20].map(i => `op-${pad(i)}`);
+  assert.deepEqual(dropped, expected);
+  for (const id of ['op-000012', 'op-000013']) {
+    assert.ok(after.history.some(record => record.id === id), `${id} stays in live history`);
+    assert.ok(offered.includes(id), `${id} is offered for re-archiving`);
+  }
+  assert.equal(after.history.find(record => record.id === 'op-000013').settledWrites.timer.n, 4242);
+});
+
 test('flag off -> history grows exactly as before', async () => {
   const storage = memoryStorage(); seed(storage, 300);
   const c = coordinator(storage, { cut: false });

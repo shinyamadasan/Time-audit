@@ -2805,8 +2805,11 @@ const AccountingHistoryArchive = (() => {
         request.onsuccess = () => got.push([record, request.result]);
       }
       await done(read);
-      const verified = verifiedByOwner.get(owner) || new Set();
-      for (const [record, row] of got) if (row && TimeAckCore.same(row.record, record)) verified.add(record.id);
+      // id -> the archived copy itself. The coordinator drops a record only if this copy still equals the live
+      // record at cut time (Priya R1, d041dba): an id alone is never proof.
+      const verified = verifiedByOwner.get(owner) || new Map();
+      for (const [record, row] of got) if (row && TimeAckCore.same(row.record, record)) verified.set(record.id, row.record);
+      for (const [record, row] of got) if (!(row && TimeAckCore.same(row.record, record))) verified.delete(record.id);
       verifiedByOwner.set(owner, verified);
     } catch (error) {
       console.warn('[accounting] history archive unavailable; nothing will be dropped', error?.message || error);
@@ -2814,15 +2817,16 @@ const AccountingHistoryArchive = (() => {
       fresh.forEach(record => pending.delete(`${owner}\u0000${record.id}`));
     }
   }
-  // Rebuild the verified set after a reload: ids whose archived copy is still readable.
+  // After a reload: load each archived copy so the cut can compare it with the live record (never trusted by id).
   async function warm(owner) {
     try {
       const db = await open(), tx = db.transaction(STORE, 'readonly'), ids = [];
       const request = tx.objectStore(STORE).index('owner').openCursor(IDBKeyRange.only(owner));
-      request.onsuccess = () => { const cursor = request.result; if (cursor) { ids.push(cursor.value.id); cursor.continue(); } };
+      request.onsuccess = () => { const cursor = request.result; if (cursor) { ids.push([cursor.value.id, cursor.value.record]); cursor.continue(); } };
       await done(tx);
-      const verified = verifiedByOwner.get(owner) || new Set();
-      ids.forEach(id => verified.add(id));
+      // Loaded copies are candidates, not proof: cutHistory compares each with the live record before dropping it.
+      const verified = verifiedByOwner.get(owner) || new Map();
+      ids.forEach(([id, record]) => { if (!verified.has(id)) verified.set(id, record); });
       verifiedByOwner.set(owner, verified);
     } catch {}
   }
