@@ -36,14 +36,14 @@ test('store -> read back equal -> verified; survives reload via warm(); owners a
   const owner = 'uid_synthA';
   const verified = await page.evaluate(async ([owner, recs]) => {
     await AccountingHistoryArchive.store(owner, recs);
-    return [...(AccountingHistoryArchive.verified(owner) || [])].sort();
+    return [...(AccountingHistoryArchive.verified(owner)?.keys() || [])].sort();
   }, [owner, records(owner)]);
   expect(verified).toEqual(['arch-op-0001', 'arch-op-0002', 'arch-op-0003']);
   expect(await page.evaluate(() => AccountingHistoryArchive.verified('uid_other'))).toBeNull();
   await page.reload();
   await page.waitForFunction(() => typeof AccountingHistoryArchive === 'object');
   expect(await page.evaluate(() => AccountingHistoryArchive.verified('uid_synthA'))).toBeNull(); // memory only until warmed
-  const warmed = await page.evaluate(async owner => { await AccountingHistoryArchive.warm(owner); return [...AccountingHistoryArchive.verified(owner)].sort(); }, owner);
+  const warmed = await page.evaluate(async owner => { await AccountingHistoryArchive.warm(owner); return [...AccountingHistoryArchive.verified(owner).keys()].sort(); }, owner);
   expect(warmed).toEqual(['arch-op-0001', 'arch-op-0002', 'arch-op-0003']);
   const stored = await page.evaluate(() => new Promise(resolve => {
     const open = indexedDB.open('chronasense-accounting-archive', 1);
