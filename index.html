@@ -2826,7 +2826,16 @@ const AccountingHistoryArchive = (() => {
       verifiedByOwner.set(owner, verified);
     } catch {}
   }
-  return { store, warm, verified: owner => verifiedByOwner.get(owner) || null };
+  // Restoration: every archived record for this owner, oldest first. Archived history + live history is the full
+  // operational history; nothing here writes, so reading can never disturb the live store.
+  async function read(owner) {
+    const db = await open(), tx = db.transaction(STORE, 'readonly'), rows = [];
+    const request = tx.objectStore(STORE).index('owner').openCursor(IDBKeyRange.only(owner));
+    request.onsuccess = () => { const cursor = request.result; if (cursor) { rows.push(cursor.value); cursor.continue(); } };
+    await done(tx);
+    return rows.sort((a, b) => (a.record.at || 0) - (b.record.at || 0) || String(a.id).localeCompare(String(b.id))).map(row => row.record);
+  }
+  return { store, warm, read, verified: owner => verifiedByOwner.get(owner) || null };
 })();
 
 // Storage-growth A1b (flag ta3-accounting-flag-ref-first-hydrate, default OFF): a first hydrate captures each

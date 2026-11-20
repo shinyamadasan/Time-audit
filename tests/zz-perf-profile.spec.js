@@ -171,6 +171,12 @@ test('perf profile: storage vs accounting vs rendering per interaction', async (
   page.on('crash', () => console.log('CRASH', new Date().toISOString())); page.on('framenavigated', f => { if (f === page.mainFrame()) console.log('NAV', new Date().toISOString(), f.url()); });
   page.on('console', m => { if (/error|warn/.test(m.type())) console.log('CONSOLE', m.type(), m.text().slice(0, 200)); });
   await cdp.send('Performance.enable'); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 2000 });
+  // PERF_FLAGS=history-cut,ref-first-hydrate,... and PERF_KEEP=N switch the existing local flags on before boot.
+  await page.addInitScript(({ flags, keep }) => {
+    if (localStorage.getItem('__flags-set')) return; localStorage.setItem('__flags-set', '1');
+    for (const f of flags) localStorage.setItem(`ta3-accounting-flag-${f}`, '1');
+    if (keep) localStorage.setItem('ta3-accounting-history-keep-ops', keep);
+  }, { flags: (process.env.PERF_FLAGS || '').split(',').filter(Boolean), keep: process.env.PERF_KEEP || '' });
   const t = Date.now(); await open(page, uid, world.name, null); report.firstBootMs = Date.now() - t; report.firstBootQueue = await settle(page);
   let done = 0;
   const advance = ms => page.evaluate(ms => localStorage.setItem('__proof-now', String(Number(localStorage.getItem('__proof-now')) + ms)), ms);
