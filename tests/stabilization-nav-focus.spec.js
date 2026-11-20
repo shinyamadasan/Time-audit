@@ -171,6 +171,9 @@ test('Focus with unresolved accounting: Exit is refused but Hide leaves the sess
   await expect(page.locator('#focus-overlay')).not.toHaveClass(/open/);
   expect(await page.evaluate(() => isFocusSessionRunning())).toBe(true);
   expect(await queueLength(page)).toBe(before); // Hide staged no accounting operation
+  // A sync projection re-applies the accounting frame (Priya's 37e762f finding): the Focus screen stays hidden.
+  await page.evaluate(() => applyAccountingFrame(captureAccountingFrame()));
+  await expect(page.locator('#focus-overlay')).not.toHaveClass(/open/);
   await page.locator('#nav-braindump').click();
   await expect(page.locator('#view-braindump')).toHaveClass(/active/);
   await page.locator('#nav-today').click();
