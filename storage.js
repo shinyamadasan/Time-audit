@@ -572,21 +572,28 @@ function toDateKey(d) {
 // Never use Date.getHours() / .getDay() / .getMonth() directly — those
 // return device-local values and break multi-device, multi-timezone setups.
 
+// Perf (owner scale): building an Intl.DateTimeFormat costs far more than formatting with one, and summary views
+// call these helpers for every entry. Formatters are cached per (timezone, options), like getDateInTZ below;
+// output is unchanged.
+const _tzFmtCache = new Map();
+function _tzFmt(locale, tz, options) {
+  const key = `${locale}|${tz}|${JSON.stringify(options)}`;
+  let fmt = _tzFmtCache.get(key);
+  if (!fmt) { fmt = new Intl.DateTimeFormat(locale, { timeZone: tz, ...options }); _tzFmtCache.set(key, fmt); }
+  return fmt;
+}
+
 /** @param {number} ts UTC ms @returns {string} "9:30 AM" in user timezone */
 function tzTime(ts) {
   // "9:30 AM" in user's timezone, for display
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true
-  }).format(new Date(ts));
+  return _tzFmt('en-US', tz, { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ts));
 }
 
 function tzHHMM(ts) {
   // "HH:MM" (24-hour) for <input type="time"> prefill
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
-  }).formatToParts(new Date(ts));
+  const parts = _tzFmt('en-US', tz, { hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(ts));
   const h = (parts.find(p => p.type === 'hour')?.value || '00').replace(/^24$/, '00');
   const m =  parts.find(p => p.type === 'minute')?.value || '00';
   return `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
@@ -595,9 +602,7 @@ function tzHHMM(ts) {
 function tzHour(ts) {
   // Hour 0–23 in user's timezone
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: 'numeric', hour12: false
-  }).formatToParts(new Date(ts));
+  const parts = _tzFmt('en-US', tz, { hour: 'numeric', hour12: false }).formatToParts(new Date(ts));
   return parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
 }
 
@@ -606,7 +611,7 @@ function tzDow(ts) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   return DAYS.indexOf(
-    new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(new Date(ts))
+    _tzFmt('en-US', tz, { weekday: 'short' }).format(new Date(ts))
   );
 }
 

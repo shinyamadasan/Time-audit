@@ -140,13 +140,19 @@ function bucket(profile) {
 }
 const metrics = async cdp => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
 
-async function measure(page, cdp, label, action, uiReady) {
+async function measure(page, cdp, label, action, uiReady, nodeSide = false) {
   await page.evaluate(() => Object.assign(window.__perf, { set: 0, get: 0, setChars: 0, json: 0 }));
   const m0 = await metrics(cdp); await cdp.send('Profiler.start');
-  const t0 = Date.now(); await page.evaluate(action);
-  await page.waitForFunction(uiReady, null, { timeout: 120_000 }); const ui = Date.now() - t0;
+  const t0 = Date.now(); if (nodeSide) await action(); else await page.evaluate(action);
+  try { await page.waitForFunction(uiReady, null, { timeout: 120_000 }); }
+  catch (e) { console.log('STUCK ' + label + ' ' + JSON.stringify(await page.evaluate(() => { const c = accountingCoordinator(); const s = c.snapshot();
+    return { toast: document.getElementById('toast')?.textContent, running, queue: s?.queue.map(o => [o.input?.name, o.phase, o.reason]),
+      captures: c.captures?.(roomCode)?.map(i => [i.captured.input?.name, i.captured.phase, JSON.stringify(i.captured).length]),
+      failed: c.failedCaptures?.(roomCode)?.length, stuck: window._accountingStuck || null, legacyErr: String(window._accountingLegacyLoadError || ''),
+      sources: [...(window._accountingSourcesSeen || [])], ls: Object.keys(localStorage).reduce((t, k) => t + k.length + localStorage.getItem(k).length, 0) }; }).catch(x => String(x)))); throw e; }
+  const ui = Date.now() - t0;
   const q = await settle(page); const total = Date.now() - t0;
-  const { profile } = await cdp.send('Profiler.stop'); const m1 = await metrics(cdp);
+  let profile = { nodes: [], samples: [], timeDeltas: [] }; try { ({ profile } = await cdp.send('Profiler.stop')); } catch {} const m1 = await metrics(cdp);
   const perf = await page.evaluate(() => window.__perf);
   const sizes = await page.evaluate(() => {
     const ks = Object.keys(localStorage);
@@ -192,6 +198,21 @@ test('perf profile: storage vs accounting vs rendering per interaction', async (
     await advance(5 * MIN);
     cp.steps.push(await measure(page, cdp, 'Navigate to Brain Dump', () => showView('braindump'), () => document.getElementById('view-braindump').classList.contains('active')));
     cp.steps.push(await measure(page, cdp, 'Navigate to My Day', () => showView('today'), () => document.body.classList.contains('view-today')));
+    // Mark done on a running plan item (stops the timer through accounting, then marks the item done).
+    const planId = await page.evaluate(n => { document.getElementById('plan-task').value = `Measured plan ${n}`; addPlanItem();
+      return planRawItemsFor(currentPlanTarget()).find(i => i.task === `Measured plan ${n}`)?.id; }, done);
+    if (planId) {
+      await page.evaluate(id => startPlanItem(id), planId); await page.waitForFunction(() => running, null, { timeout: 600_000 }); await settle(page);
+      await advance(25 * MIN);
+      cp.steps.push(await measure(page, cdp, 'Mark done (running)', `togglePlanDone(${JSON.stringify(planId)})`,
+        `!running && planRawItemsFor(currentPlanTarget()).find(i => i.id === ${JSON.stringify(planId)})?.done === true`));
+      await advance(5 * MIN);
+    } else console.log('MARKDONE-SKIPPED no plan item');
+    // Sync: another device writes a new entry into the room; measured until this page holds it.
+    const rid = 900000 + done, remote = { ...synthEntries(1)[0], id: rid, activity: `Remote ${done}` };
+    cp.steps.push(await measure(page, cdp, 'Sync from another device', () => world.seed(`rooms/uid_${uid}/entries/e_${rid}`, remote),
+      `entries.some(e => e.id === ${rid})`, true));
+    cp.steps.push(await measure(page, cdp, 'Reload', () => page.reload(), () => window._accountingSourcesSeen?.size === 4, true));
     done++;
     report.checkpoints.push(cp);
     writeFileSync(OUT, JSON.stringify(report, null, 1));
