@@ -1093,15 +1093,35 @@ function applyRemoteSettings(remoteSettings) {
 
 /** Saves entries, settings, and commitment to localStorage then schedules a render. */
 function persist() {
+  // The entry and focus-redemption caches are copies of the confirmed accounting log once one exists. When local
+  // storage is full, failing to rewrite such a copy must not abort persist() (settings, plans and the timer cache follow)
+  // or, during restore, mark the whole account unrecoverable. A copy that cannot be rewritten is stale, and a stale copy
+  // is later read as unconfirmed evidence (retainUnconfirmedCompatibilityCaches), so it is removed instead: the confirmed
+  // log still holds every record it had. Without a confirmed log the copy may be the only evidence, so the error is kept.
+  const persistCompatibilityCache = (base, value) => {
+    try { return setAccountLocal(base, value); }
+    catch (error) {
+      const quota = globalThis.AccountingCommand?.isQuotaError?.(error);
+      let committed = false;
+      try { committed = !!(typeof accountingCoordinator === 'function' && accountingCoordinator()?.snapshot()?.committed); } catch (_) {}
+      if (!quota || !committed) throw error;
+      removeAccountLocal(base);
+      if (!window._compatibilityCacheQuotaNoticed) {
+        window._compatibilityCacheQuotaNoticed = true;
+        if (typeof showToast === 'function') showToast("This device's storage is full. Your confirmed time log is unchanged; a spare copy kept on this device was removed to make room.");
+      }
+      return false;
+    }
+  };
   ensureTemplateSyncStamp();
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   // Entries, settings, reviews, plans and focus redemptions go to the owning account's slot only (none when signed out).
-  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-entries', JSON.stringify(entries));
+  if (!window._accountingLegacyLoadError) persistCompatibilityCache('ta3-entries', JSON.stringify(entries));
   setAccountLocal('ta3-settings', JSON.stringify(settings));
   setAccountLocal('ta3-reviews', JSON.stringify(reviews));
   setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
-  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+  if (!window._accountingLegacyLoadError) persistCompatibilityCache('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
   setAccountLocal('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
