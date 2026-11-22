@@ -2590,6 +2590,12 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
     if (operation.input.observation?.facts.entry) knownEntries.push(operation.input.observation.facts.entry);
     frames.push(...[operation.proposal?.local?.before, operation.proposal?.local?.after, operation.input.before, operation.input.after].filter(Boolean));
   }
+  // This tab's own displayed frame: the timer/away/break/Focus caches it persisted last mirror it. A change from
+  // another device (e.g. a takeover, then Stop there) is applied without a local operation, so without this the
+  // tab's mirror of the previous confirmed frame reads as unknown evidence and blocks logging on this device.
+  // Only after this tab applied a confirmed frame for this account (never at boot or restore), so caches left by
+  // older builds or other sessions are still judged exactly as before. Entry/redemption caches are not affected.
+  if (!_accountingRestoring && _localStateOwner === roomCode && _accountingAppliedGenerations.has(roomCode)) frames.push(captureAccountingFrame());
   const unknown = {}, same = TimeAckCore.same;
   const read = base => localStorage.getItem(accountLocalKey(base));
   for (const [base, known] of [['ta3-entries', knownEntries], ['ta3-focus-redemptions', knownRedemptions]]) {
