@@ -2638,6 +2638,7 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
     if (![...state.queue, ...state.history, ...coordinator.captures(roomCode).map(item => item.captured)]
       .some(operation => AccountingCommand.sameInput(operation.input, source))) coordinator.capture(source);
   }
+  return unknown;
 }
 
 function validPhoneUsageOpen(open, endpoint) {

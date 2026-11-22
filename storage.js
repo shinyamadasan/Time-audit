@@ -1105,6 +1105,25 @@ function persist() {
       let committed = false;
       try { committed = !!(typeof accountingCoordinator === 'function' && accountingCoordinator()?.snapshot()?.committed); } catch (_) {}
       if (!quota || !committed) throw error;
+      // Proof at the removal boundary (not every persist() caller ran retention first): the existing copy must be
+      // fully known to the confirmed log, or its exact bytes must now be held by a captured operation. Retention
+      // captures unknown bytes; if it cannot (storage full, unreadable copy), nothing is removed and the error stays.
+      const key = accountLocalKey(base), raw = key ? localStorage.getItem(key) : null;
+      if (raw != null) {
+        let preserved = false;
+        try {
+          if (typeof retainUnconfirmedCompatibilityCaches !== 'function') throw error;
+          const coordinator = accountingCoordinator(), unknown = retainUnconfirmedCompatibilityCaches(coordinator);
+          if (!unknown || typeof unknown !== 'object') throw error;
+          if (!Object.prototype.hasOwnProperty.call(unknown, base)) preserved = true;
+          else {
+            const state = coordinator.snapshot();
+            preserved = [...state.queue, ...state.history, ...coordinator.captures(roomCode).map(item => item.captured)]
+              .some(operation => operation?.input?.name === 'legacy-accounting-caches' && operation.input.source?.[base] === raw);
+          }
+        } catch (_) { preserved = false; }
+        if (!preserved || localStorage.getItem(key) !== raw) throw error;
+      }
       removeAccountLocal(base);
       if (!window._compatibilityCacheQuotaNoticed) {
         window._compatibilityCacheQuotaNoticed = true;
