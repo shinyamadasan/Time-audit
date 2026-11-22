@@ -1125,7 +1125,8 @@ function persist() {
         if (!preserved || localStorage.getItem(key) !== raw) throw error;
       }
       removeAccountLocal(base);
-      if (!window._compatibilityCacheQuotaNoticed) {
+      // Notice only when a copy was actually removed (later reloads find nothing to remove and stay quiet).
+      if (raw != null && !window._compatibilityCacheQuotaNoticed) {
         window._compatibilityCacheQuotaNoticed = true;
         if (typeof showToast === 'function') showToast("This device's storage is full. Your confirmed time log is unchanged; a spare copy kept on this device was removed to make room.");
       }
