@@ -3670,12 +3670,27 @@ async function ordinaryCaptureSettles(limitMs = 5000) {
   };
   for (const until = Date.now() + limitMs; inFlight() && Date.now() < until;) {
     await new Promise(resolve => setTimeout(resolve, 100));
+    if (Date.now() >= until) return false; // a late (throttled) poll never stretches the wait past its limit
     if (ordinaryCaptureAllowed()) return true;
   }
   return false;
 }
+// The session a press acts on: account identity plus the displayed session lineage. A ping resets the block clock
+// (timerStartedAt/blockStartTime) but never these fields, so a legitimate ping during the wait keeps the press valid.
+function ordinaryPressTarget() {
+  const frame = captureAccountingFrame(), view = ordinaryProvisionalState();
+  if (view) Object.assign(frame, cloneUndoValue(view.frame));
+  return { identity: cloneUndoValue(accountingIdentity()), session: [frame.running, frame.currentTask, frame.taskStartTime,
+    frame.trackingStartedAt ?? null, frame.timerOwnerDeviceId ?? null, frame._timerStateOwner ?? null,
+    frame.awayActive, frame.breakActive, !!frame.focus] };
+}
 async function captureOrdinaryTimer(kind, task = null, planItemId = null, recovery = null) {
-  if (!ordinaryCaptureAllowed() && !(await ordinaryCaptureSettles())) { timeAckBlocks('Changing time'); return false; }
+  if (!ordinaryCaptureAllowed()) {
+    // Pin what was pressed before waiting. If the account or the session changed meanwhile, the press is stale:
+    // refuse it rather than apply it to whatever is displayed now.
+    const pressed = ordinaryPressTarget();
+    if (!(await ordinaryCaptureSettles()) || !TimeAckCore.same(pressed, ordinaryPressTarget())) { timeAckBlocks('Changing time'); return false; }
+  }
   const coordinator = accountingCoordinator(), source = cloneUndoValue(accountingIdentity());
   const view = ordinaryProvisionalState(), before = captureAccountingFrame();
   if (view) Object.assign(before, cloneUndoValue(view.frame));
