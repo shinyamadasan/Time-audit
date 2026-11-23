@@ -168,3 +168,31 @@ test('takeover: after device B takes over and stops, device A is not blocked by 
   const t = await truth(A, world, uid); console.log('TRUTH ' + JSON.stringify(t));
   expect([t.committed, t.server, t.onlyLocal + t.onlyServer, t.dupCommitted]).toEqual([TE + 2, TE + 2, 0, 0]);
 });
+
+// Jomar S6 (2026-11-23): as a device reconnects, its automatic ping can still be in flight when the user presses Stop.
+// The Stop must wait for this device's own in-flight operation instead of being refused ("Changing time waits ...").
+test('a Stop pressed while this device\'s own ping is still in flight is not refused', async ({ browser }) => {
+  const uid = 'takeover', world = await emulator.fresh(rules), base = synthEntries(TE);
+  await world.seed(`rooms/uid_${uid}`, { entries: Object.fromEntries(base.map(e => [`e_${e.id}`, e])),
+    timer: { ownerRoom: `uid_${uid}`, running: false, stopped: true, intervalSecs: 1800, updatedAt: T0 - 60 * MIN }, breakState: { active: false } });
+  const c = await browser.newContext(); await c.route('**/*', r => local(r.request().url()) ? r.continue() : r.abort());
+  const A = await c.newPage(); PAGE = A;
+  await open(A, uid, world.name, null); await settle(A);
+  await A.evaluate(() => _startTimer('Ping race')); await A.waitForFunction(() => running, null, { timeout: 120_000 }); await settle(A);
+  await advance(A, 20 * MIN);
+  const race = await A.evaluate(async () => {
+    const toasts = []; const original = window.showToast; window.showToast = (message, ...rest) => { toasts.push(String(message)); return original?.(message, ...rest); };
+    const ping = doPing();
+    const s = accountingCoordinator().snapshot();
+    const pendingAtStop = [...s.queue, ...accountingCoordinator().captures(roomCode).map(i => i.captured)].map(o => o.input.name);
+    const stopped = await stopAndLog(); await ping;
+    return { pendingAtStop, stopped, toasts: toasts.filter(t => /waits for your retained/.test(t)) };
+  });
+  console.log('PINGRACE ' + JSON.stringify(race));
+  expect(race.pendingAtStop).toContain('ping'); // the race really happened: the ping was pending at the press
+  await A.waitForFunction(() => !running, null, { timeout: 30_000 });
+  expect(race.toasts).toEqual([]);
+  await settle(A);
+  const t = await truth(A, world, uid); console.log('TRUTH ' + JSON.stringify(t));
+  expect([t.committed, t.server, t.onlyLocal + t.onlyServer, t.dupCommitted]).toEqual([TE + 1, TE + 1, 0, 0]);
+});

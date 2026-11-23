@@ -2595,7 +2595,11 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
   // tab's mirror of the previous confirmed frame reads as unknown evidence and blocks logging on this device.
   // Only after this tab applied a confirmed frame for this account (never at boot or restore), so caches left by
   // older builds or other sessions are still judged exactly as before. Entry/redemption caches are not affected.
-  if (!_accountingRestoring && _localStateOwner === roomCode && _accountingAppliedGenerations.has(roomCode)) frames.push(captureAccountingFrame());
+  // Only the session fields cache() reads: no clone of the entry log, so this stays cheap at any size.
+  if (!_accountingRestoring && _localStateOwner === roomCode && _accountingAppliedGenerations.has(roomCode)) frames.push({ running,
+    timerStartedAt, totalSecs, lastTaskForRepeat, currentTask, taskStartTime, trackingStartedAt, blockStartTime, timerOwnerDeviceId,
+    currentTaskPlanItemId, remaining, awayActive, awayStartTime, awayLabel, breakActive, breakStartTs, breakEndsAt, _breakStartedBy,
+    focus: typeof captureFocusAccountingFrame === 'function' ? captureFocusAccountingFrame() : null });
   const unknown = {}, same = TimeAckCore.same;
   const read = base => localStorage.getItem(accountLocalKey(base));
   for (const [base, known] of [['ta3-entries', knownEntries], ['ta3-focus-redemptions', knownRedemptions]]) {
@@ -3653,8 +3657,25 @@ function restoreOrdinaryProvisional() {
   }
   renderOrdinaryProvisional();
 }
+// A same-device operation still in flight (e.g. the automatic ping captured as the device reconnects) settles within
+// moments. Wait briefly for it instead of refusing the press. Any other block (legacy, open undo, failed capture, conflict,
+// another device's op) refuses at once, exactly as before. The press is still captured only once ordinaryCaptureAllowed().
+async function ordinaryCaptureSettles(limitMs = 5000) {
+  const inFlight = () => {
+    if (window._accountingLegacyLoadError || timeAckOpenOperation()) return false;
+    const coordinator = accountingCoordinator();
+    if (!coordinator || coordinator.failedCaptures(roomCode).length) return false;
+    const state = coordinator.snapshot(), pending = [...state.queue, ...coordinator.captures(roomCode).map(item => item.captured)];
+    return pending.length > 0 && pending.every(item => item.device === syncedDeviceId && !['conflict', 'cancelling'].includes(item.phase));
+  };
+  for (const until = Date.now() + limitMs; inFlight() && Date.now() < until;) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (ordinaryCaptureAllowed()) return true;
+  }
+  return false;
+}
 async function captureOrdinaryTimer(kind, task = null, planItemId = null, recovery = null) {
-  if (!ordinaryCaptureAllowed()) { timeAckBlocks('Changing time'); return false; }
+  if (!ordinaryCaptureAllowed() && !(await ordinaryCaptureSettles())) { timeAckBlocks('Changing time'); return false; }
   const coordinator = accountingCoordinator(), source = cloneUndoValue(accountingIdentity());
   const view = ordinaryProvisionalState(), before = captureAccountingFrame();
   if (view) Object.assign(before, cloneUndoValue(view.frame));
