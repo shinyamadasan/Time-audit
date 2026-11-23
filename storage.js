@@ -1093,55 +1093,15 @@ function applyRemoteSettings(remoteSettings) {
 
 /** Saves entries, settings, and commitment to localStorage then schedules a render. */
 function persist() {
-  // The entry and focus-redemption caches are copies of the confirmed accounting log once one exists. When local
-  // storage is full, failing to rewrite such a copy must not abort persist() (settings, plans and the timer cache follow)
-  // or, during restore, mark the whole account unrecoverable. A copy that cannot be rewritten is stale, and a stale copy
-  // is later read as unconfirmed evidence (retainUnconfirmedCompatibilityCaches), so it is removed instead: the confirmed
-  // log still holds every record it had. Without a confirmed log the copy may be the only evidence, so the error is kept.
-  const persistCompatibilityCache = (base, value) => {
-    try { return setAccountLocal(base, value); }
-    catch (error) {
-      const quota = globalThis.AccountingCommand?.isQuotaError?.(error);
-      let committed = false;
-      try { committed = !!(typeof accountingCoordinator === 'function' && accountingCoordinator()?.snapshot()?.committed); } catch (_) {}
-      if (!quota || !committed) throw error;
-      // Proof at the removal boundary (not every persist() caller ran retention first): the existing copy must be
-      // fully known to the confirmed log, or its exact bytes must now be held by a captured operation. Retention
-      // captures unknown bytes; if it cannot (storage full, unreadable copy), nothing is removed and the error stays.
-      const key = accountLocalKey(base), raw = key ? localStorage.getItem(key) : null;
-      if (raw != null) {
-        let preserved = false;
-        try {
-          if (typeof retainUnconfirmedCompatibilityCaches !== 'function') throw error;
-          const coordinator = accountingCoordinator(), unknown = retainUnconfirmedCompatibilityCaches(coordinator);
-          if (!unknown || typeof unknown !== 'object') throw error;
-          if (!Object.prototype.hasOwnProperty.call(unknown, base)) preserved = true;
-          else {
-            const state = coordinator.snapshot();
-            preserved = [...state.queue, ...state.history, ...coordinator.captures(roomCode).map(item => item.captured)]
-              .some(operation => operation?.input?.name === 'legacy-accounting-caches' && operation.input.source?.[base] === raw);
-          }
-        } catch (_) { preserved = false; }
-        if (!preserved || localStorage.getItem(key) !== raw) throw error;
-      }
-      removeAccountLocal(base);
-      // Notice only when a copy was actually removed (later reloads find nothing to remove and stay quiet).
-      if (raw != null && !window._compatibilityCacheQuotaNoticed) {
-        window._compatibilityCacheQuotaNoticed = true;
-        if (typeof showToast === 'function') showToast("This device's storage is full. Your confirmed time log is unchanged; a spare copy kept on this device was removed to make room.");
-      }
-      return false;
-    }
-  };
   ensureTemplateSyncStamp();
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   // Entries, settings, reviews, plans and focus redemptions go to the owning account's slot only (none when signed out).
-  if (!window._accountingLegacyLoadError) persistCompatibilityCache('ta3-entries', JSON.stringify(entries));
+  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-entries', JSON.stringify(entries));
   setAccountLocal('ta3-settings', JSON.stringify(settings));
   setAccountLocal('ta3-reviews', JSON.stringify(reviews));
   setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
-  if (!window._accountingLegacyLoadError) persistCompatibilityCache('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+  if (!window._accountingLegacyLoadError) setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
   setAccountLocal('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));

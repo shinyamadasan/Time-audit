@@ -285,10 +285,6 @@
           if (captured.input.name !== 'ordinary-heartbeat' || source?.input.ordinary?.v !== 1
             || source.input.ordinary.kind !== 'start' || source.device !== captured.device || source.uid !== captured.uid
             || !Number.isSafeInteger(captured.at) || captured.at < source.at) throw Error('Unreadable provisional observation');
-          // Storage wall: a Start that could not enter the full envelope is still held in intake. The envelope must
-          // never reference an op it does not hold (load() rejects it permanently), so the observation stays in intake
-          // until its Start is imported. Readers already merge intake observations (ordinaryProvisionalState).
-          if (![...state.queue, ...state.history].includes(source)) return;
           state.provisionalObserved ||= {};
           state.provisionalObserved[source.id] = Math.max(state.provisionalObserved[source.id] || source.at, captured.at);
           save(state); storage.removeItem(slot); return;
