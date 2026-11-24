@@ -5723,3 +5723,14 @@ behaviour: a browser that ran the previous version starts, hydrates and saves; r
 ### TASK-040 - Claude connector requests plan write on connect (November 13, 2026, owner-direct)
 changed: workers/chronasense-conversational-bridge/src/index.js (requiredScopes now read + plan.write); test/oauth.test.js expectation; worker README note; TASKS.md entry.
 behaviour: the connect-time challenge and protected-resource metadata name read + plan.write, so a new Claude connection is offered plan write on its consent page. No connection can be read-only. Brain Dump write is not added. Existing read-only grants must reconnect. Not deployed.
+
+## TASK-041 - blocked investigation checkpoint (branch: task-041-orphan-heartbeat-recovery)
+changed:
+  - TASKS.md: owner-direct contract recorded; status blocked on the approved failure-preservation guarantee.
+  - accounting-orphan-recovery.test.js: historical-corruption reproducer and two fail-closed controls; intentionally red, not wired into npm test.
+  - TASK_041_LEGACY_TEST_EXPECTATIONS.md: five pre-existing stale quota expectations documented separately; legacy tests unchanged.
+  - TEST_REPORT.md: local regression results, fault-model evidence and independent Claude safety review.
+tests: existing accounting subset 46/46; new reproducer 2/3; original staged-effects 51/56; npm test stopped at unrelated Obsidian test-vault failures.
+blockers: after a successful smaller envelope write with failed readback, restoring original bytes is not guaranteed under quota/concurrent unlocked writers. A conditional facts-preserving route exists, but needs an explicit owner-approved contract decision.
+deviations: no runtime implementation, schema change, validation weakening or release candidate. Local evidence-only checkpoint authorized by owner; no merge, push or deployment. One independent review cycle used; second not started.
+-> status set to `blocked` in TASKS.md; owner approval required before continuing.

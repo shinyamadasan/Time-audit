@@ -2425,6 +2425,62 @@ constraints:
 verification:
   - [ ] `npm test` in the worker, `npm run check:bundle`, git diff --check.
 
+### TASK-041 - Bounded recovery of historical orphan-heartbeat accounting envelopes
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none (owner-selected development baseline b0bbc6f)
+files: accounting-command.js; www/accounting-command.js (generated parity mirror);
+  accounting-orphan-recovery.test.js (new focused tests); package.json (test wiring only);
+  TASK_041_LEGACY_TEST_EXPECTATIONS.md (separate legacy-test evidence, no expectation edits);
+  CODEMAP.md only if code structure moves; CHANGELOG.md and TEST_REPORT.md append only; this entry.
+context:
+  Owner approval in this session on November 24, 2026: implement the confirmed P0 recovery issue
+  from the completed baseline audit, in an isolated branch/worktree based on b0bbc6f, preserving
+  evidence and making local Git checkpoints. Owner requires autonomous independent QA, addressing
+  scoped blockers, and a maximum of two implementation/review cycles. No merge or deployment.
+objective:
+  Recover only envelopes whose historical provisionalObserved marker references an original
+  ordinary Start retained solely in the same account's intake, without losing any original fact.
+acceptance:
+  - Validate the exact historical pattern and owner/uid/device/id/timestamp relationships;
+    preserve original Start bytes, observation timestamps, accounting history and unrelated state.
+  - Follow the audited design: durably retain the original observation using the existing intake
+    format before replacing the invalid envelope; preserve the original envelope on repair failure.
+  - All other malformed envelopes remain fail-closed; no accounting schema or validation weakening.
+  - Prove crash recovery, quota/readback failures, idempotence, restart and multi-tab safety.
+  - Run focused tests red then green, relevant existing accounting regressions and npm test;
+    retain exact results, including failures and limitations, in TEST_REPORT.md.
+  - Keep root/www runtime parity; perform SELF_REVIEW.md and applicable QA.md checks.
+  - Delegate fresh independent verification; address blocking findings within two cycles maximum.
+  - Document the five stale staged-effects expectations separately, without changing legacy tests
+    or introducing unrelated runtime changes; preserve local checkpoints and report final revision.
+constraints:
+  - Interactive, solo owner-direct implementation on task-041-orphan-heartbeat-recovery only.
+  - Existing coordination, acknowledgment gates and original evidence remain authoritative.
+  - No production access, credentials, real accounts, rules changes, deployment, push, merge,
+    rollback adoption, unrelated feature changes or new infrastructure.
+  - STOP if repair needs schema changes, weakened validation, unsafe concurrency, or a broader
+    architecture/storage contract; report the exact blocker instead of guessing.
+  - Stop after two implementation/review cycles if blocking findings remain; owner approves release.
+verification:
+  - Public coordinator interfaces with synthetic storage, fault injection and independently scheduled
+    tabs; original historical corruption fixture; exact preservation and fail-closed assertions.
+  - Existing accounting wall/storage/history/growth/capability tests; relevant local emulator/browser
+    regressions; npm test; runtime-mirror --check; git diff --check; independent QA.
+blocker:
+  Cycle 1 independent Claude review confirmed that the proposed existing-schema repair cannot
+  guarantee original envelope bytes after a successful replacement write followed by failed
+  readback. Unlocked intake/settings writers can consume the freed space, preventing restoration;
+  restoring after an unexpected readback could also overwrite another writer. No runtime patch
+  was made. A locked repair can preserve all original facts in the repaired envelope plus durable
+  observation intake, but adopting that weaker post-write preservation contract needs owner approval.
+  Strict byte preservation instead needs a broader storage/evidence contract, outside this task.
+  Synchronous load must not repair without the async owner lock; a locked drain repair is feasible
+  conditionally, with the existing page remaining paused until reload/sign-in. No schema or
+  validation changes authorized. See TEST_REPORT.md TASK-041 for exact evidence and limitations.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

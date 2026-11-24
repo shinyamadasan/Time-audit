@@ -3236,3 +3236,36 @@ not run locally: wider browser suite, packaged release spec (CI).
 ### TASK-040 - Claude connector requests plan write on connect (November 13, 2026)
 green: worker npm test 55/55. The real OAuth library needs the Cloudflare runtime so it could not run in Node; its source (buildWwwAuthenticateHeader, withRequiredScopes) was read to confirm challenge and metadata scopes come from requiredScopes.
 not run: npm run check:bundle, live consent page, live Claude reconnect (needs approved deploy). Red-zone: held at approved.
+
+## TASK-041 - November 24, 2026 - blocked feasibility/evidence checkpoint
+baseline: b0bbc6fc56c48e8ff0e3a219cf486b68fc8394ca; isolated task-041-orphan-heartbeat-recovery branch. Runtime remains byte-identical to baseline; main checkout untouched.
+result: NOT IMPLEMENTED / NOT RELEASE-QUALIFIED. Original envelope preservation after failed post-write readback cannot be guaranteed by the proposed repair under the approved storage contract.
+
+### Local commands and exact results
+- `node --test accounting-capability.test.js accounting-history-cut.test.cjs accounting-storage-full.test.cjs accounting-wall-observation.test.js accounting-hazards/storage-growth.test.js`: 46 passed, 0 failed.
+- `node --test accounting-orphan-recovery.test.js`: 2 passed, 1 failed. The positive historical recovery case still throws `Unreadable accounting envelope`; missing-Start and pre-Start-timestamp controls preserve bytes and fail closed. This is an intentionally red reproducer, not an implemented recovery test or npm-test addition.
+- `node --test accounting-hazards/staged-effects.test.js`: 51 passed, 5 failed, all pre-existing `Missing expected rejection` cases. Separate classification is in TASK_041_LEGACY_TEST_EXPECTATIONS.md; no expectations or runtime quota behavior changed.
+- `npm test`: exit 1 in the Obsidian suite, whose own summary is 455 tests / 452 passed / 3 failed (not an overall npm-test total). Each failing CLI apply fixture reports `Apply requires a real TEST-VAULT.md file at the vault root`. Failures: unmanaged conflicts/identical second apply; authorized test vault renderer/writer; stale generated Daily cleanup. The remaining chained suites were not reached. No unrelated fix attempted.
+- `node scripts/runtime-mirror.mjs --check`: 106 runtime files byte-identical. `git diff --check`: passed.
+- Independent scratch proof rerun against this baseline: P1-P8 passed. These are baseline/prototype/fault-model diagnostics, NOT tests of an implemented production repair.
+- Generated readback/quota counterexample: 1 passed, demonstrating that the naive restore guarantee fails in its synthetic fault schedule, NOT proving that every conceivable storage design is impossible.
+
+### Blocking failure schedule and conditional route
+1. Start intake and original corrupt envelope R0 exist. The repair durably writes/readbacks the original observation in existing-schema intake.
+2. A smaller valid replacement R1 is written, removing only the orphan marker.
+3. Another tab's unlocked intake/settings write consumes the freed quota; envelope readback then fails.
+4. Restoring the larger R0 can fail quota. Blind restoration after an unexpected readback can also overwrite another writer. The accounting Web Lock does not serialize these unrelated writers.
+Thus byte-identical R0 cannot be promised after every repair failure. No such repair was added. All original facts could instead remain recoverable from R1 plus durable observation/Start intake, but accepting that post-write guarantee rather than original-envelope preservation is an owner decision, not a silent implementation interpretation. Strict original-byte retention may require a broader backup/reservation/storage contract, outside approved scope; no schema change is proposed here.
+
+An unlocked repair inside synchronous `load` is unsafe: a stale tab can overwrite a repaired/drained envelope and lose the original Start. The reviewer found a conditional route inside the existing async owner lock at `drainLocked`, retaining the unchanged validator. Observation identity must come from its original Start, not the repairing tab. Even after a locked repair, the existing page's sticky `_accountingLegacyLoadError` requires reload/sign-in; same-session recovery needs separately approved bootstrap scope. Full storage can leave the account safely paused until enough observation-intake space is freed. No production exposure was inspected.
+
+### Independent review and qualification limits
+Reviewer: Claude Opus 5.5, fresh delegated TASK-041 cycle 1 recovery safety review. Verdict: conditional facts-preserving design feasible; strict original-byte preservation after unconfirmed write is a real blocker. No runtime approval or completed implementation QA. One of maximum two cycles used; no second cycle needed to stop on the contract boundary.
+SELF_REVIEW / QA disposition: scope, parity and diff hygiene checked; would ship recovery = NO (not implemented). No status-review handoff or release approval. Local evidence checkpoint only, as explicitly authorized by owner, despite retained red evidence. No browser/emulator qualification of a repair was run because there is no repair; prior audit browser results are not reused as current qualification. Crash/idempotence/multi-tab prototype evidence does not replace eventual runtime integration tests. Coverage not measured.
+
+### Preserved local evidence
+Directory: C:/Users/DevLabs-Test/AppData/Local/Temp/chronasense-task041-evidence-20261124
+- existing-accounting.log; recovery-red.log; legacy-expectations.log; npm-test.log
+- repair-readback-counterexample.test.mjs; repair-readback-counterexample.log
+- independent-safety-proof.mjs; independent-safety-proof.log (reviewer's P1-P8 scratch proof copied and rerun)
+The committed positive recovery reproducer remains red on purpose; do not merge this checkpoint as a fix. Before source work resumes, owner must choose the failure-preservation contract and accept reload/sign-in behavior or authorize broader scope. Then implement and qualify the locked repair, perform fresh independent implementation QA within the remaining cycle, and obtain owner merge/release approval. No production/credentials/real accounts/rules/deploy/push/merge accessed or changed.
