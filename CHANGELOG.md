@@ -5745,3 +5745,13 @@ tests: focused 46/46; combined accounting/ACK/mirror subset 186/186; existing br
 blockers: full npm test still stops at three pre-existing Obsidian test-vault fixture failures; original staged-effects remains 51/56 with the same five separately documented stale expectations. No unrelated fixes attempted.
 deviations: owner expressly approved local checkpoints and revised preservation; only local work performed. Review limit respected (two cycles total). Root/www byte-identical; main untouched; no production, rules, push, merge or deployment.
 -> status held `blocked` for broader release qualification, not an unresolved recovery implementation finding. Owner release approval required.
+
+## TASK-042 - test maintenance complete; release qualification blocked (branch: task-042-release-qualification)
+changed:
+  - test.js: canonicalize two disposable Obsidian vault fixtures; unchanged production marker/path safety checks. Baseline and candidate reproduce the same original failures and both pass corrected fixtures.
+  - accounting-hazards/staged-effects.test.js: correct exactly five obsolete quota-throws expectations, retaining readback rejection and strengthening retained-fact, acknowledgment and once-only recovery assertions.
+  - package.json: include staged-effects in the existing npm test chain; no runtime or dependency changes.
+tests: complete npm test exit 0, 3003 passed / 0 failed / 1 existing opt-in skip; baseline/candidate staged-effects 56/56 each; independent test-only QA APPROVE. Mandatory accounting browser run 489/490, with the remaining Check now click timeout reproduced 4/5 times on both baseline and candidate.
+blockers: mandatory Focus interaction qualification remains red; wider suite 801 passed / 303 failed, including 298 recorded known and 2 history-only failures; of 3 outside-ledger failures, 2 MV3 fixture-parent failures pass corrected-environment reruns, while an owner-scale Stop/profile timeout remains unqualified against baseline. CI count 1071 versus actual 1104 and old artifact pins require review. Android native project unavailable; packaged 62-case gate, hosted CI and real-device acceptance unperformed. No failing cases removed, skipped or relabelled green.
+deviations: later Obsidian-sync fixtures use a canonical long-path TMP/TEMP environment instead of unrelated source edits; pinned rules verifier passes 9/9 on authoritative LF Git export but two exact-byte checks fail on Windows CRLF. Cached dependencies reused, none installed. TASK-041 runtime remains exactly b18cc52, root/www parity preserved; no production, push, merge or deploy.
+-> status set to `blocked` in TASKS.md for outstanding release gates, not a new TASK-041 recovery defect. Local test-maintenance checkpoint only.

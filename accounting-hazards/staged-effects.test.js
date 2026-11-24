@@ -80,7 +80,12 @@ test(`failed ${fault} capture retains the complete original identity and input u
   const retained = c.failedCaptures('uid_alice');
   assert.equal(retained.length, 1); assert.equal(retained[0].input.cursor, 10);
   assert.equal(retained[0].at, 123); assert.equal(callbacks, 0); assert.equal(f.sends, 0);
-  await assert.rejects(c.drain()); assert.equal(callbacks, 0); assert.equal(f.sends, 0);
+  if (fault === 'quota') assert.deepEqual(await c.drain(), {
+    status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: []
+  });
+  else await assert.rejects(c.drain(), /readback/);
+  assert.deepEqual(c.failedCaptures('uid_alice'), retained);
+  assert.equal(callbacks, 0); assert.equal(f.sends, 0);
   fail = false; await c.drain(); await c.drain();
   assert.equal(callbacks, 1); assert.equal(callbackOperation.id, retained[0].id);
   assert.deepEqual(callbackOperation.input, retained[0].input); assert.equal(f.sends, 1);
@@ -113,7 +118,9 @@ test('read-only recovery beside failed capture retires its intake and applies it
   };
   assert.throws(() => c.capture(input()));
   await c.submit({ name: 'hydrate-accounting', confirmedOnly: true });
-  await assert.rejects(c.drain());
+  assert.deepEqual(await c.drain(), {
+    status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: []
+  });
   assert.equal(c.snapshot().generation, 1); assert.equal(c.snapshot().history.length, 1);
   assert.equal(c.captures('uid_alice').length, 0); assert.equal(c.failedCaptures('uid_alice').length, 1); assert.equal(f.sends, 0);
 });
@@ -355,7 +362,9 @@ test('failed hydration commit retains the original captured cache and can repeat
   f.deps.prepare = (operation, raw) => ({ localOnly: true, projection: { raw, cursor: raw.timer.cursor } });
   const c = f.create(), write = f.storage.setItem;
   f.storage.setItem = (key, value) => { if (key.startsWith(BASE) && JSON.parse(value).committed) throw Error('quota'); return write(key, value); };
-  await assert.rejects(c.submit({ name: 'hydrate-accounting', frame: { original: 'cache facts' } }), /quota/);
+  const result = await c.submit({ name: 'hydrate-accounting', frame: { original: 'cache facts' } });
+  assert.deepEqual(result, { status: 'storage-full', reason: 'local-storage-full', retained: true,
+    stuck: [], capturedId: 'command_1', ownApplied: false, ownSettled: false });
   assert.equal(f.applied, null); assert.equal(f.sends, 0);
   assert.equal(c.snapshot().queue[0].input.frame.original, 'cache facts');
   f.storage.setItem = write;
@@ -512,7 +521,9 @@ test('one matching stamp cannot acknowledge a multi-path command or authorize st
 test('failed atomic local commit leaves accepted command recoverable and cursor/Undo unapplied', async () => {
   const f = fixture(), c = f.create(), write = f.storage.setItem;
   f.storage.setItem = (key, raw) => { if (key.startsWith(BASE) && JSON.parse(raw).committed) throw Error('quota'); return write(key, raw); };
-  await assert.rejects(c.submit(input()), /quota/);
+  const result = await c.submit(input());
+  assert.deepEqual(result, { status: 'storage-full', reason: 'local-storage-full', retained: true,
+    stuck: [], capturedId: 'command_1', ownApplied: false, ownSettled: false });
   assert.equal(c.snapshot().queue[0].phase, 'accepted'); assert.equal(f.applied, null);
   f.storage.setItem = write;
   await f.create().drain();
@@ -597,11 +608,22 @@ test('O1 observation intake survives envelope quota and recovers its original ob
   const start = c.capture({ ...input(), name: 'start-timer', ordinary: { v: 1, kind: 'start' } }, { at: 100 });
   const write = f.storage.setItem;
   f.storage.setItem = (key, value) => { if (key.startsWith(BASE)) throw Error('quota'); return write(key, value); };
-  await assert.rejects(c.observeProvisional(start.id, 200), /quota/);
+  assert.equal(await c.observeProvisional(start.id, 200), true);
   assert.equal(c.captures(f.context.owner).length, 2); assert.equal(f.sends, 0);
+  const retained = c.captures(f.context.owner);
+  assert.deepEqual(retained.find(item => item.captured.id === start.id).captured, start);
+  const observation = retained.find(item => item.captured.phase === 'provisional-observation').captured;
+  assert.equal(observation.at, 200); assert.equal(observation.input.sourceId, start.id);
+  assert.equal(observation.device, start.device); assert.equal(observation.uid, start.uid);
+  assert.equal(c.snapshot().provisionalObserved, undefined); assert.equal(f.applied, null);
   f.storage.setItem = write; const restarted = f.create(); await restarted.drain();
   assert.equal(restarted.snapshot().provisionalObserved[start.id], 200);
   assert.equal(restarted.snapshot().queue.length, 1);
+  assert.equal(restarted.captures(f.context.owner).length, 0);
+  f.offline = false; await restarted.drain(); await restarted.drain();
+  assert.equal(f.sends, 1); assert.equal(restarted.snapshot().history.length, 1);
+  assert.equal(restarted.snapshot().generation, 1);
+  assert.equal(restarted.snapshot().provisionalObserved[start.id], 200);
 });
 
 test('O1 observations cannot borrow another device or an absent provisional source', async () => {

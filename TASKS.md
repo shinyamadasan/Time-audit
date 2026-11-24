@@ -2493,6 +2493,54 @@ blocker:
   Owner must resolve or explicitly disposition broader baseline test failures and approve release;
   do not merge, push or deploy this local checkpoint. No further review cycle started.
 
+### TASK-042 - Local release qualification and baseline test maintenance
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none (owner explicitly selects local candidate b18cc52; no merge required)
+files: test.js (Obsidian test fixtures only, if proven necessary);
+  accounting-hazards/staged-effects.test.js (five obsolete quota expectations and safety assertions);
+  package.json (existing-suite test wiring only); CHANGELOG.md and TEST_REPORT.md append only;
+  this entry; generated local qualification evidence outside runtime.
+context:
+  Owner instruction in this session, November 24, 2026: accept TASK-041 checkpoint b18cc52 for
+  release qualification, compare three Obsidian failures against clean b0bbc6f in equivalent
+  environments, correct only obsolete quota expectations, restore the full run with existing
+  tooling/fixtures, execute full tests and required checks, preserve separate local checkpoints.
+objective:
+  Remove verified test/environment blockers without altering reviewed runtime, then report
+  evidence-backed release readiness and outstanding packaged/device/owner requirements.
+acceptance:
+  - Compare original Obsidian failures on clean baseline export and candidate using the same
+    Node/platform/temp/dependency environment; distinguish fixture/environment issues from regressions.
+  - Correct only obsolete storage-quota throw expectations, asserting exact retained outcomes,
+    original identities/bytes/timestamps, no premature callback/publication, exactly-once recovery;
+    retain readback-failure rejection checks and all other safety assertions.
+  - No skipped/deleted tests, hidden failures, safety bypasses or unrelated runtime changes.
+  - Run full npm test and existing required CI/release checks where tooling is available; preserve
+    failures/counts and explain every blocked gate. Document real-device acceptance requirements.
+  - Keep TASK-041 runtime byte-identical to b18cc52; any newly proven runtime fix requires renewed
+    independent QA and a separate explicit scoped contract, not a silent test workaround.
+  - Test maintenance stays on its own local branch/checkpoint; final report GO/NO-GO with evidence.
+constraints:
+  - No production, real-account/data/credentials access, Firebase rules edits, push, merge or deploy.
+  - No new infrastructure or broad architecture investigation; cached local tools and synthetic
+    loopback emulators only. No dependency installs or shared dependency target changes.
+  - STOP on an actual permission/security boundary or a verified gate requiring unavailable
+    resources, after completing independent feasible qualification work. Do not weaken checks.
+verification:
+  - Baseline/candidate original test.js comparison; focused staged-effects red/green with a
+    baseline cross-check; complete npm test; lint/parity/rules/functions checks; CI-required
+    emulator/browser/worker/artifact checks or exact unavailability evidence; git diff --check.
+blockers:
+  Full npm test and scoped test-maintenance QA pass without runtime changes. Release gate remains
+  blocked by the mandatory Focus Check now click/rerender timeout, reproduced on clean baseline;
+  owner-scale Stop/profile timeout not yet attributed against baseline and wider-suite count
+  disposition (1104 actual versus 1071 pinned); missing native Android project/packaged 62-case gate;
+  candidate-specific reviewed artifact fingerprints and real-device acceptance. See TEST_REPORT.md
+  TASK-042 and retained local evidence. Do not merge, push, deploy or alter reviewed runtime.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
