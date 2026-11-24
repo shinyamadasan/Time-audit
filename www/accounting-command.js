@@ -133,6 +133,11 @@
       const raw = readStored(key(owner));
       if (raw != null && validatedRaw.get(owner) === raw) return JSON.parse(raw);
       const state = raw == null ? { v: VERSION, owner, generation: 0, committed: null, queue: [], history: [] } : JSON.parse(raw);
+      validateEnvelope(state, owner);
+      if (raw != null) validatedRaw.set(owner, raw);
+      return state;
+    }
+    function validateEnvelope(state, owner) {
       if (state?.v !== VERSION || state.owner !== owner || !Array.isArray(state.queue)
         || !Array.isArray(state.history) || !Number.isSafeInteger(state.generation) || state.generation < 0
         || state.sources != null && !Array.isArray(state.sources)
@@ -159,8 +164,6 @@
           || Object.entries(state.effectReceipts).some(([id, receipt]) => receipt?.v !== 1
             || !state.history.some(op => op.id === receipt.operationId && op.proposal?.effects?.some(effect => effect.id === id))))
         || !validDropMaps(state)) throw Error('Unreadable accounting envelope');
-      if (raw != null) validatedRaw.set(owner, raw);
-      return state;
     }
     function validDropMaps(state) {
       const plain = value => value == null || typeof value === 'object' && !Array.isArray(value);
@@ -196,6 +199,56 @@
           return { slot, captured };
         }).sort((a, b) => a.captured.at - b.captured.at
           || Number(a.captured.phase === 'source-result') - Number(b.captured.phase === 'source-result') || a.slot.localeCompare(b.slot));
+    }
+    function recoverOrphanObservations(context) {
+      const owner = context.owner, raw = readStored(key(owner));
+      if (raw == null || validatedRaw.get(owner) === raw) return;
+      const state = JSON.parse(raw);
+      let unreadable;
+      try { validateEnvelope(state, owner); validatedRaw.set(owner, raw); return; }
+      catch (error) { unreadable = error; }
+      if (!Array.isArray(state?.queue) || !Array.isArray(state.history)
+        || !state.provisionalObserved || typeof state.provisionalObserved !== 'object'
+        || Array.isArray(state.provisionalObserved)) throw unreadable;
+      const held = [...state.queue, ...state.history];
+      const orphans = Object.entries(state.provisionalObserved).filter(([id]) => !held.some(operation => operation?.id === id));
+      if (!orphans.length) throw unreadable;
+      const candidate = clone(state);
+      for (const [id] of orphans) delete candidate.provisionalObserved[id];
+      validateEnvelope(candidate, owner);
+      const intake = captures(owner), observations = [];
+      const live = [...held, ...state.sources || []];
+      for (const [id, at] of orphans) {
+        const source = intake.find(item => item.slot === prefix(owner) + id);
+        const start = source?.captured;
+        if (!start || start.id !== id || start.phase !== 'captured' || start.source != null
+          || start.input.ordinary?.v !== 1 || start.input.ordinary.kind !== 'start' || start.input.compacted != null
+          || !Number.isSafeInteger(start.at) || start.at <= 0 || !Number.isSafeInteger(at) || at < start.at
+          || typeof start.device !== 'string' || !start.device || !Number.isSafeInteger(start.generation) || start.generation < 0
+          || live.some(operation => operation.id === id) || Object.hasOwn(state.droppedIds || {}, id)
+          || start.eventKey && (Object.hasOwn(state.droppedEventKeys || {}, start.eventKey)
+            || live.some(operation => operation.eventKey === start.eventKey))) throw unreadable;
+        const observationId = `orphan-${sha256Hex(`${owner}\n${id}\n${at}`).slice(0, 40)}`;
+        if (live.some(operation => operation.id === observationId) || Object.hasOwn(state.droppedIds || {}, observationId)) throw unreadable;
+        const observation = { v: VERSION, owner, uid: start.uid, device: start.device, generation: start.generation,
+          id: observationId, at, eventKey: null, dependsOn: null, input: { name: 'ordinary-heartbeat', sourceId: id },
+          local: null, phase: 'provisional-observation' };
+        const sourceRaw = readStored(source.slot);
+        if (sourceRaw == null || !same(JSON.parse(sourceRaw), start)) throw Error('Accounting recovery Start changed');
+        observations.push({ slot: prefix(owner) + observationId, raw: JSON.stringify(observation), sourceSlot: source.slot, sourceRaw });
+      }
+      for (const observation of observations) {
+        const existing = readStored(observation.slot);
+        if (existing != null && existing !== observation.raw) throw Error('Accounting recovery observation identity changed');
+        if (existing == null) storage.setItem(observation.slot, observation.raw);
+        if (readStored(observation.slot) !== observation.raw) throw Error('Accounting recovery observation readback failed');
+      }
+      if (!attached(context)) throw Error('Accounting recovery detached');
+      if (readStored(key(owner)) !== raw) throw Error('Accounting recovery envelope changed');
+      for (const observation of observations) {
+        if (readStored(observation.sourceSlot) !== observation.sourceRaw) throw Error('Accounting recovery Start changed');
+      }
+      save(candidate);
     }
     // Unique intake slots avoid an unlocked read/modify/write race before the first Web Lock await.
     // Their removal follows durable import into the single authoritative projection/command envelope.
@@ -735,6 +788,7 @@
     function drainLocked(context) {
       return (async () => {
         if (!attached(context)) return { status: 'detached', retained: true };
+        recoverOrphanObservations(context);
         const state = load(context.owner);
         try { flushFailedCaptures(context); }
         catch (error) {

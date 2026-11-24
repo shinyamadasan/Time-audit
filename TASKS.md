@@ -2434,12 +2434,16 @@ depends-on: none (owner-selected development baseline b0bbc6f)
 files: accounting-command.js; www/accounting-command.js (generated parity mirror);
   accounting-orphan-recovery.test.js (new focused tests); package.json (test wiring only);
   TASK_041_LEGACY_TEST_EXPECTATIONS.md (separate legacy-test evidence, no expectation edits);
-  CODEMAP.md only if code structure moves; CHANGELOG.md and TEST_REPORT.md append only; this entry.
+  CODEMAP.md only if code structure moves; DECISIONS.md (owner-approved preservation decision);
+  CHANGELOG.md and TEST_REPORT.md append only; this entry.
 context:
   Owner approval in this session on November 24, 2026: implement the confirmed P0 recovery issue
   from the completed baseline audit, in an isolated branch/worktree based on b0bbc6f, preserving
   evidence and making local Git checkpoints. Owner requires autonomous independent QA, addressing
   scoped blockers, and a maximum of two implementation/review cycles. No merge or deployment.
+  November 24 owner decision resumes this task: accepts fact-preserving recovery after the single
+  envelope replacement write, no unsafe restoration after unconfirmed readback, and reload/sign-in
+  to clear the paused page. Recovery only in the existing locked drain path; no startup repair.
 objective:
   Recover only envelopes whose historical provisionalObserved marker references an original
   ordinary Start retained solely in the same account's intake, without losing any original fact.
@@ -2447,7 +2451,9 @@ acceptance:
   - Validate the exact historical pattern and owner/uid/device/id/timestamp relationships;
     preserve original Start bytes, observation timestamps, accounting history and unrelated state.
   - Follow the audited design: durably retain the original observation using the existing intake
-    format before replacing the invalid envelope; preserve the original envelope on repair failure.
+    format before replacing the invalid envelope. Before the single replacement write, failures
+    preserve original envelope bytes. Afterwards, preserve every original fact in valid envelope
+    and durable intake; unconfirmed readback stops safely without restoring the old envelope.
   - All other malformed envelopes remain fail-closed; no accounting schema or validation weakening.
   - Prove crash recovery, quota/readback failures, idempotence, restart and multi-tab safety.
   - Run focused tests red then green, relevant existing accounting regressions and npm test;
@@ -2459,6 +2465,8 @@ acceptance:
 constraints:
   - Interactive, solo owner-direct implementation on task-041-orphan-heartbeat-recovery only.
   - Existing coordination, acknowledgment gates and original evidence remain authoritative.
+  - No index.html changes or automatic startup repair. Document the accepted reload/sign-in limit
+    and revised preservation contract in the existing project decision records.
   - No production access, credentials, real accounts, rules changes, deployment, push, merge,
     rollback adoption, unrelated feature changes or new infrastructure.
   - STOP if repair needs schema changes, weakened validation, unsafe concurrency, or a broader
@@ -2469,17 +2477,21 @@ verification:
     tabs; original historical corruption fixture; exact preservation and fail-closed assertions.
   - Existing accounting wall/storage/history/growth/capability tests; relevant local emulator/browser
     regressions; npm test; runtime-mirror --check; git diff --check; independent QA.
+prior-blocker-resolution:
+  Owner explicitly approved the independent cycle 1 review's revised guarantee in this session.
+  No schema change or validator weakening authorized. Cycle 2 fresh Claude implementation QA
+  completed APPROVE with no blocking findings; maximum two review cycles used.
+qualification:
+  Scoped implementation complete: locked exact-pattern repair, unchanged validator, root/www
+  parity, focused recovery/fault tests and relevant local emulator/browser regressions passed.
+  See TEST_REPORT.md TASK-041 owner-decision implementation qualification for exact evidence.
 blocker:
-  Cycle 1 independent Claude review confirmed that the proposed existing-schema repair cannot
-  guarantee original envelope bytes after a successful replacement write followed by failed
-  readback. Unlocked intake/settings writers can consume the freed space, preventing restoration;
-  restoring after an unexpected readback could also overwrite another writer. No runtime patch
-  was made. A locked repair can preserve all original facts in the repaired envelope plus durable
-  observation intake, but adopting that weaker post-write preservation contract needs owner approval.
-  Strict byte preservation instead needs a broader storage/evidence contract, outside this task.
-  Synchronous load must not repair without the async owner lock; a locked drain repair is feasible
-  conditionally, with the existing page remaining paused until reload/sign-in. No schema or
-  validation changes authorized. See TEST_REPORT.md TASK-041 for exact evidence and limitations.
+  Release qualification remains blocked: full npm test stops at the same three pre-existing
+  Obsidian CLI test-vault fixture failures reproduced before runtime edits. Unrelated repairs
+  are outside this task. The five separately documented staged-effects expectations also remain
+  unchanged and failing on both baselines. No new scoped regression or unresolved QA finding.
+  Owner must resolve or explicitly disposition broader baseline test failures and approve release;
+  do not merge, push or deploy this local checkpoint. No further review cycle started.
 
 <!-- Paste new tasks above this line. -->
 

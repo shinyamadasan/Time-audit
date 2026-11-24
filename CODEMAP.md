@@ -1,6 +1,18 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## TASK-041 historical orphan-heartbeat recovery - November 24 local only
+
+`accounting-command.js`: `validateEnvelope` contains the unchanged strict envelope checks;
+`load` remains a synchronous read-only validator. `recoverOrphanObservations` runs only from
+`drainLocked` under the existing account Web Lock before normal loading. It retains exact orphan
+timestamps as deterministic existing-schema observation intake before one envelope replacement.
+Failed replacement readback stops without restoring stale bytes (DECISIONS.md decision 44).
+Original Start intake is never edited by the repair; normal import retains its existing gates.
+Affected pages may remain paused until reload/sign-in. No automatic startup repair.
+Tests: `accounting-orphan-recovery.test.js`; legacy expectation drift is documented separately
+in `TASK_041_LEGACY_TEST_EXPECTATIONS.md`. Root/www parity required; owner release approval pending.
+
 ## TASK-039 shipped accounting capability — November 2 local only
 
 New runtime file `accounting-capability.js`: `AccountingCapability.createTransport({ rest, coordinator, now })`

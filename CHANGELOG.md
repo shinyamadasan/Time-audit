@@ -5734,3 +5734,14 @@ tests: existing accounting subset 46/46; new reproducer 2/3; original staged-eff
 blockers: after a successful smaller envelope write with failed readback, restoring original bytes is not guaranteed under quota/concurrent unlocked writers. A conditional facts-preserving route exists, but needs an explicit owner-approved contract decision.
 deviations: no runtime implementation, schema change, validation weakening or release candidate. Local evidence-only checkpoint authorized by owner; no merge, push or deployment. One independent review cycle used; second not started.
 -> status set to `blocked` in TASKS.md; owner approval required before continuing.
+
+## TASK-041 - local implementation qualified, release held (branch: task-041-orphan-heartbeat-recovery)
+changed:
+  - accounting-command.js and generated www/accounting-command.js: exact historical orphan observation recovery before load in drainLocked; deterministic original-device intake/readback, then one validated envelope replacement. No unsafe restoration after unconfirmed readback.
+  - Existing strict envelope validator extracted unchanged to validateEnvelope; synchronous load/snapshot/restore remain read-only and fail closed. Original Start/history/timestamps and acknowledgment gates preserved.
+  - accounting-orphan-recovery.test.js and package.json: focused regression coverage wired into npm test; no legacy expectation or unrelated runtime change.
+  - DECISIONS.md decision 44 records the owner's revised preservation contract and accepted reload/sign-in limit; CODEMAP.md records the new helpers.
+tests: focused 46/46; combined accounting/ACK/mirror subset 186/186; existing browser/emulator 7/7; real Chromium Web Lock/reload and historical-build carry-over probes passed. Fresh Claude implementation QA APPROVE, no blockers.
+blockers: full npm test still stops at three pre-existing Obsidian test-vault fixture failures; original staged-effects remains 51/56 with the same five separately documented stale expectations. No unrelated fixes attempted.
+deviations: owner expressly approved local checkpoints and revised preservation; only local work performed. Review limit respected (two cycles total). Root/www byte-identical; main untouched; no production, rules, push, merge or deployment.
+-> status held `blocked` for broader release qualification, not an unresolved recovery implementation finding. Owner release approval required.
