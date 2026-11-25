@@ -2008,6 +2008,7 @@ function publishSharedAccountability() {
 
 let _partnerListener = null;
 let _partnerSharedListener = null;
+let partnerSharedReadState = null; // Household My Day V1 — see initPartnerSharedListener
 let _nudgesRef      = null;
 let _nudgeReceipts  = new Map(); // per-UID, tab-session receipts; never reset on account detach
 let _partnerUidRef  = null;
@@ -2082,7 +2083,12 @@ function initPartnerListener(partnerUid) {
 function initPartnerSharedListener(partnerUid) {
   if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
   _partnerSharedListener = fbDb.ref(`uid_${partnerUid}/shared`);
+  // Household My Day V1: read-state for this exact listener (loading → received | denied),
+  // so "not yet arrived" or "access refused" is never shown as an empty list.
+  const readState = partnerSharedReadState = { ref: _partnerSharedListener, uid: partnerUid, state: 'loading' };
+  const refresh = () => globalThis.HouseholdMyDay?.refresh();
   _partnerSharedListener.on('value', snap => {
+    readState.state = 'received';
     const M = globalThis.SharedAccountabilityModel;
     const PV = globalThis.PartnerViewModel;
     const raw = snap.val();
@@ -2093,7 +2099,8 @@ function initPartnerSharedListener(partnerUid) {
     partnerViewShared = PV ? PV.validatePartnerViewProjection(raw && raw.partnerView) : null;
     if (typeof renderPartnerCard === 'function') renderPartnerCard();
     if (typeof renderPartnerViewScreen === 'function') renderPartnerViewScreen();
-  });
+    refresh();
+  }, () => { readState.state = 'denied'; refresh(); });
 }
 
 // ── Shared Access Hardening V1 (F2) ─────────────────────────────────────────

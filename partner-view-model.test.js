@@ -136,3 +136,40 @@ test('validatePartnerViewProjection fails closed to null on missing/malformed sh
   assert.equal(validatePartnerViewProjection({}), null);
   assert.equal(validatePartnerViewProjection({ today: {} }), null);
 });
+
+// ── HOUSEHOLD MY DAY V1: OPT-IN FULL DAILY LIST ─────────────────────────────
+test('full daily list is absent unless the publisher passes it (consent off by default)', () => {
+  const p = buildPartnerViewProjection({ dateKey: '2026-11-25', priorities: [{ title: 'A' }] });
+  assert.equal(p.today.dailyTasksShared, undefined);
+  assert.equal(p.today.dailyTasks, undefined);
+  const v = validatePartnerViewProjection(p);
+  assert.equal(v.today.dailyTasksShared, undefined);
+  assert.equal(v.today.dailyTasks, undefined);
+});
+
+test('full daily list keeps more than three tasks, allowlists fields, dedupes ids and bounds length', () => {
+  const tasks = Array.from({ length: 130 }, (_, i) => ({ id: `t${i}`, title: `Task ${i}`, done: i === 1, when: i === 0 ? '09:30' : 'bad', statusLabel: 'In progress', secret: 'x', description: 'private' }));
+  tasks.splice(5, 0, { id: 't0', title: 'Duplicate' });
+  const p = buildPartnerViewProjection({ dateKey: '2026-11-25', priorities: [], dailyTasks: tasks });
+  assert.equal(p.today.dailyTasksShared, true);
+  assert.equal(p.today.dailyTasks.length, 100);
+  assert.deepEqual(p.today.dailyTasks[0], { id: 't0', title: 'Task 0', done: false, when: '09:30', statusLabel: 'In progress' });
+  assert.deepEqual(p.today.dailyTasks[1], { id: 't1', title: 'Task 1', done: true, statusLabel: 'Done' });
+  assert.ok(!p.today.dailyTasks.some(t => t.title === 'Duplicate'));
+  assert.equal(p.today.priorities.length, 0, 'the top-3 priorities remain separate');
+});
+
+test('shared but empty survives RTDB dropping the empty array', () => {
+  const p = buildPartnerViewProjection({ dateKey: '2026-11-25', dailyTasks: [] });
+  assert.deepEqual([p.today.dailyTasksShared, p.today.dailyTasks], [true, undefined]);
+  const v = validatePartnerViewProjection(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual([v.today.dailyTasksShared, v.today.dailyTasks], [true, []]);
+});
+
+test('read side: a hostile node without the consent marker never exposes a list; malformed rows are dropped', () => {
+  const hostile = { today: { dateKey: '2026-11-25', dailyTasks: [{ id: 'a', title: 'Leak' }] } };
+  assert.equal(validatePartnerViewProjection(hostile).today.dailyTasks, undefined);
+  const v = validatePartnerViewProjection({ today: { dateKey: '2026-11-25', dailyTasksShared: true,
+    dailyTasks: [{ id: 'a', title: 'Ok', done: 'yes' }, { title: 'no id' }, null, { id: 'b', title: '' }] } });
+  assert.deepEqual(v.today.dailyTasks, [{ id: 'a', title: 'Ok', done: false, statusLabel: 'Not started' }]);
+});

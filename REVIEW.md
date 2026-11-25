@@ -529,3 +529,14 @@ evidence: accounting-hazards/evidence/f1-undo-refusal-20261102/F1-CORRECTION.md
 ### TASK-039 - Pending-sync panel pass-through (November 2, 2026)
 verdict: APPROVE WITH NOTES for c556671 (independent same-provider subagent, not Guardian). Notes: :has() unsupported before Chromium 105 falls back to old behaviour; long panel text no longer scrollable; text not selectable. No protective role lost (gates are in JS).
 risk gate: CSS only, but held with the red-zone task; nothing merged.
+
+### TASK-043 - Household My Day V1 authenticated integration (November 25, 2026)
+verdict: APPROVE WITH NOTES for the uncommitted task-043 worktree (independent same-provider QA subagent, not Guardian). Round 1: 1 major (Start refused for own tasks the timeline does not render) and 6 minor (focus lost on re-render; saved Meal Prep sign-in not resumed after reload; offline provisional Start not reflected; another device's timer offered Start; "verified" email comment overclaimed; interim docs). All fixed with regression tests (household spec 9/9 twice); no blocker. Allowlist, consent revoke, cross-account isolation, Meal Prep account binding and sign-out verified by the reviewer against the emulators.
+notes: partner list freshness is by publisher day, not by age (publishing is event driven). Food shows only the viewer's own Meal Prep account; a household-wide food view needs a Meal Prep rules change (owner decision). meal-ready-food.js is a copied extraction of Meal Prep's ranking and can drift from it.
+risk gate: red-zone (partner sync projection + storage.js listener) → approved, held. Not committed, merged or deployed; production enablement needs the owner approvals listed in STATUS/handoff.
+
+## TASK-043 mobile-first UX pass — APPROVE (held with TASK-043)
+Presentation-only change in household-my-day.js/.css; Start/Stop/Done reuse the same handlers and guard
+(`invoke` → `DailyCommandCenter.startTask` / `stopAndLog` / `toggleTimelinePlanDone`); partner card still has no
+buttons; no data, rules or auth path touched. QA findings fixed with regression tests. Gate: remains `approved`
+(the TASK-043 branch as a whole touches partner sync and storage.js), held for owner merge.

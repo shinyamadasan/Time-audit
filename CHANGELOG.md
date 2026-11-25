@@ -5723,3 +5723,20 @@ behaviour: a browser that ran the previous version starts, hydrates and saves; r
 ### TASK-040 - Claude connector requests plan write on connect (November 13, 2026, owner-direct)
 changed: workers/chronasense-conversational-bridge/src/index.js (requiredScopes now read + plan.write); test/oauth.test.js expectation; worker README note; TASKS.md entry.
 behaviour: the connect-time challenge and protected-resource metadata name read + plan.write, so a new Claude connection is offered plan write on its consent page. No connection can be read-only. Brain Dump write is not added. Existing read-only grants must reconnect. Not deployed.
+### TASK-043 - Household My Day V1 authenticated integration (November 25, 2026, owner-direct)
+changed: partner-view-model.js (opt-in full daily list: dailyTasksShared marker + allowlisted dailyTasks, max 100); index.html (setPartnerDailyTaskSharing consent + Settings › Partner checkbox, consent-gated publish in buildPartnerViewProjectionForPublish, runtime includes, partner-view-model cache key); storage.js (partnerSharedReadState for the current /shared listener only); household-my-day.js (3 columns over real sources, Stop for the running task); household-my-day-model.js (partner/food state model); new household-food-source.js (Meal Prep named Firebase app, own users/{uid} read, email binding, sign-out on account change); removed mock household-my-day-source.js and mock server; tests/household-env.mjs, tests/household-my-day.spec.js, scripts/serve-household-preview.mjs; package.json test + lint wiring; www mirror.
+behaviour: behind ?household=1 only. Partner full list appears only after that partner opts in; default projection unchanged. Meal Prep column reports "not configured" in production (no config shipped). No rules, auth or Meal Prep changes.
+deviations: Claude implemented (Codex provider unavailable in this environment).
+
+## TASK-043 — Household My Day mobile-first UX pass (November 25 2026, owner-direct)
+- `household-my-day.js` / `.css` only (presentation): Up Next hero at the top (running/focus item, else
+  `todayGuidedAction().planItemId`, else `getNextPlanItem()`) with Start/Stop and Done; phone/tablet section links
+  (My tasks · partner · Food with counts); compact task rows (done toggle · title/meta · start/stop icon, 44px
+  targets, accessible names unchanged); meals show a freshness badge (amber ≤1 day, red use-today) with portions and
+  storage; pantry as separate chips under a divider; tools nav moved under the columns; desktop keeps three columns
+  with a slim Up Next bar.
+- QA fixes: keyboard Start keeps focus on Stop (Start/Stop share a focus key); "updated … ago" stamps tick in place
+  (aria-live off) so the partner/food live regions are not rebuilt every minute; `#accountability-details` moved
+  into the collapsed details; legacy `#timer-current-task` and empty `#switch-btn` hidden in household mode; Up
+  Next take-over button has a distinct name; Up Next buttons 48px.
+- No task, food, auth, sharing or rules change. Cache keys `20261125-household-v1e` (css) / `v1d` (js).

@@ -3236,3 +3236,22 @@ not run locally: wider browser suite, packaged release spec (CI).
 ### TASK-040 - Claude connector requests plan write on connect (November 13, 2026)
 green: worker npm test 55/55. The real OAuth library needs the Cloudflare runtime so it could not run in Node; its source (buildWwwAuthenticateHeader, withRequiredScopes) was read to confirm challenge and metadata scopes come from requiredScopes.
 not run: npm run check:bundle, live consent page, live Claude reconnect (needs approved deploy). Red-zone: held at approved.
+### TASK-043 - Household My Day V1 authenticated integration (November 25, 2026)
+green: partner-view-model 19/19; household-my-day-model 9/9; tests/household-my-day.spec.js 7/7 on two consecutive runs (real RTDB rules + real Meal Prep Firestore rules, emulators); partner-view + partner-view-mobile + household specs 26/26; npm-test-wiring 4/4; runtime-mirror --check OK; git diff --check clean; eslint 0 problems on new/changed modules.
+npm test: per-command run — all pass except test.js (452/455, 3 Obsidian TEST-VAULT cases), obsidian-life-ledger-sync, life-ledger-sync-cycle and scripts/life-ledger-sync-{worker,restore,health,chaos}; the same Obsidian/vault suites fail identically at base b0bbc6f.
+regression specs: wife-shared-accountability, my-day-command-center, my-day-daily-workflow, task-completion pass; daily-command-center (3) and my-day-timeline (3) fail; baseline worktree at b0bbc6f fails the same 6 plus one more (7) — pre-existing.
+not run: production, phone/Android, packaged release spec.
+QA round 1 fixes (same day): household spec 9/9 on two consecutive runs (adds: Start for tasks beyond the rendered timeline; Meal Prep session resumes after reload; focus kept on Mark done/Reopen and the consent checkbox). Unit 32/32 (partner-view, household model, npm-test-wiring). Partner-view/mobile/wife-shared/my-day-command-center pass; daily-command-center fails the same 4 tests as baseline b0bbc6f. npm test per-command: 97 pass, the same 7 Obsidian/vault suites fail as at baseline (run serially in a b0bbc6f worktree).
+
+## TASK-043 — mobile-first UX pass (November 25 2026)
+- tests/household-my-day.spec.js 11/11 on three consecutive runs (new: Up Next Start/Stop/Done/Reopen at 390px,
+  section links and no overflow at 360/390/820, ≥44px targets; QA regression for keyboard Start→Stop focus,
+  no live-region rebuild over 3 idle minutes, legacy elements hidden while tracking).
+- partner-view, partner-view-mobile-navigation, wife-shared-accountability, my-day-command-center: pass (39/39 with
+  household). Unit: partner-view-model + household model + npm-test-wiring 32/32. eslint 0 on household modules;
+  runtime-mirror --check OK; git diff --check clean.
+- daily-command-center (3) and my-day-timeline (3) failures are the same pre-existing set recorded for base b0bbc6f;
+  those specs do not load `?household=1`.
+- Screenshots at 360/390/820/1366 for both synthetic accounts with Meal Prep connected (local only).
+- Independent QA agent: 0 blockers; 2 major + 4 minor + 2 nits, all fixed except the owner-scope note on the consent
+  checkbox and the pre-existing Done-on-<1-min behaviour.

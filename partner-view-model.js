@@ -24,6 +24,10 @@
 
 const MAX_PRIORITIES = 3; // mirrors the app's own PLAN_MAX
 const MAX_TIMELINE_ITEMS = 150; // bounded — a pathological day must not distort payload size or an ordinary day
+// Household My Day V1: the FULL daily task list, published only when the owner
+// explicitly opted in (settings.partnerShareDailyTasks). Bounded like the timeline.
+const MAX_DAILY_TASKS = 100;
+const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const STATUS_LABELS = new Set(['Done', 'In progress', 'Logged', 'Not started']);
 const KIND_VALUES = new Set(['actual', 'observed', 'template', 'gap']);
 const EVIDENCE_LABELS = new Set(['TIMER', 'OBSERVED']);
@@ -62,6 +66,35 @@ function buildPriorities(items) {
     .slice(0, MAX_PRIORITIES)
     .map(buildPartnerViewPriority)
     .filter(Boolean);
+}
+
+/** One full-list daily task, display-ready and allowlisted: id, title, done, when, statusLabel. */
+export function buildPartnerViewDailyTask(input) {
+  if (!input || typeof input !== 'object') return null;
+  const id = cleanText(input.id, 200);
+  const title = cleanText(input.title, 200);
+  if (!id || !title) return null;
+  const out = { id, title, done: input.done === true };
+  const when = cleanText(input.when, 5);
+  if (TIME_RE.test(when)) out.when = when;
+  out.statusLabel = out.done ? 'Done' : (STATUS_LABELS.has(input.statusLabel) && input.statusLabel !== 'Done' ? input.statusLabel : 'Not started');
+  return out;
+}
+
+/** Bounded, de-duplicated (by id) daily list. Returns null for a non-array, so
+ *  "not shared" is never confused with "shared and empty". */
+function buildDailyTasks(items) {
+  if (!Array.isArray(items)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const raw of items) {
+    if (out.length >= MAX_DAILY_TASKS) break;
+    const task = buildPartnerViewDailyTask(raw);
+    if (!task || seen.has(task.id)) continue;
+    seen.add(task.id);
+    out.push(task);
+  }
+  return out;
 }
 
 /**
@@ -109,12 +142,12 @@ function buildTimeline(items) {
  * required shape (a publisher today dateKey) is missing, so a broken build
  * can never publish a half-formed projection.
  */
-export function buildPartnerViewProjection({ dateKey, priorities, soFar, timelineItems, tomorrowDateKey, tomorrowPriorities } = {}) {
+export function buildPartnerViewProjection({ dateKey, priorities, soFar, timelineItems, tomorrowDateKey, tomorrowPriorities, dailyTasks } = {}) {
   if (typeof dateKey !== 'string' || !dateKey) return null;
   const deepMin = Number.isFinite(soFar && soFar.deepMin) ? Math.max(0, Math.trunc(soFar.deepMin)) : 0;
   const wasteMin = Number.isFinite(soFar && soFar.wasteMin) ? Math.max(0, Math.trunc(soFar.wasteMin)) : 0;
 
-  return {
+  const out = {
     today: {
       dateKey,
       priorities: buildPriorities(priorities),
@@ -126,6 +159,11 @@ export function buildPartnerViewProjection({ dateKey, priorities, soFar, timelin
       priorities: buildPriorities(tomorrowPriorities)
     }
   };
+  // Consent marker + list. RTDB drops empty arrays, so `dailyTasksShared: true`
+  // is what distinguishes "shared, nothing planned" from "not shared".
+  const daily = buildDailyTasks(dailyTasks);
+  if (daily) { out.today.dailyTasksShared = true; if (daily.length) out.today.dailyTasks = daily; }
+  return out;
 }
 
 /** Content-only signature for write dedupe. There is no `updatedAt` anywhere
@@ -157,7 +195,7 @@ export function validatePartnerViewProjection(value) {
   const tomorrow = value.tomorrow && typeof value.tomorrow === 'object' ? value.tomorrow : {};
   const tomorrowDateKey = typeof tomorrow.dateKey === 'string' && tomorrow.dateKey ? tomorrow.dateKey : today.dateKey;
 
-  return {
+  const out = {
     today: {
       dateKey: today.dateKey,
       priorities: buildPriorities(today.priorities),
@@ -169,10 +207,16 @@ export function validatePartnerViewProjection(value) {
       priorities: buildPriorities(tomorrow.priorities)
     }
   };
+  // Only an explicit consent marker exposes a list; anything else reads as not shared.
+  if (today.dailyTasksShared === true) {
+    out.today.dailyTasksShared = true;
+    out.today.dailyTasks = buildDailyTasks(today.dailyTasks == null ? [] : today.dailyTasks) || [];
+  }
+  return out;
 }
 
 const api = {
-  buildPartnerViewPriority, buildPartnerViewTimelineItem, buildPartnerViewProjection,
+  buildPartnerViewPriority, buildPartnerViewTimelineItem, buildPartnerViewProjection, buildPartnerViewDailyTask,
   partnerViewSignature, validatePartnerViewProjection
 };
 globalThis.PartnerViewModel = api;

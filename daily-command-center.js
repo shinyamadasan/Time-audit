@@ -273,6 +273,7 @@
     refreshOverview();
     refreshWork();
     refreshUnfinished();
+    globalThis.HouseholdMyDay?.refresh();
   }
   function initialize() {
     const today = byId('view-today');
@@ -298,7 +299,14 @@
     const next = document.createElement('p'); next.id = 'command-next'; upNext.append(next);
     const brand = document.createElement('div'); brand.className = 'command-brand'; brand.innerHTML = 'Chrona<span>Sense</span>';
     today.prepend(brand);
-    globalThis.DailyCommandCenter = {refresh, refreshWork};
+    // Reuse the exact guarded Start action for the opt-in household card. No second timer path.
+    async function startTask(dayId, itemId, account) {
+      if (account !== accountLocalKey('command-center')) throw new Error('The account changed.');
+      // The same guarded execute() as an agenda card. It reads only these dataset keys, so the item
+      // need not be rendered on the timeline (which shows only part of a long day).
+      return execute({dataset: {planDayId: dayId, planItemId: itemId, commandOwner: account}}, false);
+    }
+    globalThis.DailyCommandCenter = {refresh, refreshWork, startTask};
     refresh();
   }
   initialize();

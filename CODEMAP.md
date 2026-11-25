@@ -1,6 +1,27 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## TASK-043 Household My Day V1 (local candidate, opt-in `?household=1`)
+
+- `household-my-day.js`: mounts the three columns above `#command-overview` on My Day and moves the
+  existing overview/timeline/details into `#household-secondary`. Own tasks read `PlanAuthority.current()`;
+  Start → `DailyCommandCenter.startTask`, Stop → `stopAndLog`, Mark done → `toggleTimelinePlanDone`.
+  Partner column reads storage.js globals `partnerShared` / `partnerViewShared` / `partnerSharedReadState`.
+  Mobile-first layout (UX pass): `#household-next` Up Next hero (`pickNext()` = running/focus item, else
+  `todayGuidedAction().planItemId`, else `getNextPlanItem()`), `.household-jump` section links (≤1000px,
+  `jumpCount()`), compact rows via `taskRow()` / `iconButton()`; tools nav sits under the three columns.
+- `household-my-day-model.js`: pure `partner()` / `food()` state model (every non-ready state carries no data).
+- `household-food-source.js`: `HouseholdFoodSource` — Meal Prep connection on a separate named Firebase app;
+  `configure()` (no built-in config), `bind(owner,email)`, `connect`, `disconnect`, `snapshot`, `subscribe`.
+- `meal-ready-food.js`: read-only extraction of Meal Prep `getReadyFoodSuggestions` ranking (`MealReadyFood.project`).
+- `partner-view-model.js`: `buildPartnerViewDailyTask`; projection/validation carry `today.dailyTasksShared`
+  + `today.dailyTasks` only when the publisher opted in.
+- `index.html`: `setPartnerDailyTaskSharing()` + `#partner-share-daily-tasks` (Settings › Partner);
+  `buildPartnerViewProjectionForPublish()` adds `dailyTasks` when `settings.partnerShareDailyTasks`.
+- `storage.js` `initPartnerSharedListener()`: sets `partnerSharedReadState` (loading/received/denied).
+- Tests: `household-my-day-model.test.js`, `partner-view-model.test.js`, `tests/household-my-day.spec.js` over
+  `tests/household-env.mjs` (RTDB emulator + Meal Prep emulators); preview `scripts/serve-household-preview.mjs`.
+
 ## TASK-039 shipped accounting capability — November 2 local only
 
 New runtime file `accounting-capability.js`: `AccountingCapability.createTransport({ rest, coordinator, now })`

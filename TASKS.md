@@ -2425,6 +2425,51 @@ constraints:
 verification:
   - [ ] `npm test` in the worker, `npm run check:bundle`, git diff --check.
 
+### TASK-043 - Shared household My Day V1, authenticated integration (local emulators)
+status: approved
+owner: codex
+source: owner-direct
+depends-on: none
+files: index.html (partner consent control, opt-in daily-list publish, runtime includes); storage.js (partner `/shared` listener read-state only); partner-view-model.js (+ test); daily-command-center.js (startTask hook); household-my-day.js; household-my-day.css; household-my-day-model.js (+ test); household-food-source.js; meal-ready-food.js; tests/household-env.mjs; tests/household-my-day.spec.js; scripts/serve-household-preview.mjs; package.json (test/lint wiring); generated www/; CODEMAP.md; CHANGELOG.md and TEST_REPORT.md append only; this entry.
+context:
+  Owner instructions in this interactive session, November 25 2026: (1) smallest working household My Day V1
+  with synthetic data; (2) "complete the functional integration": own tasks from the authoritative ChronaSense
+  source with Start/Stop/completion preserved; partner's FULL daily list via existing reciprocal partner sharing
+  through an explicitly authorized projection, read only; food from Meal Prep's authoritative inventory and
+  ready-food projection, prepared meals/portions/freshness with pantry ingredients separated, no inventory copy;
+  keep three sections with Time tracking, Brain Dump and Plan Tomorrow secondary. Synthetic or authorized staging
+  data only; preserve both Firebase projects' auth boundaries; no credential exposure, rules bypass, unauthorized
+  production reads, push, merge or deploy without approval. Codex provider unavailable in this environment;
+  implemented by Claude per Delegation Policy, independent QA by a separate agent.
+objective:
+  An authenticated local My Day showing both people's tasks and current food from the appropriate test sources,
+  with verified live updates, loading/error states and access controls.
+acceptance:
+  - Own tasks: all current-day PlanAuthority items; Start/Stop/Mark done call the existing guarded handlers only.
+  - Partner tasks: full list only when the partner opted in (settings.partnerShareDailyTasks); read only; read
+    through the existing reciprocal-partner `/shared` rules; stale day, not linked, refused, not shared and
+    malformed states show no tasks.
+  - Food: viewer's own Meal Prep account via Meal Prep Auth (separate named Firebase app), own users/{uid} doc
+    only, email bound to the ChronaSense account, signed out on ChronaSense account change; ready meals ranked by
+    the Meal Prep projection with portions/freshness; pantry separate; no write-back.
+  - No production config shipped: Meal Prep connection reports "not configured" until an approved config exists;
+    household view stays behind ?household=1.
+  - Integration suite against real ChronaSense RTDB rules and real Meal Prep Firestore rules passes; npm test and
+    regression specs show no new failures versus base b0bbc6f.
+constraints:
+  - Work only in task-043 worktree; TASK-042 worktree untouched. No production data, rules/auth changes, pushes,
+    merges or deployment. Red zone (partner sync + storage.js listener): approval gate is `approved`, not `done`.
+verification:
+  - node --test partner-view-model.test.js household-my-day-model.test.js
+  - npx playwright test tests/household-my-day.spec.js tests/partner-view.spec.js --workers=1
+  - npm test (compare per-command with base); runtime-mirror --check; git diff --check; eslint on new modules.
+ux-pass (owner-direct, November 25 2026, "Final Mobile-First UX Refinement and Release Preparation"):
+  scope: presentation only in household-my-day.js/.css (+ spec, cache keys). Up Next task with Start/Stop/Done at
+  the top; section links to all three columns on phone/tablet; compact task rows (done toggle, title/meta, start/stop
+  icon); meals show portions + freshness badge, pantry as separate chips; tools under the columns; desktop keeps
+  three columns. No new features, no task/food/auth/sharing architecture change. Verified at 360/390/820/1366 with
+  both synthetic accounts and Meal Prep test data; independent QA; preserved in a local commit (no push/merge/deploy).
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
