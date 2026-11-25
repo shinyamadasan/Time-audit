@@ -3236,3 +3236,45 @@ not run locally: wider browser suite, packaged release spec (CI).
 ### TASK-040 - Claude connector requests plan write on connect (November 13, 2026)
 green: worker npm test 55/55. The real OAuth library needs the Cloudflare runtime so it could not run in Node; its source (buildWwwAuthenticateHeader, withRequiredScopes) was read to confirm challenge and metadata scopes come from requiredScopes.
 not run: npm run check:bundle, live consent page, live Claude reconnect (needs approved deploy). Red-zone: held at approved.
+### TASK-043 - Household My Day V1 authenticated integration (November 25, 2026)
+green: partner-view-model 19/19; household-my-day-model 9/9; tests/household-my-day.spec.js 7/7 on two consecutive runs (real RTDB rules + real Meal Prep Firestore rules, emulators); partner-view + partner-view-mobile + household specs 26/26; npm-test-wiring 4/4; runtime-mirror --check OK; git diff --check clean; eslint 0 problems on new/changed modules.
+npm test: per-command run — all pass except test.js (452/455, 3 Obsidian TEST-VAULT cases), obsidian-life-ledger-sync, life-ledger-sync-cycle and scripts/life-ledger-sync-{worker,restore,health,chaos}; the same Obsidian/vault suites fail identically at base b0bbc6f.
+regression specs: wife-shared-accountability, my-day-command-center, my-day-daily-workflow, task-completion pass; daily-command-center (3) and my-day-timeline (3) fail; baseline worktree at b0bbc6f fails the same 6 plus one more (7) — pre-existing.
+not run: production, phone/Android, packaged release spec.
+QA round 1 fixes (same day): household spec 9/9 on two consecutive runs (adds: Start for tasks beyond the rendered timeline; Meal Prep session resumes after reload; focus kept on Mark done/Reopen and the consent checkbox). Unit 32/32 (partner-view, household model, npm-test-wiring). Partner-view/mobile/wife-shared/my-day-command-center pass; daily-command-center fails the same 4 tests as baseline b0bbc6f. npm test per-command: 97 pass, the same 7 Obsidian/vault suites fail as at baseline (run serially in a b0bbc6f worktree).
+
+## TASK-043 — mobile-first UX pass (November 25 2026)
+- tests/household-my-day.spec.js 11/11 on three consecutive runs (new: Up Next Start/Stop/Done/Reopen at 390px,
+  section links and no overflow at 360/390/820, ≥44px targets; QA regression for keyboard Start→Stop focus,
+  no live-region rebuild over 3 idle minutes, legacy elements hidden while tracking).
+- partner-view, partner-view-mobile-navigation, wife-shared-accountability, my-day-command-center: pass (39/39 with
+  household). Unit: partner-view-model + household model + npm-test-wiring 32/32. eslint 0 on household modules;
+  runtime-mirror --check OK; git diff --check clean.
+- daily-command-center (3) and my-day-timeline (3) failures are the same pre-existing set recorded for base b0bbc6f;
+  those specs do not load `?household=1`.
+- Screenshots at 360/390/820/1366 for both synthetic accounts with Meal Prep connected (local only).
+- Independent QA agent: 0 blockers; 2 major + 4 minor + 2 nits, all fixed except the owner-scope note on the consent
+  checkbox and the pre-existing Done-on-<1-min behaviour.
+
+## TASK-043 — partner read-only correction (November 25 2026)
+- tests/household-my-day.spec.js 11/11 on two consecutive runs: partner section has 0 buttons/inputs/links in ready
+  and not-shared states; her consent revoke/restore now goes through her Settings › Partner checkbox and reaches my
+  dashboard live. partner-view, partner-view-mobile-navigation, wife-shared-accountability, my-day-command-center 28/28.
+  Unit 32/32; eslint 0; runtime-mirror --check OK; git diff --check clean.
+
+## TASK-043 — web release qualification (November 25 2026, candidate on base = production main b0bbc6f)
+- Mandatory CI set: 490/490 (`ci-test-report required 490`: PASS), 22.7 min, one worker.
+- Wider CI set via `scripts/ci-run-wider.mjs` 4 shards: ran 1104 (same count as base; household spec is opt-in via
+  `MEAL_PREP_TEST_HOSTING` like the packaged release spec). 0 new failures attributable to TASK-043: the single
+  "outside baseline" failure is zz-perf-profile timing out on Stop at a GROW step with QuotaExceededError, the same
+  pre-existing quota-wall failure TASK-042 reproduced on b0bbc6f. 17 recorded baseline failures now pass; 297 known
+  baseline failures and 2 history-only fixtures unchanged. Note: main's ci.yml WIDER_COUNT is 1071 while base already
+  collects 1104 (pre-existing; TASK-042 updates it), so hosted CI on main is red before and after this change.
+- npm test per command: 96 pass, the same 7 Obsidian/vault suites fail as at base (test.js 452/455 TEST-VAULT etc.).
+- Static: www parity OK; firebase rules builder match; functions/shared match; lint 0 errors (TASK-043 files add 0
+  warnings; storage.js 62 = base). No rules, functions, CI, service worker or data-schema change.
+- Household spec 11/11 with `npm run test:household` (Up Next test made time-of-day independent: it asserts the app's own next-task choice, which moves to a task once its time is due); partner payload cross-version check: old reader accepts new
+  payload (strips dailyTasks), new reader accepts old payload (shows not-shared).
+- Meal Prep activation branch `task-043-meal-prep-activation`: simulated origins (all outside requests aborted) —
+  configured only on https://shinyamadasan.github.io with ?household=1; not configured without the flag or on any
+  other origin; no Meal Prep data host contacted. Not part of the release candidate.

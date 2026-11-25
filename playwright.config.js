@@ -3,7 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   // Needs packaged bytes from scripts/build-release-artifacts.mjs; run with npm run test:release-artifacts.
-  testIgnore: process.env.CHRONASENSE_RELEASE_DIR ? [] : ['**/accounting-release-artifacts.spec.js'],
+  // Household My Day needs the Meal Prep Auth/Firestore emulators (Meal Prep repo, MEAL_PREP_TEST_HOSTING);
+  // run with npm run test:household.
+  testIgnore: [
+    ...(process.env.CHRONASENSE_RELEASE_DIR ? [] : ['**/accounting-release-artifacts.spec.js']),
+    ...(process.env.MEAL_PREP_TEST_HOSTING ? [] : ['**/household-my-day.spec.js'])
+  ],
   timeout: 30000,
   expect: {
     timeout: 5000

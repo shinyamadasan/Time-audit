@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="planning-continuity.css?v=20261120-storage-recovery-v2">
 <link rel="stylesheet" href="brain-dump-tray.css?v=20261111-my-day-capture-v1">
 <link rel="stylesheet" href="daily-command-center.css?v=20261120-storage-recovery-v2">
+<link rel="stylesheet" href="household-my-day.css?v=20261125-household-v1f">
 </head>
 <body>
 <div id="desktop-layout">
@@ -963,6 +964,10 @@
           </div>
           <button class="btn sm danger" onclick="removePair()">Remove</button>
         </div>
+        <label class="partner-share-daily" style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="partner-share-daily-tasks" onchange="setPartnerDailyTaskSharing(this.checked)">
+          <span>Share my full daily task list with my partner (read only). Off shares only my top 3 priorities.</span>
+        </label>
       </div>
     </div>
   </div>
@@ -1846,7 +1851,7 @@
 <script type="module" src="coarse-life-evidence-ui.js?v=20261120-storage-recovery-v2"></script>
 <script type="module" src="coarse-life-evidence-sync.js?v=20261120-storage-recovery-v2"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
-<script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
+<script type="module" src="partner-view-model.js?v=20261125-household-v1b"></script>
 <script type="module" src="personal-day-boundary-live.js?v=20261120-storage-recovery-v2"></script>
 <script type="module" src="personal-day-boundary-ui.js?v=20261120-storage-recovery-v2"></script>
 <script type="module" src="plan-by-deadline-ui.js?v=20261120-storage-recovery-v2"></script>
@@ -12502,9 +12507,18 @@ function buildPartnerViewProjectionForPublish() {
   const priorities = buildPartnerViewPriorityInputs(currentTarget);
   const tomorrowPriorities = buildPartnerViewPriorityInputs(upcomingTarget).map(p => ({ title: p.title, plannedTime: p.plannedTime }));
 
+  // Household My Day V1: the full daily list is published ONLY after the owner's
+  // explicit opt-in. Off (the default) leaves the projection exactly as before.
+  const dailyTasks = settings.partnerShareDailyTasks === true && currentTarget
+    ? planItemsFor(currentTarget).map(it => ({
+        id: it.id, title: it.task, when: it.when || null, done: it.done === true,
+        statusLabel: it.done ? 'Done' : getPlanItemStatus(it, currentTarget, planTrackedMinFor(currentTarget, it.task, it.id)).label
+      }))
+    : undefined;
+
   return PV.buildPartnerViewProjection({
     dateKey: todayKey, priorities, soFar: health, timelineItems,
-    tomorrowDateKey: tomorrowKey, tomorrowPriorities
+    tomorrowDateKey: tomorrowKey, tomorrowPriorities, dailyTasks
   });
 }
 
@@ -13359,7 +13373,21 @@ function renderPartnerViewScreen() {
   </div>`;
 }
 
+/** Household My Day V1 — explicit, revocable consent for the full daily list.
+ *  Stored in synced settings; republishing immediately adds or removes the list. */
+function setPartnerDailyTaskSharing(on) {
+  settings.partnerShareDailyTasks = on === true;
+  settings._savedAt = Date.now();
+  persist();
+  pushSettings();
+  if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
+  renderPartnerSettings();
+  globalThis.HouseholdMyDay?.refresh();
+}
+
 function renderPartnerSettings() {
+  const shareDaily = document.getElementById('partner-share-daily-tasks');
+  if (shareDaily) shareDaily.checked = settings.partnerShareDailyTasks === true;
   const signInPrompt = document.getElementById('partner-signin-prompt');
   const body = document.getElementById('partner-settings-body');
   if (!signInPrompt || !body) return;
@@ -15097,5 +15125,9 @@ initPhoneUsageTracking();
 
 <script defer src="my-day-work-model.js?v=20261120-storage-recovery-v2"></script>
 <script defer src="daily-command-center.js?v=20261120-storage-recovery-v2"></script>
+<script defer src="meal-ready-food.js?v=20261125-household-v1"></script>
+<script defer src="household-my-day-model.js?v=20261125-household-v1b"></script>
+<script defer src="household-food-source.js?v=20261125-household-v1g"></script>
+<script defer src="household-my-day.js?v=20261125-household-v1f"></script>
 </body>
 </html>
