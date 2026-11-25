@@ -3255,3 +3255,9 @@ QA round 1 fixes (same day): household spec 9/9 on two consecutive runs (adds: S
 - Screenshots at 360/390/820/1366 for both synthetic accounts with Meal Prep connected (local only).
 - Independent QA agent: 0 blockers; 2 major + 4 minor + 2 nits, all fixed except the owner-scope note on the consent
   checkbox and the pre-existing Done-on-<1-min behaviour.
+
+## TASK-043 — partner read-only correction (November 25 2026)
+- tests/household-my-day.spec.js 11/11 on two consecutive runs: partner section has 0 buttons/inputs/links in ready
+  and not-shared states; her consent revoke/restore now goes through her Settings › Partner checkbox and reaches my
+  dashboard live. partner-view, partner-view-mobile-navigation, wife-shared-accountability, my-day-command-center 28/28.
+  Unit 32/32; eslint 0; runtime-mirror --check OK; git diff --check clean.

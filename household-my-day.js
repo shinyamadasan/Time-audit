@@ -1,7 +1,7 @@
 /* global URLSearchParams, PlanAuthority, isViewingToday, toggleTimelinePlanDone, accountLocalKey, isTimelineTargetEditable,
   showView, openPlanTomorrow, getPlanItemStatus, planTrackedMinFor, showToast, stopAndLog, running,
   currentTaskPlanItemId, focusModeOn, activeFocusPlanItemId, currentUser, partnerShared, partnerViewShared,
-  partnerSharedReadState, _partnerSharedListener, setPartnerDailyTaskSharing, settings, getDateInTZ,
+  partnerSharedReadState, _partnerSharedListener, settings, getDateInTZ,
   timerRunsForPlanItem, getActiveTimerOwnerSnapshot, todayGuidedAction, getNextPlanItem, planDisplayOrder */
 // Household My Day V1 (opt-in: ?household=1). Three columns over existing authorities:
 //   • My daily tasks  — ChronaSense PlanAuthority + the existing Start / Stop / Mark done handlers.
@@ -220,7 +220,8 @@
     }
   }
 
-  // ── Column 2: partner tasks (their own /shared projection; read only) ──
+  // ── Column 2: partner tasks (their own /shared projection; strictly read only — no controls here;
+  //    the viewer's own sharing consent lives only in Settings › Partner) ──
   function partnerState() {
     const partnerUid = localStorage.getItem('ta3-partner-uid');
     const listener = typeof _partnerSharedListener !== 'undefined' ? _partnerSharedListener : null;
@@ -233,21 +234,20 @@
   function partnerTasks() {
     const body = byId('household-partner-body');
     const view = partnerState();
-    const sharing = typeof settings !== 'undefined' && settings.partnerShareDailyTasks === true;
     jumpCount('partner', view.state === 'ready' ? `${view.items.filter(item => !item.done).length} left` : '');
     const jumpName = byId('household-jump-partner')?.querySelector('.household-jump-name');
     const firstName = view.name ? view.name.split(/\s+/)[0] : 'Partner';
     if (jumpName && jumpName.textContent !== firstName) jumpName.textContent = firstName;
-    if (!changed(body,[owner(),view,sharing])) return tickStamps(body);
+    if (!changed(body,[owner(),view])) return tickStamps(body);
     const name = view.name || 'Your partner';
     byId('household-partner-title').textContent = view.name ? `${view.name}’s daily tasks` : 'Partner’s daily tasks';
     const messages = {
       'not-linked':'Connect a partner in Settings › Partner to see their day here.',
       loading:`Loading ${name}’s shared day…`,
-      unavailable:'Partner access is unavailable. Sharing has to be connected on both sides.',
+      unavailable:`${name}’s shared day is unavailable. Partner sharing has to be connected on both sides in Settings › Partner.`,
       'not-published':`${name} hasn’t shared a day yet.`,
       stale:`${name} hasn’t opened ChronaSense today, so there is no current list.`,
-      'not-shared':`${name} shares only their top 3 priorities. They can turn on full-list sharing in Settings › Partner.`,
+      'not-shared':`${name} isn’t sharing their full daily list, only their top 3 priorities. They can turn it on in their own Settings › Partner.`,
       error:'The shared list could not be read safely. Nothing is shown rather than a partial list.'
     };
     if (view.state === 'ready') {
@@ -262,13 +262,6 @@
     } else {
       note(body, messages[view.state] || messages.error);
       if (view.state === 'stale' && view.updatedAt) stamp(body, 'Last update ', view.updatedAt);
-    }
-    if (view.state !== 'not-linked' && owner()) {
-      const consent = node('label',null,'household-consent');
-      const box = node('input'); box.type = 'checkbox'; box.checked = sharing; box.id = 'household-share-mine';
-      box.addEventListener('change', () => setPartnerDailyTaskSharing(box.checked));
-      consent.append(box, node('span', `Share my full daily list with ${view.name || 'my partner'}`));
-      body.append(consent);
     }
   }
 

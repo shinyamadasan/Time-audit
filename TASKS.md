@@ -2469,6 +2469,9 @@ ux-pass (owner-direct, November 25 2026, "Final Mobile-First UX Refinement and R
   icon); meals show portions + freshness badge, pantry as separate chips; tools under the columns; desktop keeps
   three columns. No new features, no task/food/auth/sharing architecture change. Verified at 360/390/820/1366 with
   both synthetic accounts and Meal Prep test data; independent QA; preserved in a local commit (no push/merge/deploy).
+owner-correction (November 25 2026): owner approved the V1 mobile design; "Share my full daily list" moves to
+  Settings › Partner only, partner section strictly read only with clear sharing-status messages. V1 design and
+  features are FROZEN after this correction (no further optional refinements or design cycles).
 
 <!-- Paste new tasks above this line. -->
 

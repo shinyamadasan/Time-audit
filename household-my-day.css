@@ -72,8 +72,6 @@ body.household-on #timer-current-task,body.household-on #switch-btn{display:none
 #household-secondary{margin:4px 0 20px}
 #household-secondary>summary{font:600 14px/1.5 var(--ui);padding:12px;cursor:pointer;border:1px solid var(--border2);border-radius:var(--r)}
 #view-today.household-enabled #command-overview{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:16px}
-.household-consent{display:flex;gap:8px;align-items:center;font:13px/1.5 var(--ui);color:var(--muted);margin-top:10px;min-height:44px;cursor:pointer}
-.household-consent input{width:20px;height:20px;flex-shrink:0}
 .household-connect{display:grid;gap:8px}
 .household-connect input{min-height:44px;font:16px var(--ui);padding:8px 10px;border-radius:var(--r);border:1px solid var(--border2);background:var(--surface,transparent);color:var(--text);min-width:0}
 

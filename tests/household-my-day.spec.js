@@ -51,7 +51,7 @@ test('three sections: all own tasks, Alyssa’s full shared list, and Meal Prep 
   await expect(partnerCard(page).locator('li')).toHaveCount(5);
   await expect(partnerCard(page).locator('li', {hasText: 'Book the vet'})).toContainText('Done');
   await expect(partnerCard(page).locator('li', {hasText: 'Pick up groceries'})).toContainText('17:00');
-  await expect(partnerCard(page).getByRole('button')).toHaveCount(0); // read only
+  await expect(partnerCard(page).locator('button,input,select,textarea,a[href],[tabindex]')).toHaveCount(0); // strictly read only
   await expect(foodCard(page)).toContainText('Sign in with your Meal Prep account');
   await connectMeal(page, PEOPLE.me.email);
   const meals = foodCard(page).locator('ul').nth(0).locator('li');
@@ -84,7 +84,7 @@ test('own Start, Stop and Mark done use the existing handlers; one entry is logg
   await context.close();
 });
 
-test('Alyssa’s changes reach my dashboard live; her consent switch removes and restores the full list', async ({browser}) => {
+test('Alyssa’s changes reach my dashboard live; her Settings › Partner consent removes and restores the full list', async ({browser}) => {
   const me = await open(browser, 'me');
   const her = await open(browser, 'alyssa');
   await her.page.locator('#household-mine li', {hasText: 'Pick up groceries'}).getByRole('button', {name: 'Mark done: Pick up groceries'}).click();
@@ -92,12 +92,18 @@ test('Alyssa’s changes reach my dashboard live; her consent switch removes and
   await her.page.evaluate(() => { const t = PlanAuthority.current(); PlanAuthority.addItem({destination: t, item: createPlanItem('Call mum', '19:00', 'task')}); refreshAuthoritativePlanSurfaces(); });
   await expect(partnerCard(me.page).locator('li')).toHaveCount(6, {timeout: 15000});
   await expect(partnerCard(me.page).locator('li', {hasText: 'Call mum'})).toContainText('19:00');
-  // Revoke: her own consent control in her own dashboard.
-  await her.page.locator('#household-share-mine').uncheck();
-  await expect(partnerCard(me.page)).toContainText('shares only their top 3 priorities', {timeout: 15000});
+  // Revoke: her own consent control, which lives only in her Settings › Partner.
+  await expect(her.page.locator('#household-dashboard input[type=checkbox]')).toHaveCount(0);
+  await her.page.evaluate(() => showView('settings'));
+  const share = her.page.locator('#partner-share-daily-tasks');
+  await expect(share).toBeChecked();
+  await share.uncheck();
+  await expect(partnerCard(me.page)).toContainText('isn’t sharing their full daily list', {timeout: 15000});
   await expect(partnerCard(me.page).locator('li')).toHaveCount(0);
-  await her.page.locator('#household-share-mine').check();
+  await expect(partnerCard(me.page).locator('button,input,select,textarea,a[href],[tabindex]')).toHaveCount(0);
+  await share.check();
   await expect(partnerCard(me.page).locator('li')).toHaveCount(6, {timeout: 15000});
+  await her.page.evaluate(() => showView('today'));
   // Tidy for later tests.
   await her.page.locator('#household-mine li', {hasText: 'Pick up groceries'}).getByRole('button', {name: 'Reopen: Pick up groceries'}).click();
   await her.context.close(); await me.context.close();
@@ -217,10 +223,6 @@ test('QA regression: a Meal Prep sign-in resumes after reload, and keyboard focu
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', {name: 'Mark done: Water the plants'})).toBeFocused();
 
-  const consent = page.locator('#household-share-mine');
-  await consent.focus();
-  await page.evaluate(() => { document.getElementById('household-partner-body').dataset.renderKey = 'force'; HouseholdMyDay.refresh(); });
-  await expect(page.locator('#household-share-mine')).toBeFocused();
   await context.close();
 });
 

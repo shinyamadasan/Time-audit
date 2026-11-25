@@ -5740,3 +5740,9 @@ deviations: Claude implemented (Codex provider unavailable in this environment).
   into the collapsed details; legacy `#timer-current-task` and empty `#switch-btn` hidden in household mode; Up
   Next take-over button has a distinct name; Up Next buttons 48px.
 - No task, food, auth, sharing or rules change. Cache keys `20261125-household-v1e` (css) / `v1d` (js).
+
+## TASK-043 — owner correction: partner section strictly read only (November 25 2026)
+- Removed the "Share my full daily list" checkbox from the partner section; the viewer's own consent stays only in
+  Settings › Partner (`#partner-share-daily-tasks`, unchanged). Partner section now has no controls in any state.
+- Clearer status copy when the partner's list is unavailable (not sharing full list / unavailable / stale / loading).
+- Owner froze V1 design and features after this correction. Cache keys `20261125-household-v1f`.
