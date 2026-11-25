@@ -3261,3 +3261,20 @@ QA round 1 fixes (same day): household spec 9/9 on two consecutive runs (adds: S
   and not-shared states; her consent revoke/restore now goes through her Settings › Partner checkbox and reaches my
   dashboard live. partner-view, partner-view-mobile-navigation, wife-shared-accountability, my-day-command-center 28/28.
   Unit 32/32; eslint 0; runtime-mirror --check OK; git diff --check clean.
+
+## TASK-043 — web release qualification (November 25 2026, candidate on base = production main b0bbc6f)
+- Mandatory CI set: 490/490 (`ci-test-report required 490`: PASS), 22.7 min, one worker.
+- Wider CI set via `scripts/ci-run-wider.mjs` 4 shards: ran 1104 (same count as base; household spec is opt-in via
+  `MEAL_PREP_TEST_HOSTING` like the packaged release spec). 0 new failures attributable to TASK-043: the single
+  "outside baseline" failure is zz-perf-profile timing out on Stop at a GROW step with QuotaExceededError, the same
+  pre-existing quota-wall failure TASK-042 reproduced on b0bbc6f. 17 recorded baseline failures now pass; 297 known
+  baseline failures and 2 history-only fixtures unchanged. Note: main's ci.yml WIDER_COUNT is 1071 while base already
+  collects 1104 (pre-existing; TASK-042 updates it), so hosted CI on main is red before and after this change.
+- npm test per command: 96 pass, the same 7 Obsidian/vault suites fail as at base (test.js 452/455 TEST-VAULT etc.).
+- Static: www parity OK; firebase rules builder match; functions/shared match; lint 0 errors (TASK-043 files add 0
+  warnings; storage.js 62 = base). No rules, functions, CI, service worker or data-schema change.
+- Household spec 11/11 with `npm run test:household`; partner payload cross-version check: old reader accepts new
+  payload (strips dailyTasks), new reader accepts old payload (shows not-shared).
+- Meal Prep activation branch `task-043-meal-prep-activation`: simulated origins (all outside requests aborted) —
+  configured only on https://shinyamadasan.github.io with ?household=1; not configured without the flag or on any
+  other origin; no Meal Prep data host contacted. Not part of the release candidate.

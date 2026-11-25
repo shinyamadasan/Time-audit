@@ -2479,6 +2479,10 @@ release-coordination with TASK-042 (read-only check, November 25 2026): TASK-042
   changes the runtime closure, so TASK-042's pinned artifact fingerprints, wider CI count and packaged checks must be
   re-run on the combined tree before release. Android (Capacitor `webDir: www`) cannot open `?household=1`, so V1
   household is web-only unless the owner enables it by default.
+web-release (owner direction, November 25 2026): controlled web-first release, `?household=1` kept, TASK-042 not
+  bundled, Android next. Release candidate = `task-043` on production base b0bbc6f; Meal Prep production connection
+  prepared on `task-043-meal-prep-activation` (not activated). Procedure and rollback: docs/RELEASE_TASK_043_WEB.md.
+  Status stays `approved` (held): merge/push/deploy and Meal Prep activation need explicit owner approval.
 
 <!-- Paste new tasks above this line. -->
 

@@ -13,6 +13,8 @@
 - `household-my-day-model.js`: pure `partner()` / `food()` state model (every non-ready state carries no data).
 - `household-food-source.js`: `HouseholdFoodSource` — Meal Prep connection on a separate named Firebase app;
   `configure()` (no built-in config), `bind(owner,email)`, `connect`, `disconnect`, `snapshot`, `subscribe`.
+- Production Meal Prep config is NOT in this branch: `household-meal-config.js` (calls `configure()` only on
+  https://shinyamadasan.github.io with `?household=1`) lives on `task-043-meal-prep-activation`.
 - `meal-ready-food.js`: read-only extraction of Meal Prep `getReadyFoodSuggestions` ranking (`MealReadyFood.project`).
 - `partner-view-model.js`: `buildPartnerViewDailyTask`; projection/validation carry `today.dailyTasksShared`
   + `today.dailyTasks` only when the publisher opted in.

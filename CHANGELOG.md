@@ -5746,3 +5746,10 @@ deviations: Claude implemented (Codex provider unavailable in this environment).
   Settings › Partner (`#partner-share-daily-tasks`, unchanged). Partner section now has no controls in any state.
 - Clearer status copy when the partner's list is unavailable (not sharing full list / unavailable / stale / loading).
 - Owner froze V1 design and features after this correction. Cache keys `20261125-household-v1f`.
+
+## TASK-043 — web release candidate (November 25 2026)
+- household spec opt-in (`npm run test:household`, `MEAL_PREP_TEST_HOSTING`), no machine-specific default path.
+- `HouseholdFoodSource.configure({..., appCheckSiteKey})`: optional App Check (reCAPTCHA v3) attestation of the named
+  Meal Prep app, inert without production configuration. Cache key `household-food-source.js?v=20261125-household-v1g`.
+- `docs/RELEASE_TASK_043_WEB.md`: controlled web release, Meal Prep production checks and rollback.
+- Separate branch `task-043-meal-prep-activation` adds `household-meal-config.js` (production origin only); approval required.
