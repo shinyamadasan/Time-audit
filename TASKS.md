@@ -2472,6 +2472,13 @@ ux-pass (owner-direct, November 25 2026, "Final Mobile-First UX Refinement and R
 owner-correction (November 25 2026): owner approved the V1 mobile design; "Share my full daily list" moves to
   Settings › Partner only, partner section strictly read only with clear sharing-status messages. V1 design and
   features are FROZEN after this correction (no further optional refinements or design cycles).
+release-coordination with TASK-042 (read-only check, November 25 2026): TASK-042 branch
+  `task-042-release-qualification` (c7c6eb9, runtime b18cc52, status blocked) and `task-043` (5818d53) share base
+  b0bbc6f. `git merge-tree` shows no runtime overlap (TASK-042 runtime = accounting-command.js only); conflicts are
+  append-only docs and the single `npm test`/`lint` line in package.json (union of both edits). A combined candidate
+  changes the runtime closure, so TASK-042's pinned artifact fingerprints, wider CI count and packaged checks must be
+  re-run on the combined tree before release. Android (Capacitor `webDir: www`) cannot open `?household=1`, so V1
+  household is web-only unless the owner enables it by default.
 
 <!-- Paste new tasks above this line. -->
 
