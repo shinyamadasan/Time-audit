@@ -14,6 +14,7 @@
   const APP_NAME = 'chronasense-household-meal-prep';
   const SDK_VERSION = '10.12.2';
   const FIRESTORE_SDK = `https://www.gstatic.com/firebasejs/${SDK_VERSION}/firebase-firestore-compat.js`;
+  const APP_CHECK_SDK = `https://www.gstatic.com/firebasejs/${SDK_VERSION}/firebase-app-check-compat.js`;
   const LOOPBACK = ['127.0.0.1', 'localhost'];
 
   let config = null;
@@ -30,7 +31,11 @@
     if (!next || typeof next !== 'object' || !next.firebase || typeof next.firebase.projectId !== 'string'
       || typeof next.firebase.apiKey !== 'string') throw new Error('An approved Meal Prep web configuration is required.');
     if (next.emulator && !LOOPBACK.includes(location.hostname)) throw new Error('Meal Prep emulators are local only.');
-    config = Object.freeze({firebase: {...next.firebase}, emulator: next.emulator ? {...next.emulator} : null});
+    if (next.appCheckSiteKey != null && (typeof next.appCheckSiteKey !== 'string' || !next.appCheckSiteKey)) throw new Error('Invalid Meal Prep App Check key.');
+    // Meal Prep's own web app attests with App Check (reCAPTCHA v3). When its public site key is supplied,
+    // this connection attests the same way, so an enforced App Check does not refuse My Day's reads.
+    config = Object.freeze({firebase: {...next.firebase}, emulator: next.emulator ? {...next.emulator} : null,
+      appCheckSiteKey: next.emulator ? null : next.appCheckSiteKey || null});
     status = 'signed-out';
     notify();
   }
@@ -49,7 +54,12 @@
     ready = (async () => {
       if (typeof firebase === 'undefined' || typeof firebase.initializeApp !== 'function') throw new Error('Firebase is not loaded.');
       if (typeof firebase.firestore !== 'function') await loadScript(FIRESTORE_SDK);
-      app = firebase.apps.find(a => a.name === APP_NAME) || firebase.initializeApp(config.firebase, APP_NAME);
+      const existing = firebase.apps.find(a => a.name === APP_NAME);
+      app = existing || firebase.initializeApp(config.firebase, APP_NAME);
+      if (config.appCheckSiteKey && !existing) {
+        if (typeof firebase.appCheck !== 'function') await loadScript(APP_CHECK_SDK);
+        firebase.appCheck(app).activate(new firebase.appCheck.ReCaptchaV3Provider(config.appCheckSiteKey), true);
+      }
       auth = app.auth();
       db = app.firestore();
       if (config.emulator) {

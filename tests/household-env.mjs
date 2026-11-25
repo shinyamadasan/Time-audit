@@ -20,7 +20,7 @@ import {computeClosure} from '../scripts/runtime-mirror.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LOCAL = 'http://127.0.0.1';
 export const MEAL = {project: 'demo-meal-prep', authPort: 9099, firestorePort: 8080, password: 'ourlife-local-1',
-  dir: process.env.MEAL_PREP_TEST_HOSTING || 'C:/Users/DevLabs-Test/.t3/recoveries/our-life-v1-e678141/preview/test-hosting'};
+  dir: process.env.MEAL_PREP_TEST_HOSTING || ''};
 export const PEOPLE = {
   me: {uid: 'cs-me', email: 'shin@household.test', displayName: 'Shin (demo)', tasks: [
     ['Write the project brief', '09:30', 'priority'], ['Review the budget', '', 'priority'], ['Call the bank', '14:00', 'priority'],
@@ -56,7 +56,7 @@ export const FOOD = {
 const up = async url => { try { await fetch(url); return true; } catch { return false; } };
 async function ensureMealEmulators() {
   if (await up(`${LOCAL}:${MEAL.authPort}/`) && await up(`${LOCAL}:${MEAL.firestorePort}/`)) return null;
-  if (!existsSync(path.join(MEAL.dir, 'firebase.local.json'))) throw new Error(`Meal Prep emulator config not found in ${MEAL.dir} (set MEAL_PREP_TEST_HOSTING)`);
+  if (!MEAL.dir || !existsSync(path.join(MEAL.dir, 'firebase.local.json'))) throw new Error(`Meal Prep emulator config not found${MEAL.dir ? ` in ${MEAL.dir}` : ''}: set MEAL_PREP_TEST_HOSTING to Meal Prep's test-hosting folder`);
   const child = spawn('firebase', ['emulators:start', '--config', 'firebase.local.json', '--only', 'auth,firestore', '--project', MEAL.project],
     {cwd: MEAL.dir, shell: true, stdio: 'ignore'});
   for (let i = 0; i < 240; i++) {
