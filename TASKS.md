@@ -2550,8 +2550,10 @@ blockers:
   AGP8.13.0 dependencies and Gradle8.14.3 distribution/cache are absent. APK build/62 packaged
   tests require owner-provided offline toolchain or explicit expanded download/install authority;
   physical-device acceptance and hosted CI remain unperformed. Independent baseline attribution
-  of the raw wider Stop/profile failure is still active; do not claim the wider gate green or
-  permit a runtime change/allowlist workaround. See TEST_REPORT.md TASK-042 continuation.
+  confirms the raw wider Stop/profile failure is the pre-existing storage-quota ceiling with
+  the original operation durably retained, not a demonstrated TASK-041 regression. The default
+  workload still fails the required wider CI gate; do not silently waive it, shrink the workload,
+  enable compaction or alter runtime. See TEST_REPORT.md TASK-042 final attribution.
   Runtime remains b18cc52. No merge, push, deploy, production or unauthorized download.
 
 <!-- Paste new tasks above this line. -->

@@ -5772,3 +5772,9 @@ tests: all490 mandatory cases, all142 rules cases, full npm, worker/dry-run, SDK
 blockers: actual APK/packaged62-case qualification requires unavailable API36/Gradle8.14.3/AGP8.13.0 tooling and owner-provided caches or expanded download/install authority. Physical devices/hosted CI unavailable; independent baseline Stop attribution still active, wider gate not declared green.
 deviations: none; existing-tool native generation/offline sync completed, no new infrastructure/install/network/production/runtime/push/merge/deploy. Independent test/CI QA APPROVE, APK explicitly unqualified.
 -> TASKS status `blocked` for a genuine resource boundary, not a routine implementation decision.
+
+## TASK-042 - final independent quota attribution (documentation checkpoint)
+changed: own TASKS blocker and TEST_REPORT append only; reviewed runtime/test/CI checkpoint unchanged.
+tests: unchanged baseline owner-scale profile reproduces the candidate failure at GROW35; read-only baseline/candidate diagnostics show the same quota ceiling and durable original-operation retention. Raw failed runs preserved, not relabelled passing.
+blockers: the original workload still fails required wider CI despite correct fail-closed retention; APK/toolchain/device/hosted gates remain as recorded. Delegated claim that the profile is absent from CI corrected against the actual collector and raw report. No automatic waiver, workload shrink or compaction flag.
+deviations: none; no new implementation, runtime/review cycle, production, push, merge, deployment, installation or external download. Local release remains NO-GO; TASKS stays `blocked`.
