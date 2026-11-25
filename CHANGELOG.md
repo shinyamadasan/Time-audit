@@ -5765,3 +5765,10 @@ tests: full npm 3003 passed / zero failed / one existing opt-in skip; mandatory 
 blockers: owner-scale Stop baseline attribution pending; generated Android project cannot build without unavailable API36/AGP8.13.0/Gradle8.14.3 offline tooling; APK-extracted bundle/62 packaged cases, hosted CI and real-device acceptance unperformed. Expected artifact hashes do not claim APK qualification.
 deviations: none to runtime. Existing cached Capacitor generated only ignored native output; no install, external download, production, merge, push or deployment. Original failing reports and independent reviewer provenance correction retained in TEST_REPORT.
 -> TASKS remains `codex` while the independent baseline attribution completes; this is a local test/CI checkpoint, not release authorization.
+
+## TASK-042 continuation - local toolchain boundary
+changed: own TASKS status/blockers and TEST_REPORT append only; code checkpoint 835f182 retained.
+tests: all490 mandatory cases, all142 rules cases, full npm, worker/dry-run, SDK23/23, mutation43/43 and existing superseded-classification gates pass as recorded; no new skips or relaxed assertions.
+blockers: actual APK/packaged62-case qualification requires unavailable API36/Gradle8.14.3/AGP8.13.0 tooling and owner-provided caches or expanded download/install authority. Physical devices/hosted CI unavailable; independent baseline Stop attribution still active, wider gate not declared green.
+deviations: none; existing-tool native generation/offline sync completed, no new infrastructure/install/network/production/runtime/push/merge/deploy. Independent test/CI QA APPROVE, APK explicitly unqualified.
+-> TASKS status `blocked` for a genuine resource boundary, not a routine implementation decision.

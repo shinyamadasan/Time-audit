@@ -2494,7 +2494,7 @@ blocker:
   do not merge, push or deploy this local checkpoint. No further review cycle started.
 
 ### TASK-042 - Local release qualification and baseline test maintenance
-status: codex
+status: blocked
 owner: codex
 source: owner-direct
 priority: P0
@@ -2543,12 +2543,16 @@ verification:
     baseline cross-check; complete npm test; lint/parity/rules/functions checks; CI-required
     emulator/browser/worker/artifact checks or exact unavailability evidence; git diff --check.
 blockers:
-  Full npm test and scoped test-maintenance QA pass without runtime changes. Release gate remains
-  blocked by the mandatory Focus Check now click/rerender timeout, reproduced on clean baseline;
-  owner-scale Stop/profile timeout not yet attributed against baseline and wider-suite count
-  disposition (1104 actual versus 1071 pinned); missing native Android project/packaged 62-case gate;
-  candidate-specific reviewed artifact fingerprints and real-device acceptance. See TEST_REPORT.md
-  TASK-042 and retained local evidence. Do not merge, push, deploy or alter reviewed runtime.
+  Continuation resolved the Focus/rules fixture failures: mandatory490/490, npm3003 passed with
+  one existing opt-in skip, rules142/142, Worker55/55 plus dry-run and all static checks pass.
+  Wider count1104 and exact expected candidate artifact pins independently reviewed and updated;
+  failure ledger unchanged. Native project generation/offline sync pass, but API36 SDK,
+  AGP8.13.0 dependencies and Gradle8.14.3 distribution/cache are absent. APK build/62 packaged
+  tests require owner-provided offline toolchain or explicit expanded download/install authority;
+  physical-device acceptance and hosted CI remain unperformed. Independent baseline attribution
+  of the raw wider Stop/profile failure is still active; do not claim the wider gate green or
+  permit a runtime change/allowlist workaround. See TEST_REPORT.md TASK-042 continuation.
+  Runtime remains b18cc52. No merge, push, deploy, production or unauthorized download.
 
 <!-- Paste new tasks above this line. -->
 
