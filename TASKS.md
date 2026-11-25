@@ -2494,7 +2494,7 @@ blocker:
   do not merge, push or deploy this local checkpoint. No further review cycle started.
 
 ### TASK-042 - Local release qualification and baseline test maintenance
-status: blocked
+status: codex
 owner: codex
 source: owner-direct
 priority: P0
@@ -2502,12 +2502,18 @@ depends-on: none (owner explicitly selects local candidate b18cc52; no merge req
 files: test.js (Obsidian test fixtures only, if proven necessary);
   accounting-hazards/staged-effects.test.js (five obsolete quota expectations and safety assertions);
   package.json (existing-suite test wiring only); CHANGELOG.md and TEST_REPORT.md append only;
+  tests/accounting-staged-effects.spec.js and tests/zz-perf-profile.spec.js (qualification fixtures only);
+  .github/workflows/ci.yml and existing release-check scripts (verified counts/artifact checks only);
   this entry; generated local qualification evidence outside runtime.
 context:
   Owner instruction in this session, November 24, 2026: accept TASK-041 checkpoint b18cc52 for
   release qualification, compare three Obsidian failures against clean b0bbc6f in equivalent
   environments, correct only obsolete quota expectations, restore the full run with existing
   tooling/fixtures, execute full tests and required checks, preserve separate local checkpoints.
+  Owner continuation in this session: autonomously resolve remaining baseline test failures,
+  CI/artifact checks and Android packaging where possible, preserving reviewed runtime; independent
+  QA when needed. Existing-tool native project generation is allowed for local packaging only,
+  with cached dependencies/toolchains; no installs, remote services or artifact substitution.
 objective:
   Remove verified test/environment blockers without altering reviewed runtime, then report
   evidence-backed release readiness and outstanding packaged/device/owner requirements.
@@ -2523,6 +2529,9 @@ acceptance:
   - Keep TASK-041 runtime byte-identical to b18cc52; any newly proven runtime fix requires renewed
     independent QA and a separate explicit scoped contract, not a silent test workaround.
   - Test maintenance stays on its own local branch/checkpoint; final report GO/NO-GO with evidence.
+  - Qualify fixture fixes against baseline/candidate without weakening semantic/user-action assertions;
+    verify collected CI counts and exact artifact fingerprints, with independent QA before adoption.
+    Attempt existing local Android build tools only; report unavailable SDK/cache/device gates precisely.
 constraints:
   - No production, real-account/data/credentials access, Firebase rules edits, push, merge or deploy.
   - No new infrastructure or broad architecture investigation; cached local tools and synthetic
