@@ -226,12 +226,21 @@ test('QA regression: a Meal Prep sign-in resumes after reload, and keyboard focu
   await context.close();
 });
 
+// Up Next must be the app's own choice (guided action, else getNextPlanItem); it depends on the time of day.
+const appNext = page => page.evaluate(() => {
+  const t = PlanAuthority.current(), items = PlanAuthority.items(t);
+  const id = todayGuidedAction().planItemId || getNextPlanItem(t)?.id;
+  return items.find(i => i.id === id && !i.done)?.task || null;
+});
 test('mobile: Up Next drives Start/Stop/Done with one hand, section links reach every column, no overflow', async ({browser}) => {
   for (const width of [360, 390, 820]) {
     const {context, page} = await open(browser, 'me', {viewport: {width, height: 800}});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const next = page.getByRole('region', {name: 'Up next'});
-    await expect(next).toContainText('Write the project brief');
+    const expected = await appNext(page);
+    expect(expected).toBeTruthy();
+    await expect(next.locator('.household-next-title')).toHaveText(expected);
+    await expect(page.locator('#household-mine li.is-next')).toContainText(expected);
     const box = await next.getByRole('button', {name: /^Start .*\(Up next\)$/}).boundingBox();
     expect(box.y + box.height).toBeLessThan(800); // Start is on the first screen
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -247,17 +256,21 @@ test('mobile: Up Next drives Start/Stop/Done with one hand, section links reach 
   }
   const {context, page} = await open(browser, 'me', {viewport: {width: 390, height: 844}, clock: true});
   const next = page.getByRole('region', {name: 'Up next'});
-  await next.getByRole('button', {name: 'Start Write the project brief (Up next)'}).click();
+  const first = await appNext(page);
+  await next.getByRole('button', {name: `Start ${first} (Up next)`}).click();
   await expect(next).toContainText('Tracking now');
-  await expect(page.locator('#household-mine li', {hasText: 'Write the project brief'})).toContainText('Tracking now');
+  await expect(page.locator('#household-mine li', {hasText: first})).toContainText('Tracking now');
   await page.clock.fastForward('02:05');
-  await next.getByRole('button', {name: 'Stop Write the project brief (Up next)'}).click();
+  await next.getByRole('button', {name: `Stop ${first} (Up next)`}).click();
   await expect.poll(() => page.evaluate(() => running)).toBe(false);
-  await next.getByRole('button', {name: 'Mark Write the project brief done (Up next)'}).click();
-  await expect(page.locator('#household-mine li', {hasText: 'Write the project brief'})).toContainText('Done', {timeout: 15000});
-  await expect(next).not.toContainText('Write the project brief');
-  await page.locator('#household-mine li', {hasText: 'Write the project brief'}).getByRole('button', {name: 'Reopen: Write the project brief'}).click();
-  await expect(next).toContainText('Write the project brief', {timeout: 15000});
+  // After Stop the app may pick a different next task (e.g. one now due); Up Next follows it.
+  const after = await appNext(page);
+  await expect(next.locator('.household-next-title')).toHaveText(after);
+  await next.getByRole('button', {name: `Mark ${after} done (Up next)`}).click();
+  await expect(page.locator('#household-mine li', {hasText: after})).toContainText('Done', {timeout: 15000});
+  await expect(next.locator('.household-next-title')).not.toHaveText(after);
+  await page.locator('#household-mine li', {hasText: after}).getByRole('button', {name: `Reopen: ${after}`}).click();
+  await expect(page.locator('#household-mine li', {hasText: after})).not.toContainText('Done', {timeout: 15000});
   await context.close();
 });
 

@@ -3273,7 +3273,7 @@ QA round 1 fixes (same day): household spec 9/9 on two consecutive runs (adds: S
 - npm test per command: 96 pass, the same 7 Obsidian/vault suites fail as at base (test.js 452/455 TEST-VAULT etc.).
 - Static: www parity OK; firebase rules builder match; functions/shared match; lint 0 errors (TASK-043 files add 0
   warnings; storage.js 62 = base). No rules, functions, CI, service worker or data-schema change.
-- Household spec 11/11 with `npm run test:household`; partner payload cross-version check: old reader accepts new
+- Household spec 11/11 with `npm run test:household` (Up Next test made time-of-day independent: it asserts the app's own next-task choice, which moves to a task once its time is due); partner payload cross-version check: old reader accepts new
   payload (strips dailyTasks), new reader accepts old payload (shows not-shared).
 - Meal Prep activation branch `task-043-meal-prep-activation`: simulated origins (all outside requests aborted) —
   configured only on https://shinyamadasan.github.io with ?household=1; not configured without the flag or on any
