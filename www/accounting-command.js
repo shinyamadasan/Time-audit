@@ -273,6 +273,12 @@
     }
     // A failed synchronous capture remains an original page-held fact. No later command may
     // send until this fact has passed durable readback in its original account/device partition.
+    function failedCaptureCount(owner = null) {
+      if (owner == null) return failed.size;
+      let count = 0;
+      for (const { record } of failed.values()) if (record.owner === owner) count++;
+      return count;
+    }
     function failedCaptures(owner) {
       return [...failed.values()].map(item => clone(item.record)).filter(item => item.owner === owner)
         .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
@@ -535,6 +541,7 @@
       const batch = Number.isSafeInteger(config.batch) ? Math.max(1, config.batch) : 50;
       const plain = state.history.filter(op => !isCheckpoint(op));
       if (plain.length <= keep + batch) return 0;
+      if (config.minEnvelopeChars && (readStored(key(state.owner))?.length || 0) < config.minEnvelopeChars) return 0;
       const pinned = new Set([state.committed?.operationId, state.committed?.value?.serverTimer?._csWrite?.operationId,
         ...(state.effects || []).map(effect => effect.operationId),
         ...Object.values(state.effectReceipts || {}).map(receipt => receipt.operationId),
@@ -550,7 +557,8 @@
       for (const op of Object.values(nativeNewest)) pinned.add(op.id);
       const newest = new Set(plain.slice(-keep).map(op => op.id));
       const eligible = plain.filter(op => !newest.has(op.id) && !pinned.has(op.id) && !op.resolution
-        && !/^legacy-/.test(op.input?.name || '') && (SETTLED.includes(op.phase) || op.phase === 'coalesced' && !!op.aliasOf));
+        && !/^legacy-/.test(op.input?.name || '') && (SETTLED.includes(op.phase) || op.phase === 'coalesced' && !!op.aliasOf)
+        && (!config.eligible || config.eligible(op)));
       if (eligible.length < batch) return 0;
       let archived = null;
       try { archived = config.archived?.(state.owner) || null; } catch { archived = null; }
@@ -918,7 +926,7 @@
         const state = load(observation.owner); importCaptures(state); return true;
       });
     }
-    return { capture, failedCaptures, reserveSource: (input, options) => capture(input, { ...options, source: true }), completeSource,
+    return { capture, failedCaptureCount, failedCaptures, reserveSource: (input, options) => capture(input, { ...options, source: true }), completeSource,
       submit, drain, cancel, runEffects, restore, snapshot, observeProvisional, captures: owner => clone(captures(owner)),
       stuckCaptures: () => pruneStuck().map(clone) };
   }

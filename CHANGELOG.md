@@ -5820,3 +5820,13 @@ deviations: SDK/build-dependency downloads explicitly owner-authorized from offi
 changed: merge 9eb6cf2 of task-042-release-qualification (a5de93e) onto origin/main 0ff39ec; doc conflicts unioned; package.json = main plus accounting-orphan-recovery and staged-effects tests in npm test. Queue QUEUE-20261126 recorded in TASKS.md.
 tests: runtime-mirror OK; npm test exit 0 (2561 node + 455 custom, 0 failed, 1 skip) with long-path TMP on D:.
 -> TASK-044 `approved` (held); TASK-045 `codex`. No push, merge or deploy.
+
+## TASK-045 — ready for review (branch: task-044-durability-integration)
+changed:
+  - accounting-command.js and index.html, with their www mirrors: automatic, verified archiving of settled ordinary receipts under storage pressure. Page-held captures show their count, warn before unload and retry through the account lock.
+  - tests/accounting-storage-durability.spec.js: loopback fault injection for durable intake, page-held capture, native unload confirmation, reload, multi-tab recovery and archive failure.
+  - DECISIONS.md decision 45 records the pre-code quota diagnosis and archive policy. CODEMAP.md records the new entry points.
+tests: focused browser 3/3, accounting Node 195/195, npm test 3016 passed with one existing skip, original owner-scale profile 1/1, mandatory browser 490/490. Mirror, lint and diff checks passed. See TEST_REPORT.md.
+blockers: none for implementation handoff. Independent review is pending.
+deviations: verification used the long-path D: temp directory and the existing loopback emulator. The mandatory launcher had a path-selection error and a post-run metadata append error. The three actual runs and their reports passed.
+→ status set to `review` in TASKS.md

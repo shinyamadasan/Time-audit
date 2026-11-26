@@ -2696,7 +2696,7 @@ result (Nov26): PASS. accounting-command.js + www identical to b18cc52; no House
   Red-zone runtime: held `approved` (owner merges the queue at release).
 
 ### TASK-045 - Capture durability, storage capacity and truthful save status (red zone)
-status: codex
+status: review
 owner: codex
 source: owner-direct (QUEUE-20261126 item 1)
 priority: P0

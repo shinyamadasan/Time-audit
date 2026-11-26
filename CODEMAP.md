@@ -23,6 +23,19 @@
 - `storage.js` `initPartnerSharedListener()`: sets `partnerSharedReadState` (loading/received/denied).
 - Tests: `household-my-day-model.test.js`, `partner-view-model.test.js`, `tests/household-my-day.spec.js` over
   `tests/household-env.mjs` (RTDB emulator + Meal Prep emulators); preview `scripts/serve-household-preview.mjs`.
+
+## TASK-045 accounting storage capacity and capture durability
+
+- `accountingCompactionFlags()` configures verified history archiving on normal commits,
+  with the default policy limited to settled ordinary Start and Stop and coherent hydrates
+  without held evidence. `cutHistory()` keeps the committed frame and pending evidence intact.
+- `failedCaptureCount()`, `pageHeldAccountingText()`, and `showAccountingStorageFull()`
+  distinguish page-held changes from storage-full imports. The existing accounting recheck
+  retries page-held bytes under the account lock. The page warns before unload while any
+  capture is page-held.
+- Loopback fault injection is in `tests/accounting-storage-durability.spec.js`. Decision 45
+  records the quota measurements and archive policy.
+
 ## TASK-041 historical orphan-heartbeat recovery - November 24 local only
 
 `accounting-command.js`: `validateEnvelope` contains the unchanged strict envelope checks;

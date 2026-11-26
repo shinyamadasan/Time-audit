@@ -2777,17 +2777,25 @@ function accountingFieldUnchanged(field, a, b) {
   return TimeAckCore.same(byId(a), byId(b));
 }
 
-// Storage-growth flags (release N+1 candidates). Both default OFF; unreadable storage means OFF.
+// Reserve room for new operations before the measured Chromium limit of about 5 Mi characters.
+const ACCOUNTING_ARCHIVE_THRESHOLD = 3 * 1024 * 1024;
 function accountingCompactionFlags() {
   const on = key => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
   const keepOps = (() => { try { return Number.parseInt(localStorage.getItem('ta3-accounting-history-keep-ops') || '', 10); } catch { return NaN; } })();
+  const explicitCut = on('ta3-accounting-flag-history-cut');
+  const policy = explicitCut ? (Number.isSafeInteger(keepOps) ? { keepOps } : {}) : {
+    minEnvelopeChars: ACCOUNTING_ARCHIVE_THRESHOLD, keepOps: 50, batch: 25,
+    eligible: op => op.phase === 'local-applied' && (
+      op.input.ordinary?.v === 1 && ['start', 'stop'].includes(op.input.ordinary.kind)
+      || op.input.name === 'hydrate-accounting' && op.authority === 'coherent-account-read' && op.evidence == null)
+  };
   return { stripFirstHydrate: on('ta3-accounting-flag-strip-first-hydrate'), elideNoopHydrate: on('ta3-accounting-flag-elide-noop-hydrate'),
     refFirstHydrate: on('ta3-accounting-flag-ref-first-hydrate'),
-    historyCut: { enabled: on('ta3-accounting-flag-history-cut'), ...(Number.isSafeInteger(keepOps) ? { keepOps } : {}),
-      archived: owner => AccountingHistoryArchive.verified(owner), onCandidates: (owner, records) => AccountingHistoryArchive.store(owner, records) } };
+    historyCut: { enabled: true, ...policy, archived: owner => AccountingHistoryArchive.verified(owner),
+      onCandidates: (owner, records) => AccountingHistoryArchive.store(owner, records) } };
 }
 
-// Storage-growth C, preservation step (flag ta3-accounting-flag-history-cut, default OFF). Before the coordinator may
+// Before the coordinator may
 // drop a settled history record, a full copy is written to IndexedDB and read back equal (TimeAckCore.same). Only
 // ids in this owner's VERIFIED set can be dropped; with IndexedDB missing, failing or full, nothing is dropped and
 // history behaves exactly as before. The archive is local to this device, like history itself.
@@ -2896,7 +2904,11 @@ function accountingCoordinator() {
   _accountingTransport = globalThis.AccountingCapability?.createTransport({ rest: rawTransport }) || null;
   const transport = _accountingTransport || { enforcesAccounting: false, enforcesCancellation: false };
   _accountingCoordinator = AccountingCommand.createCoordinator({ storage: localStorage, lock: TimeAckCore.webLock,
-    compaction: (() => { const flags = accountingCompactionFlags(); if (flags.historyCut.enabled && roomCode) AccountingHistoryArchive.warm(roomCode); return flags; })(),
+    compaction: (() => {
+      const flags = accountingCompactionFlags();
+      if (flags.historyCut.minEnvelopeChars == null && roomCode) AccountingHistoryArchive.warm(roomCode);
+      return flags;
+    })(),
     identity: accountingIdentity, randomId: TimeAckCore.randomOperationId, same, transport,
     validateLocal(local, owner, operation) {
       validateAccountingFrame(local.before, owner); validateAccountingFrame(local.after, owner);
@@ -3255,7 +3267,8 @@ function hydrateAccounting() {
   if (window._accountingLegacyLoadError) return Promise.resolve(false);
   if (window._accountingSourcesSeen?.size !== 4) return Promise.resolve(false);
   const pending = accountingHasPending();
-  if ([...coordinator.snapshot().queue, ...coordinator.captures(roomCode).map(item => item.captured)]
+  if ([...coordinator.snapshot().queue, ...coordinator.captures(roomCode).map(item => item.captured),
+    ...(coordinator.failedCaptureCount(roomCode) ? coordinator.failedCaptures(roomCode) : [])]
     .some(operation => operation.input.name === 'hydrate-accounting')) return accountingOutcome(coordinator.drain());
   const committed = coordinator.snapshot().committed;
   const ref = !committed && accountingCompactionFlags().refFirstHydrate
@@ -3423,13 +3436,23 @@ function buildAccountingInput(name, before, after, { timer = false, extra = {}, 
     ...auxiliary, auxGuards, auxBefore, conflict, effects: cloneUndoValue(effects) };
 }
 
-// Storage fix F2: a full local store is reported once in plain words; nothing is deleted and the rest keeps syncing.
+function pageHeldAccountingText(count) {
+  return `${count} accounting change${count === 1 ? ' is' : 's are'} held in this page. Keep this page open while storage recovers.`;
+}
+
 let _accountingStorageFullShownAt = 0;
-function showAccountingStorageFull(stuck) {
+function showAccountingStorageFull() {
+  const held = _accountingCoordinator?.failedCaptureCount(roomCode);
+  if (held) { showToast(pageHeldAccountingText(held)); return; }
   if (Date.now() - _accountingStorageFullShownAt < 10 * 60_000) return;
   _accountingStorageFullShownAt = Date.now();
-  const count = Array.isArray(stuck) && stuck.length ? stuck.length : 1;
-  showToast(`This device's storage is full: ${count} pending change${count === 1 ? ' is' : 's are'} kept safely on this device and could not be filed yet. Nothing was deleted.`);
+  showToast("This device's storage is full. Use Check now to retry accounting when space is available.");
+}
+
+function showAccountingCaptureFailure(fallback) {
+  const held = _accountingCoordinator?.failedCaptureCount(roomCode);
+  showToast(held ? pageHeldAccountingText(held) : fallback);
+  renderTimeAckStatus();
 }
 
 function accountingOutcome(submitted) {
@@ -3437,12 +3460,12 @@ function accountingOutcome(submitted) {
   renderTimeAckStatus();
   return submitted.then(outcome => {
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
-    if (outcome.status === 'storage-full') { showAccountingStorageFull(outcome.stuck); return !!(outcome.ownSettled ?? outcome.ownApplied); }
+    if (outcome.status === 'storage-full') { showAccountingStorageFull(); return !!(outcome.ownSettled ?? outcome.ownApplied); }
     if (outcome.status !== 'drained' && !(outcome.ownSettled ?? outcome.ownApplied)) { showToast(`Accounting retained: ${outcome.reason || outcome.status}`); return false; }
     return true;
   }).catch(error => {
     console.warn('[accounting] retained operation', error.message);
-    showToast('Accounting is unconfirmed; your pending operation is retained'); return false;
+    showAccountingCaptureFailure('Accounting is unconfirmed. Use Check now to retry.'); return false;
   }).finally(renderTimeAckStatus);
 }
 
@@ -3472,7 +3495,7 @@ function stageAccountingChange(name, reduce, options = {}) {
   const input = buildAccountingInput(name, before, after, { ...options, at });
   const dependsOn = accountingCommandDependency(coordinator, roomCode);
   try { return accountingOutcome(coordinator.submit(input, { eventKey: options.eventKey || null, at, dependsOn, onCaptured: options.onCaptured })); }
-  catch (error) { showToast('Accounting capture failed; the original operation is held in this page'); return Promise.resolve(false); }
+  catch (error) { showAccountingCaptureFailure('Accounting could not be captured'); return Promise.resolve(false); }
 }
 
 // O1: presentation derives from immutable captures; confirmed globals/caches remain ACK-only.
@@ -3750,6 +3773,7 @@ async function captureOrdinaryTimer(kind, task = null, planItemId = null, recove
         _ordinaryProvisionalRecovery = null; document.getElementById('recovery-overlay').style.display = 'none';
         renderOrdinaryProvisional(); renderTimeAckStatus(); } });
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
+    if (result.status === 'storage-full') showAccountingStorageFull();
     if (result.ownApplied && !ordinaryProvisionalState()) {
       if (kind === 'start') await showStartedTimerRuntime(task);
       else if (kind === 'resume' && running && _accountingRawTimer?._csWrite?.operationId === capturedId) {
@@ -3771,9 +3795,10 @@ async function captureOrdinaryTimer(kind, task = null, planItemId = null, recove
     return result.ownApplied || !!capturedId;
   } catch (error) {
     if (!TimeAckCore.same(source, accountingIdentity())) return false;
-    _ordinaryProvisionalPaused = true; renderOrdinaryProvisional(); renderTimeAckStatus();
-    showToast(capturedId ? 'Original time is captured; confirmed accounting needs recovery'
-      : 'Local save failed — tracking paused; the original operation is held in this page'); return false;
+    _ordinaryProvisionalPaused = true;
+    showAccountingCaptureFailure(capturedId ? 'Accounting is unconfirmed. Use Check now to retry.'
+      : 'Local save failed. Tracking is paused.');
+    return false;
   }
 }
 
@@ -3796,8 +3821,9 @@ function stageAccountingObservation(name, facts, { eventKey, at = Date.now(), pr
     return accountingOutcome(coordinator.submit({ name, observation: { facts: cloneUndoValue(facts), frame, source } },
       { eventKey, at, dependsOn, onCaptured }));
   } catch (error) {
-    onCaptureFailure?.(error); renderTimeAckStatus();
-    showToast('Automatic time is held in this page; tracking is paused'); return Promise.resolve(false);
+    onCaptureFailure?.(error);
+    showAccountingCaptureFailure('Automatic accounting could not be captured. Tracking is paused.');
+    return Promise.resolve(false);
   }
 }
 
@@ -4082,16 +4108,16 @@ function renderTimeAckStatus(override = null) {
     el.hidden = false; el.dataset.phase = 'unconfirmed'; el.textContent = '';
     const text = document.createElement('span');
     const focusPaused = typeof focusCaptureIsPaused === 'function' && focusCaptureIsPaused();
-    const capturePaused = !!_accountingCoordinator?.failedCaptures(roomCode).length;
+    const pageHeld = _accountingCoordinator?.failedCaptureCount(roomCode) || 0;
     let legacy = false;
     try { legacy = [..._accountingCoordinator.snapshot().queue, ..._accountingCoordinator.captures(roomCode).map(item => item.captured)]
       .some(operation => operation.input.name.startsWith('legacy-')); } catch {}
-    text.textContent = window._accountingLegacyLoadError
+    text.textContent = pageHeld ? pageHeldAccountingText(pageHeld)
+      : window._accountingLegacyLoadError
       ? _accountingLegacyCaptureJobs.get(roomCode)?.length
         ? 'Legacy time could not be stored. Its original record is held in this page; logging is paused until storage recovers.'
         : 'Stored time on this device could not be confirmed. Its original data is retained; logging is paused.'
       : legacy ? 'Legacy time needs recovery review. Its original record is retained unchanged; this version does not resend legacy writes.'
-      : capturePaused ? 'Accounting could not be stored. Its original operation is held in this page; logging waits for storage recovery. Use Check now to retry.'
       : focusPaused ? 'Focus could not be stored. Its original event is held in this page; logging waits for recovery. Use Check now to retry.'
       : accountingTransportRefused() ? 'This version is waiting for its accounting safeguards. Your original time is retained on this device and nothing new is being sent.'
       : !accountingHasPending() && phoneUsageHasRequest() ? 'Phone usage has a retained query. Its original range waits for recovery; other logging remains available. Use Check now to retry.'
@@ -4110,7 +4136,7 @@ function renderTimeAckStatus(override = null) {
     let hasCommand = false;
     try { hasCommand = !focusPaused && (_accountingCoordinator?.snapshot().queue.length
       || accountingCapturedCommands(_accountingCoordinator, roomCode).length); } catch { /* keep recovery visible when storage cannot be read */ }
-    if (!window._accountingLegacyLoadError && hasCommand) el.append(keep);
+    if (!pageHeld && !window._accountingLegacyLoadError && hasCommand) el.append(keep);
     return;
   }
   const op = override || (roomCode ? timeAckOpenOperation() : null);
@@ -5180,6 +5206,11 @@ async function handleRecovery(intentional) {
 }
 
 window.addEventListener('beforeunload', e => {
+  // A page can still hold a capture for an account that has since been detached.
+  if (_accountingCoordinator?.failedCaptureCount()) {
+    e.preventDefault();
+    e.returnValue = true;
+  }
   if (running) {
     const ownerRoom = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null;
     const key = ownerRoom && typeof accountLocalKey === 'function' ? accountLocalKey('ta3-heartbeat-ts', ownerRoom) : null;
