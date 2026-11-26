@@ -1031,3 +1031,15 @@ owner-approved check of her stored legacy history against that rule would tell w
 **Do not:** add a test seam to shipped runtime; treat `proven` as proof of the whole ruleset; install Stage B before writers are quiesced.
 
 ---
+
+## 44. Historical orphan-heartbeat recovery preserves facts across one locked replacement (November 24, 2026, TASK-041)
+
+**Owner decision:** recover only the historical case where an envelope observation references an ordinary Start retained solely in the same owner's intake. Use the existing account Web Lock before normal drain loading, the unchanged envelope validator, and deterministic existing-schema observation intake with write/readback verification. Never edit or synthesize the captured Start, timestamps or accounting history.
+
+**Preservation boundary:** before the single envelope replacement write, any failure leaves original envelope bytes unchanged. Afterwards, all original accounting facts remain in the valid envelope and durable intake. If replacement readback is unconfirmed, stop and do not restore the old bytes: unlocked writers can consume freed quota, and restoration can fail or overwrite newer evidence. The next locked drain/load determines the stored state.
+
+**Accepted limitation:** the affected page may remain paused until reload or sign-in even after a successful locked recovery. At persistent full storage it remains paused until the observation intake fits. No index.html change, automatic startup repair, new storage schema, weakened validator or acknowledgment bypass is approved. The prior evidence-only checkpoint remains historical, not a release candidate.
+
+**Release gate:** focused crash/quota/readback/idempotence/concurrency and fail-closed regressions, fresh independent implementation QA, then owner approval before merge or deployment. No production access or rules change is part of this decision.
+
+---

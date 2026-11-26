@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { startEmulator, token } from '../rtdb-emulator-support.js';
 import { behaviour, canonicalHash, precheck, readInstalledRules, stageRules, verify } from './verify-installed-rules.mjs';
 
-const PAIRED = readFileSync(new URL('../firebase.rules.json', import.meta.url), 'utf8');
+const PAIRED = readFileSync(new URL('../firebase.rules.json', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // What production serves today: the rules at f73edd4, main's tip before this release. Pinned so the test
 // still means "today's live rules" after this candidate itself lands on main.
 const LIVE = execFileSync('git', ['show', 'f73edd4:firebase.rules.json']).toString();
@@ -25,6 +25,7 @@ const args = ({ databaseURL }) => ({ databaseURL, adminBearer: 'owner', probeUid
 
 test('precheck accepts only the pinned paired file', () => {
   assert.equal(precheck(PAIRED).ok, true);
+  assert.equal(precheck(PAIRED.replace(/\n/g, '\r\n')).ok, false);
   assert.equal(precheck(PAIRED.replace('"rules"', '"rules" ')).ok, false);
 });
 

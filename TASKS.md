@@ -2483,6 +2483,149 @@ web-release (owner direction, November 25 2026): controlled web-first release, `
   bundled, Android next. Release candidate = `task-043` on production base b0bbc6f; Meal Prep production connection
   prepared on `task-043-meal-prep-activation` (not activated). Procedure and rollback: docs/RELEASE_TASK_043_WEB.md.
   Status stays `approved` (held): merge/push/deploy and Meal Prep activation need explicit owner approval.
+### TASK-041 - Bounded recovery of historical orphan-heartbeat accounting envelopes
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none (owner-selected development baseline b0bbc6f)
+files: accounting-command.js; www/accounting-command.js (generated parity mirror);
+  accounting-orphan-recovery.test.js (new focused tests); package.json (test wiring only);
+  TASK_041_LEGACY_TEST_EXPECTATIONS.md (separate legacy-test evidence, no expectation edits);
+  CODEMAP.md only if code structure moves; DECISIONS.md (owner-approved preservation decision);
+  CHANGELOG.md and TEST_REPORT.md append only; this entry.
+context:
+  Owner approval in this session on November 24, 2026: implement the confirmed P0 recovery issue
+  from the completed baseline audit, in an isolated branch/worktree based on b0bbc6f, preserving
+  evidence and making local Git checkpoints. Owner requires autonomous independent QA, addressing
+  scoped blockers, and a maximum of two implementation/review cycles. No merge or deployment.
+  November 24 owner decision resumes this task: accepts fact-preserving recovery after the single
+  envelope replacement write, no unsafe restoration after unconfirmed readback, and reload/sign-in
+  to clear the paused page. Recovery only in the existing locked drain path; no startup repair.
+objective:
+  Recover only envelopes whose historical provisionalObserved marker references an original
+  ordinary Start retained solely in the same account's intake, without losing any original fact.
+acceptance:
+  - Validate the exact historical pattern and owner/uid/device/id/timestamp relationships;
+    preserve original Start bytes, observation timestamps, accounting history and unrelated state.
+  - Follow the audited design: durably retain the original observation using the existing intake
+    format before replacing the invalid envelope. Before the single replacement write, failures
+    preserve original envelope bytes. Afterwards, preserve every original fact in valid envelope
+    and durable intake; unconfirmed readback stops safely without restoring the old envelope.
+  - All other malformed envelopes remain fail-closed; no accounting schema or validation weakening.
+  - Prove crash recovery, quota/readback failures, idempotence, restart and multi-tab safety.
+  - Run focused tests red then green, relevant existing accounting regressions and npm test;
+    retain exact results, including failures and limitations, in TEST_REPORT.md.
+  - Keep root/www runtime parity; perform SELF_REVIEW.md and applicable QA.md checks.
+  - Delegate fresh independent verification; address blocking findings within two cycles maximum.
+  - Document the five stale staged-effects expectations separately, without changing legacy tests
+    or introducing unrelated runtime changes; preserve local checkpoints and report final revision.
+constraints:
+  - Interactive, solo owner-direct implementation on task-041-orphan-heartbeat-recovery only.
+  - Existing coordination, acknowledgment gates and original evidence remain authoritative.
+  - No index.html changes or automatic startup repair. Document the accepted reload/sign-in limit
+    and revised preservation contract in the existing project decision records.
+  - No production access, credentials, real accounts, rules changes, deployment, push, merge,
+    rollback adoption, unrelated feature changes or new infrastructure.
+  - STOP if repair needs schema changes, weakened validation, unsafe concurrency, or a broader
+    architecture/storage contract; report the exact blocker instead of guessing.
+  - Stop after two implementation/review cycles if blocking findings remain; owner approves release.
+verification:
+  - Public coordinator interfaces with synthetic storage, fault injection and independently scheduled
+    tabs; original historical corruption fixture; exact preservation and fail-closed assertions.
+  - Existing accounting wall/storage/history/growth/capability tests; relevant local emulator/browser
+    regressions; npm test; runtime-mirror --check; git diff --check; independent QA.
+prior-blocker-resolution:
+  Owner explicitly approved the independent cycle 1 review's revised guarantee in this session.
+  No schema change or validator weakening authorized. Cycle 2 fresh Claude implementation QA
+  completed APPROVE with no blocking findings; maximum two review cycles used.
+qualification:
+  Scoped implementation complete: locked exact-pattern repair, unchanged validator, root/www
+  parity, focused recovery/fault tests and relevant local emulator/browser regressions passed.
+  See TEST_REPORT.md TASK-041 owner-decision implementation qualification for exact evidence.
+blocker:
+  Release qualification remains blocked: full npm test stops at the same three pre-existing
+  Obsidian CLI test-vault fixture failures reproduced before runtime edits. Unrelated repairs
+  are outside this task. The five separately documented staged-effects expectations also remain
+  unchanged and failing on both baselines. No new scoped regression or unresolved QA finding.
+  Owner must resolve or explicitly disposition broader baseline test failures and approve release;
+  do not merge, push or deploy this local checkpoint. No further review cycle started.
+
+### TASK-042 - Local release qualification and baseline test maintenance
+status: blocked
+owner: codex
+source: owner-direct
+priority: P0
+depends-on: none (owner explicitly selects local candidate b18cc52; no merge required)
+files: test.js (Obsidian test fixtures only, if proven necessary);
+  accounting-hazards/staged-effects.test.js (five obsolete quota expectations and safety assertions);
+  package.json (existing-suite test wiring only); CHANGELOG.md and TEST_REPORT.md append only;
+  tests/accounting-staged-effects.spec.js and tests/zz-perf-profile.spec.js (qualification fixtures only);
+  .github/workflows/ci.yml and existing release-check scripts (verified counts/artifact checks only);
+  this entry; generated local qualification evidence outside runtime.
+context:
+  Owner instruction in this session, November 24, 2026: accept TASK-041 checkpoint b18cc52 for
+  release qualification, compare three Obsidian failures against clean b0bbc6f in equivalent
+  environments, correct only obsolete quota expectations, restore the full run with existing
+  tooling/fixtures, execute full tests and required checks, preserve separate local checkpoints.
+  Owner continuation in this session: autonomously resolve remaining baseline test failures,
+  CI/artifact checks and Android packaging where possible, preserving reviewed runtime; independent
+  QA when needed. Existing-tool native project generation is allowed for local packaging only,
+  with cached dependencies/toolchains; no installs, remote services or artifact substitution.
+  November26 owner amendment supersedes the prior missing-toolchain installation restriction:
+  install/download only the necessary local SDK36, Gradle8.14.3 and Android Gradle Plugin build
+  dependencies from official trusted sources. Delegate execution and independent verification
+  through T3. Complete real APK/package62 qualification, independently verify Stop attribution,
+  propose explicit wider-performance disposition without waiver/workload/assertion weakening,
+  compare with current main including merged Household My Day, and prepare device/hosted-CI evidence.
+  No application runtime, release configuration, Firebase, production or secret changes; no push,
+  merge or deploy. Reconciliation is read-only comparison/integration planning, not adoption.
+objective:
+  Remove verified test/environment blockers without altering reviewed runtime, then report
+  evidence-backed release readiness and outstanding packaged/device/owner requirements.
+acceptance:
+  - Compare original Obsidian failures on clean baseline export and candidate using the same
+    Node/platform/temp/dependency environment; distinguish fixture/environment issues from regressions.
+  - Correct only obsolete storage-quota throw expectations, asserting exact retained outcomes,
+    original identities/bytes/timestamps, no premature callback/publication, exactly-once recovery;
+    retain readback-failure rejection checks and all other safety assertions.
+  - No skipped/deleted tests, hidden failures, safety bypasses or unrelated runtime changes.
+  - Run full npm test and existing required CI/release checks where tooling is available; preserve
+    failures/counts and explain every blocked gate. Document real-device acceptance requirements.
+  - Keep TASK-041 runtime byte-identical to b18cc52; any newly proven runtime fix requires renewed
+    independent QA and a separate explicit scoped contract, not a silent test workaround.
+  - Test maintenance stays on its own local branch/checkpoint; final report GO/NO-GO with evidence.
+  - Qualify fixture fixes against baseline/candidate without weakening semantic/user-action assertions;
+    verify collected CI counts and exact artifact fingerprints, with independent QA before adoption.
+    Attempt existing local Android build tools only; report unavailable SDK/cache/device gates precisely.
+  - November26 amendment: real debug APK and62 packaged cases with exact source/manifest hashes;
+    independently verified attribution and explicit unapplied performance-test disposition;
+    read-only current-main/Household comparison, plus honest device and hosted-CI evidence gaps.
+    Keep NO-GO until all required gates pass; involve owner only for decisions/devices/boundaries.
+constraints:
+  - No production, real-account/data/credentials access, Firebase rules edits, push, merge or deploy.
+  - No new infrastructure or broad architecture investigation; synthetic loopback emulators only.
+    Necessary Android toolchain downloads/installations are locally authorized from official trusted
+    sources; no shared existing dependency target, application runtime or release-config changes.
+  - STOP on an actual permission/security boundary or a verified gate requiring unavailable
+    resources, after completing independent feasible qualification work. Do not weaken checks.
+verification:
+  - Baseline/candidate original test.js comparison; focused staged-effects red/green with a
+    baseline cross-check; complete npm test; lint/parity/rules/functions checks; CI-required
+    emulator/browser/worker/artifact checks or exact unavailability evidence; git diff --check.
+blockers:
+  November26 real APK build and original package62/62 PASS; fresh independent extraction/signature/
+  provenance verification and second62/62 PASS. Toolchain blocker resolved with official scoped
+  installs; no runtime/release-config change. Required wider capacity gate stays red: original
+  GROW35 snapshots show a page-held failed capture, not proof of a durable Stop. Coordinator
+  PathB is lost after page loss and device-safe toast misleads; PathA is durable. Pre-existing is
+  not waived. Keep original workload40/all waits/default-off compaction and ledger unchanged;
+  separate red-zone capacity/durability/truthful-status fix requires owner approval. Main0ff39ec
+  includes Household absent from qualified source c7c6eb9; only read-only reconciliation performed,
+  no combined candidate qualified or merge/adoption authorized. Device access disabled; physical
+  acceptance and candidate-hosted CI remain unperformed. SDK install authority is not release,
+  runtime-fix, integration, remote-write or real-data device authority. See Nov26 completion report.
+  Runtime remains b18cc52. No merge, push, deploy, production or release-config change authorized.
 
 <!-- Paste new tasks above this line. -->
 

@@ -4348,7 +4348,7 @@ function dailyFile(exportPlan, dateKey = '2026-08-30') {
 }
 
 async function withTempVault(fn) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-')));
   await fs.mkdir(path.join(root, 'Life Ledger'), { recursive: true });
   try {
     return await fn(root);
@@ -4819,7 +4819,7 @@ asyncTest('CLI apply preserves unmanaged conflicts and identical second apply is
     assert.equal(second.deleted, 0);
     assert.equal(second.skipped, 2);
   });
-  const manualVault = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-manual-'));
+  const manualVault = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-manual-')));
   try {
     await fs.mkdir(path.join(manualVault, 'Life Ledger', 'Daily'), { recursive: true });
     await fs.writeFile(path.join(manualVault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');

@@ -5753,3 +5753,65 @@ deviations: Claude implemented (Codex provider unavailable in this environment).
   Meal Prep app, inert without production configuration. Cache key `household-food-source.js?v=20261125-household-v1g`.
 - `docs/RELEASE_TASK_043_WEB.md`: controlled web release, Meal Prep production checks and rollback.
 - Separate branch `task-043-meal-prep-activation` adds `household-meal-config.js` (production origin only); approval required.
+
+## TASK-041 - blocked investigation checkpoint (branch: task-041-orphan-heartbeat-recovery)
+changed:
+  - TASKS.md: owner-direct contract recorded; status blocked on the approved failure-preservation guarantee.
+  - accounting-orphan-recovery.test.js: historical-corruption reproducer and two fail-closed controls; intentionally red, not wired into npm test.
+  - TASK_041_LEGACY_TEST_EXPECTATIONS.md: five pre-existing stale quota expectations documented separately; legacy tests unchanged.
+  - TEST_REPORT.md: local regression results, fault-model evidence and independent Claude safety review.
+tests: existing accounting subset 46/46; new reproducer 2/3; original staged-effects 51/56; npm test stopped at unrelated Obsidian test-vault failures.
+blockers: after a successful smaller envelope write with failed readback, restoring original bytes is not guaranteed under quota/concurrent unlocked writers. A conditional facts-preserving route exists, but needs an explicit owner-approved contract decision.
+deviations: no runtime implementation, schema change, validation weakening or release candidate. Local evidence-only checkpoint authorized by owner; no merge, push or deployment. One independent review cycle used; second not started.
+-> status set to `blocked` in TASKS.md; owner approval required before continuing.
+
+## TASK-041 - local implementation qualified, release held (branch: task-041-orphan-heartbeat-recovery)
+changed:
+  - accounting-command.js and generated www/accounting-command.js: exact historical orphan observation recovery before load in drainLocked; deterministic original-device intake/readback, then one validated envelope replacement. No unsafe restoration after unconfirmed readback.
+  - Existing strict envelope validator extracted unchanged to validateEnvelope; synchronous load/snapshot/restore remain read-only and fail closed. Original Start/history/timestamps and acknowledgment gates preserved.
+  - accounting-orphan-recovery.test.js and package.json: focused regression coverage wired into npm test; no legacy expectation or unrelated runtime change.
+  - DECISIONS.md decision 44 records the owner's revised preservation contract and accepted reload/sign-in limit; CODEMAP.md records the new helpers.
+tests: focused 46/46; combined accounting/ACK/mirror subset 186/186; existing browser/emulator 7/7; real Chromium Web Lock/reload and historical-build carry-over probes passed. Fresh Claude implementation QA APPROVE, no blockers.
+blockers: full npm test still stops at three pre-existing Obsidian test-vault fixture failures; original staged-effects remains 51/56 with the same five separately documented stale expectations. No unrelated fixes attempted.
+deviations: owner expressly approved local checkpoints and revised preservation; only local work performed. Review limit respected (two cycles total). Root/www byte-identical; main untouched; no production, rules, push, merge or deployment.
+-> status held `blocked` for broader release qualification, not an unresolved recovery implementation finding. Owner release approval required.
+
+## TASK-042 - test maintenance complete; release qualification blocked (branch: task-042-release-qualification)
+changed:
+  - test.js: canonicalize two disposable Obsidian vault fixtures; unchanged production marker/path safety checks. Baseline and candidate reproduce the same original failures and both pass corrected fixtures.
+  - accounting-hazards/staged-effects.test.js: correct exactly five obsolete quota-throws expectations, retaining readback rejection and strengthening retained-fact, acknowledgment and once-only recovery assertions.
+  - package.json: include staged-effects in the existing npm test chain; no runtime or dependency changes.
+tests: complete npm test exit 0, 3003 passed / 0 failed / 1 existing opt-in skip; baseline/candidate staged-effects 56/56 each; independent test-only QA APPROVE. Mandatory accounting browser run 489/490, with the remaining Check now click timeout reproduced 4/5 times on both baseline and candidate.
+blockers: mandatory Focus interaction qualification remains red; wider suite 801 passed / 303 failed, including 298 recorded known and 2 history-only failures; of 3 outside-ledger failures, 2 MV3 fixture-parent failures pass corrected-environment reruns, while an owner-scale Stop/profile timeout remains unqualified against baseline. CI count 1071 versus actual 1104 and old artifact pins require review. Android native project unavailable; packaged 62-case gate, hosted CI and real-device acceptance unperformed. No failing cases removed, skipped or relabelled green.
+deviations: later Obsidian-sync fixtures use a canonical long-path TMP/TEMP environment instead of unrelated source edits; pinned rules verifier passes 9/9 on authoritative LF Git export but two exact-byte checks fail on Windows CRLF. Cached dependencies reused, none installed. TASK-041 runtime remains exactly b18cc52, root/www parity preserved; no production, push, merge or deploy.
+-> status set to `blocked` in TASKS.md for outstanding release gates, not a new TASK-041 recovery defect. Local test-maintenance checkpoint only.
+
+## TASK-042 continuation - qualification test/CI checkpoint (branch: task-042-release-qualification)
+changed:
+  - tests/accounting-staged-effects.spec.js: schedule callback availability on the real Check now click, preserving all original ACK/effect/remote assertions and adding activation proof.
+  - scripts/verify-installed-rules.test.js: use LF paired release fixture; explicitly reject CRLF without changing production verification or rules.
+  - .github/workflows/ci.yml: verified 1104-case/73-file wider count and independently reviewed b18cc52 expected web/native-bundle fingerprints; mandatory/package gates and failure ledger untouched.
+tests: full npm 3003 passed / zero failed / one existing opt-in skip; mandatory 490/490 and official classifier PASS; rules/ACK/emulator 142/142; Focus candidate 10/10, baseline 6/6, independent Claude 12/12; lint/parity/shared checks, Worker 55/55 and dry-run bundle pass. Independent test/CI QA APPROVE; reviewed runtime unchanged.
+blockers: owner-scale Stop baseline attribution pending; generated Android project cannot build without unavailable API36/AGP8.13.0/Gradle8.14.3 offline tooling; APK-extracted bundle/62 packaged cases, hosted CI and real-device acceptance unperformed. Expected artifact hashes do not claim APK qualification.
+deviations: none to runtime. Existing cached Capacitor generated only ignored native output; no install, external download, production, merge, push or deployment. Original failing reports and independent reviewer provenance correction retained in TEST_REPORT.
+-> TASKS remains `codex` while the independent baseline attribution completes; this is a local test/CI checkpoint, not release authorization.
+
+## TASK-042 continuation - local toolchain boundary
+changed: own TASKS status/blockers and TEST_REPORT append only; code checkpoint 835f182 retained.
+tests: all490 mandatory cases, all142 rules cases, full npm, worker/dry-run, SDK23/23, mutation43/43 and existing superseded-classification gates pass as recorded; no new skips or relaxed assertions.
+blockers: actual APK/packaged62-case qualification requires unavailable API36/Gradle8.14.3/AGP8.13.0 tooling and owner-provided caches or expanded download/install authority. Physical devices/hosted CI unavailable; independent baseline Stop attribution still active, wider gate not declared green.
+deviations: none; existing-tool native generation/offline sync completed, no new infrastructure/install/network/production/runtime/push/merge/deploy. Independent test/CI QA APPROVE, APK explicitly unqualified.
+-> TASKS status `blocked` for a genuine resource boundary, not a routine implementation decision.
+
+## TASK-042 - final independent quota attribution (documentation checkpoint)
+changed: own TASKS blocker and TEST_REPORT append only; reviewed runtime/test/CI checkpoint unchanged.
+tests: unchanged baseline owner-scale profile reproduces the candidate failure at GROW35; read-only baseline/candidate diagnostics show the same quota ceiling and durable original-operation retention. Raw failed runs preserved, not relabelled passing.
+blockers: the original workload still fails required wider CI despite correct fail-closed retention; APK/toolchain/device/hosted gates remain as recorded. Delegated claim that the profile is absent from CI corrected against the actual collector and raw report. No automatic waiver, workload shrink or compaction flag.
+deviations: none; no new implementation, runtime/review cycle, production, push, merge, deployment, installation or external download. Local release remains NO-GO; TASKS stays `blocked`.
+
+## TASK-041/042 November26 - real APK gate cleared; release NO-GO
+changed: owner TASK-042 contract/status and appended qualification evidence only; application/runtime and release configuration frozen. Official Android toolchain locally scoped on D after safe disk remediation; no global environment/shared-source modifications.
+tests: real Gradle-built c7c6eb9 debug APK/extraction matches all three pins; original package62/62 and fresh independent62/62 PASS, no skips/flakes/retries. Independent APK/provenance/signature review APPROVE for that artifact only. Fresh npm3003 passes/zero failures/one existing skip; P0 subset68/68; main Household/partner28/28 and111-file mirror integrity verified separately.
+blockers: fresh Stop review retracts prior blanket durability claim: original failed capture is page-held/not proven durable; coordinator PathB vanishes on reload and device-safe toast misleads. Required original40-round gate stays red/unwaived, needs owner-approved red-zone capacity/durability/truthful-status work. Qualified old-base APK omits merged Householdmain0ff39ec; no combined integration/adoption authorized or tested. Physical devices/Agent access and candidate-hosted CI remain unrun.
+deviations: SDK/build-dependency downloads explicitly owner-authorized from official sources,785 Maven checksum checks independently repeated. Initial ENOSPC/partial export invalidated and preserved; only own hash-verified archives/toolchain moved to local fixed D. Environment-only PS module fix, no source patch, workload shrink, test assertion relaxation or compaction flag. No production, secrets, push, merge or deployment.
+-> TASKS stays `blocked`; local APK qualification is not release authorization. See TEST_REPORT November26 completion and superseding Stop attribution.

@@ -1711,8 +1711,13 @@ for (const uid of ['alice', 'bob']) {
       const original = await page.evaluate(() => accountingCoordinator().snapshot().effects[0]);
       expect(original.kind).toBe('focus-started');
       expect(await page.evaluate(() => _startTimer('Other task'))).toBe(false);
-      await page.evaluate(() => { window.__focusHookFail = false; });
+      await page.evaluate(() => {
+        document.getElementById('time-ack-status').addEventListener('click', () => {
+          window.__focusHookFail = false;
+        }, { capture: true, once: true });
+      });
       await page.getByRole('button', { name: 'Check now', exact: true }).click();
+      expect(await page.evaluate(() => window.__focusHookFail)).toBe(false);
       await expect.poll(() => page.evaluate(() => accountingCoordinator().snapshot().effects.length)).toBe(0);
       expect(await page.evaluate(id => accountingCoordinator().snapshot().effectReceipts[id].operationId, original.id)).toBe(original.operationId);
       expect((await remote(world, uid)).timer).toMatchObject({ mode: 'focus', focusPhase: 'work', startedAt: T0 });
