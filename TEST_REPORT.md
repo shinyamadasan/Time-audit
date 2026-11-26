@@ -3465,3 +3465,11 @@ All delegated execution/independent review work is complete. Local build/package
 - D:/ChronaSenseQualificationEvidence/20261126/apk-independent-review/INDEPENDENT-APK-REVIEW.md; independent extraction, source/pin/signature/official checksum checks, packaged-independent.json and required62-independent.md.
 - C:/Users/DevLabs-Test/AppData/Local/Temp/chronasense-task042-qualification-20261126/: superseding Stop review/disposition, full npm/focused logs, protected-source integrity, main/device/hosted preparation and actual T3 PR check/log snapshots.
 - D:/ChronaSenseQualificationEvidence/20261126/main-reconciliation.json, current-main-export, valid Household28 test log, relocation map and preserved invalid partial export. Previous Nov24 raw evidence remains intact apart from the explicitly recorded hash-identical TAR relocations.
+
+## TASK-044 November26 - combined-tree baseline (9eb6cf2)
+- Byte checks: `git diff b18cc52 HEAD -- accounting-command.js www/accounting-command.js` empty; no Household path differs from 0ff39ec.
+- `node scripts/runtime-mirror.mjs --check`: OK, closure 111 files.
+- `npm test` with default TMP (8.3 alias C:\Users\DEVLAB~1\...): exit 1, 23 Obsidian sync fixture failures (canonical-path). The same 23 fail on the qualified c7c6eb9 worktree in the same environment: environmental, as already recorded for TASK-042.
+- `npm test` with TMP/TEMP=D:\ChronaSenseQualificationEvidence\20261126-queue\tmp: exit 0; node runner 2561 pass / 0 fail / 1 skipped; custom Obsidian runner 455/455.
+- Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-044/{mirror.log,npm-test.log,npm-test-longtmp.log}.
+- Not yet run on the combined tree: wider browser suite, release artifacts/APK (stale pins expected), hosted CI. Those are TASK-046/047.

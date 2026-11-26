@@ -2652,6 +2652,12 @@ environment (mandatory for every run on this machine):
     already documented in TASK-042; not a code regression).
   - node_modules in the worktree is a junction to task-043-household-my-day/node_modules (identical
     package-lock). Android toolchain: D:/ChronaSenseToolchains/task042-20261126.
+dependency-rule (owner instruction overrides AGENTS.md startup step 4 for QUEUE-20261126 tasks only):
+  The owner forbids merging to main AND instructs automatic advancement when dependencies pass
+  (Decision Priority 1: human instructions). Within this queue a `depends-on` task is satisfied when its
+  commits are on branch task-044-durability-integration and its entry records passing verification with
+  status `approved` (red zone, held for owner merge) or `done-local`. Nothing in this queue is merged to
+  main; the owner merges the whole queue once at final release approval. All other gates still apply.
 hard-stops (owner-only):
   - No push to main, merge, PR merge, production deploy, release-gate bypass, waiver or allowlist entry.
   - No production data, Firebase/security rules, credentials, secrets, or deployment-config changes.
@@ -2664,7 +2670,7 @@ deferred (unrelated issues found during the queue; not in scope):
   - C: drive is full; owner housekeeping recommended (affects every tool on the machine).
 
 ### TASK-044 - Integrate TASK-041 runtime and TASK-042 qualification onto Household main
-status: review
+status: approved
 owner: claude
 source: owner-direct (QUEUE-20261126 item 2)
 priority: P0
@@ -2683,9 +2689,14 @@ constraints:
     expected to be stale for the combined runtime; refreshing them belongs to TASK-046, not here.
 verification:
   - node scripts/runtime-mirror.mjs --check; npm test (long-path TMP); git diff --check; byte comparisons.
+result (Nov26): PASS. accounting-command.js + www identical to b18cc52; no Household file differs from 0ff39ec;
+  runtime-mirror OK (111 files); npm test exit 0: 2561 node + 455 custom passed, 0 failed, 1 existing opt-in skip
+  (3016 vs 3003 on c7c6eb9 = +13 Household tests). Default 8.3 TMP run had 23 Obsidian path failures that also
+  reproduce on the qualified c7 worktree (environmental). Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-044/.
+  Red-zone runtime: held `approved` (owner merges the queue at release).
 
 ### TASK-045 - Capture durability, storage capacity and truthful save status (red zone)
-status: todo
+status: codex
 owner: codex
 source: owner-direct (QUEUE-20261126 item 1)
 priority: P0

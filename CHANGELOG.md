@@ -5815,3 +5815,8 @@ tests: real Gradle-built c7c6eb9 debug APK/extraction matches all three pins; or
 blockers: fresh Stop review retracts prior blanket durability claim: original failed capture is page-held/not proven durable; coordinator PathB vanishes on reload and device-safe toast misleads. Required original40-round gate stays red/unwaived, needs owner-approved red-zone capacity/durability/truthful-status work. Qualified old-base APK omits merged Householdmain0ff39ec; no combined integration/adoption authorized or tested. Physical devices/Agent access and candidate-hosted CI remain unrun.
 deviations: SDK/build-dependency downloads explicitly owner-authorized from official sources,785 Maven checksum checks independently repeated. Initial ENOSPC/partial export invalidated and preserved; only own hash-verified archives/toolchain moved to local fixed D. Environment-only PS module fix, no source patch, workload shrink, test assertion relaxation or compaction flag. No production, secrets, push, merge or deployment.
 -> TASKS stays `blocked`; local APK qualification is not release authorization. See TEST_REPORT November26 completion and superseding Stop attribution.
+
+## TASK-044 November26 - TASK-041/042 integrated onto Household main (local branch only)
+changed: merge 9eb6cf2 of task-042-release-qualification (a5de93e) onto origin/main 0ff39ec; doc conflicts unioned; package.json = main plus accounting-orphan-recovery and staged-effects tests in npm test. Queue QUEUE-20261126 recorded in TASKS.md.
+tests: runtime-mirror OK; npm test exit 0 (2561 node + 455 custom, 0 failed, 1 skip) with long-path TMP on D:.
+-> TASK-044 `approved` (held); TASK-045 `codex`. No push, merge or deploy.
