@@ -1054,4 +1054,6 @@ A failed import leaves the original read-backed intake in storage. A failed capt
 
 If IndexedDB or archive verification fails, the live history remains intact. At persistent full storage, the page can warn and retry while open. A forced close or process termination can still lose a page-held operation. Device-level browser quota and unload behavior need physical-device verification.
 
+Known limit (independent review, Nov 26): automatic archiving covers only Start, Stop and hydrate records. Pings, automatic logs, edits, Focus, break/away and undo history, and the committed entries themselves, still grow without bound, so real daily use can still reach the quota, later than before. At that point the page-held path above keeps the loss visible rather than silent, but archiving cannot free space while a page-held capture blocks commits. TASK-046 measures headroom under a realistic mixed workload; widening archive eligibility is a follow-up decision, not part of this one.
+
 ---

@@ -2696,7 +2696,7 @@ result (Nov26): PASS. accounting-command.js + www identical to b18cc52; no House
   Red-zone runtime: held `approved` (owner merges the queue at release).
 
 ### TASK-045 - Capture durability, storage capacity and truthful save status (red zone)
-status: review
+status: approved
 owner: codex
 source: owner-direct (QUEUE-20261126 item 1)
 priority: P0
@@ -2740,7 +2740,7 @@ verification:
     unchanged; accounting browser specs; runtime-mirror --check; git diff --check; SELF_REVIEW.md + QA.md.
 
 ### TASK-046 - Combined-tree qualification: accounting, wider workload, release artifacts, Android packaged
-status: todo
+status: codex
 owner: codex
 source: owner-direct (QUEUE-20261126 item 3)
 priority: P0
@@ -2755,6 +2755,10 @@ acceptance:
   - Rebuild release artifacts from the exact candidate commit with the existing script and toolchain; refresh pins
     with justification; packaged suite (62 or the collected count) PASS; independent APK extraction/parity/
     signature check.
+  - Mixed-workload headroom (from TASK-045 review MAJOR): with E=2489, drive a realistic mix of Start/Stop,
+    heartbeat pings, automatic logs, edits, Focus and break/away commands through the real app (same harness
+    style as tests/zz-perf-profile.spec.js, as a scratch/evidence probe, not a required spec) and record stored
+    characters per day-equivalent and projected days until the ~5.24M wall. Measurement only; no runtime change.
   - An independent reviewer reruns key gates and APPROVES. No expectation edit that hides a behavior change.
 verification:
   - Exact commands, counts, hashes and evidence paths in TEST_REPORT.md.
