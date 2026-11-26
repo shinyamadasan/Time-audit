@@ -2627,6 +2627,160 @@ blockers:
   runtime-fix, integration, remote-write or real-data device authority. See Nov26 completion report.
   Runtime remains b18cc52. No merge, push, deploy, production or release-config change authorized.
 
+### QUEUE-20261126 - Owner-authorized TASK-041/042 engineering queue (read this first)
+source: owner-direct
+context:
+  Owner message, November 26 2026 19:06 UTC (thread "ChronaSense Development Status Review"), re-affirmed in
+  thread "Recover ChronaSense Engineering Queue" after a provider HTTP 400: standing authorization to run a
+  bounded queue for TASK-041/042 including the storage durability issue, in dependency order: (1) smallest
+  reliable storage-capacity/durability fix that never falsely reports a capture as durably saved and preserves
+  or clearly surfaces unconfirmed captures, with proven failure/recovery; (2) integrate with current Household
+  main; (3) independent verification, accounting regression, wider workload, Android packaged tests;
+  (4) resolve genuine required CI failures without weakening tests or hiding failures; (5) prepare physical-
+  device acceptance and final release evidence. Delegate implementation and independent review through T3;
+  advance automatically when dependencies pass; fix in-scope regressions without asking; record unrelated
+  issues under `deferred` below.
+  Execution order note (Tech Lead): integration (2) is done FIRST as TASK-044 so the durability fix is built
+  and qualified once on the combined tree. The owner's required outcomes are unchanged.
+working-branch: task-044-durability-integration (worktree .t3/worktrees/Time-audit/task-044-durability-integration),
+  based on origin/main 0ff39ec + task-042-release-qualification a5de93e. Local only; never pushed.
+evidence-root: D:/ChronaSenseQualificationEvidence/20261126-queue/<task>/
+environment (mandatory for every run on this machine):
+  - C: is ~100% full (about 1.8 GB free). Put all temp, build and evidence output on D:.
+  - Set TMP and TEMP to the long canonical path D:\ChronaSenseQualificationEvidence\20261126-queue\tmp. The
+    default 8.3 alias (C:\Users\DEVLAB~1\...) makes 23 Obsidian canonical-path fixtures fail (environmental,
+    already documented in TASK-042; not a code regression).
+  - node_modules in the worktree is a junction to task-043-household-my-day/node_modules (identical
+    package-lock). Android toolchain: D:/ChronaSenseToolchains/task042-20261126.
+hard-stops (owner-only):
+  - No push to main, merge, PR merge, production deploy, release-gate bypass, waiver or allowlist entry.
+  - No production data, Firebase/security rules, credentials, secrets, or deployment-config changes.
+  - Physical-device participation, security-sensitive decisions, irreversible actions: flag to the owner and
+    continue other independent work.
+deferred (unrelated issues found during the queue; not in scope):
+  - The TASK-043 entry still says status `approved` although PR #27 merged 0ff39ec; closure doc update pending.
+  - Local `main` checkout (b0bbc6f) is behind origin/main 0ff39ec; fast-forward is an owner/operator action.
+  - HANDOFF.md is stale (2026-07-21); regenerate at the next clean checkpoint.
+  - C: drive is full; owner housekeeping recommended (affects every tool on the machine).
+
+### TASK-044 - Integrate TASK-041 runtime and TASK-042 qualification onto Household main
+status: review
+owner: claude
+source: owner-direct (QUEUE-20261126 item 2)
+priority: P0
+depends-on: none
+files: merge commit only; package.json (union of test wiring); CHANGELOG.md/TEST_REPORT.md append; this entry.
+objective:
+  One local tree that contains Household My Day (0ff39ec) and the TASK-041 accounting runtime + TASK-042 test
+  maintenance, with no behavior lost from either side.
+acceptance:
+  - Merge 9eb6cf2: accounting-command.js + www mirror byte-identical to b18cc52; every Household file
+    byte-identical to 0ff39ec; package.json = main's scripts/lint plus the two accounting test files in `npm test`.
+  - runtime-mirror --check passes; full npm test on the combined tree with exact counts recorded; any failure
+    classified (pre-existing on 0ff39ec vs new) with evidence.
+constraints:
+  - No source edits beyond conflict resolution. Pinned artifact fingerprints and wider counts from c7c6eb9 are
+    expected to be stale for the combined runtime; refreshing them belongs to TASK-046, not here.
+verification:
+  - node scripts/runtime-mirror.mjs --check; npm test (long-path TMP); git diff --check; byte comparisons.
+
+### TASK-045 - Capture durability, storage capacity and truthful save status (red zone)
+status: todo
+owner: codex
+source: owner-direct (QUEUE-20261126 item 1)
+priority: P0
+depends-on: TASK-044
+files: accounting-command.js; index.html (accounting status/toast/storage-full sections only, via CODEMAP);
+  storage.js only if the diagnosis proves it necessary; www/ mirrors; new focused tests; DECISIONS.md;
+  CODEMAP.md if structure moves; CHANGELOG.md/TEST_REPORT.md append; this entry.
+context:
+  The TASK-042 Nov26 independent Stop review (TEST_REPORT "superseding independent Stop attribution"; raw at
+  C:/Users/DevLabs-Test/AppData/Local/Temp/chronasense-task042-qualification-20261126/stop-independent-review/,
+  incl. coordinator-quota/quota-paths.review.test.cjs) proved: under the ~5.24M-char localStorage quota,
+  ordinary Start/Stop growth (about 23-24K chars per pair at E=2489) hits the wall around GROW 35-38 because
+  accounting history is unbounded and all compaction flags are default-off (index.html ~2778). Path A (slot
+  durable, import fails) survives page loss. Path B (the capture write itself fails) leaves the operation only in
+  the page-memory `failed` Map: it is lost on reload, while the toast still says "1 pending change is kept safely
+  on this device" (count defaults to 1, index.html ~3426). The required wider spec tests/zz-perf-profile.spec.js
+  (E=2489, PERF_OPS=0,40) has never passed hosted CI.
+objective:
+  Smallest reliable fix so that ordinary use at owner scale does not hit the storage wall within the required
+  workload, a capture is never reported as durably saved unless it is, and an unconfirmed capture is either
+  preserved durably or clearly surfaced (and protected against silent loss) until resolved.
+acceptance:
+  - Diagnosis first: record which bytes dominate growth and the chosen mechanism in DECISIONS.md before coding.
+  - Capacity: the ORIGINAL unchanged tests/zz-perf-profile.spec.js (E=2489, PERF_OPS=0,40, all waits, one
+    worker) passes on the combined tree. No workload shrink, skip, allowlist, quota bypass or assertion change.
+    Any retention/compaction must never drop un-filed logged time or unacknowledged accounting facts; prove it.
+  - Truthful status: no UI string claims "kept safely on this device"/durable unless a durable slot exists for
+    that exact operation; page-held captures show an honest message with their real count.
+  - Page-held (Path B) captures: either made durable through an existing safe mechanism, or the page warns before
+    unload/navigation and keeps retrying, with the original id/input/timestamp flushed exactly once when space
+    frees. Prove Path A and Path B failure, restart, multi-tab and recovery behavior with fault injection.
+  - All existing accounting regressions (storage-full, wall-observation, orphan-recovery, staged-effects,
+    capability, history-cut) and full npm test pass; root/www parity; Hard Rules 4/6/7/8/9 untouched.
+  - Independent review (separate agent) APPROVE with no blocking findings; at most two fix/review cycles before
+    escalating. Gate on approval: `approved` (red zone), never `done`.
+constraints:
+  - No entry schema, RTDB rules, Firebase config or credential change. No startup auto-repair. No new
+    infrastructure or dependency. STOP and record the blocker if the only fix needs a schema/rules change.
+verification:
+  - Focused tests red then green; npm test; npx playwright test tests/zz-perf-profile.spec.js --workers=1
+    unchanged; accounting browser specs; runtime-mirror --check; git diff --check; SELF_REVIEW.md + QA.md.
+
+### TASK-046 - Combined-tree qualification: accounting, wider workload, release artifacts, Android packaged
+status: todo
+owner: codex
+source: owner-direct (QUEUE-20261126 item 3)
+priority: P0
+depends-on: TASK-045
+files: test expectation pins only where the runtime legitimately changed (release-artifact pins, scripts/ci-*
+  expected counts), each change justified byte-for-byte; CHANGELOG.md/TEST_REPORT.md append; this entry.
+objective:
+  Full local qualification of the combined candidate with fresh independent verification.
+acceptance:
+  - npm test; mandatory accounting suite; full wider browser suite (all shards, incl. zz-perf-profile and the
+    household spec) compared with the recorded failure ledger; rules/functions/worker checks.
+  - Rebuild release artifacts from the exact candidate commit with the existing script and toolchain; refresh pins
+    with justification; packaged suite (62 or the collected count) PASS; independent APK extraction/parity/
+    signature check.
+  - An independent reviewer reruns key gates and APPROVES. No expectation edit that hides a behavior change.
+verification:
+  - Exact commands, counts, hashes and evidence paths in TEST_REPORT.md.
+
+### TASK-047 - Resolve genuine required CI failures for the combined candidate
+status: todo
+owner: codex
+source: owner-direct (QUEUE-20261126 item 4)
+priority: P1
+depends-on: TASK-046
+files: as proven necessary by each failure, within accounting/household/test-fixture scope; this entry.
+objective:
+  Every required CI job (.github/workflows/ci.yml, scripts/ci-*) green locally on the candidate; each previously
+  failing job either fixed at its real cause or documented as an environment limitation with evidence. Hosted CI
+  on the candidate requires a push, which is an owner action; prepare the exact command.
+constraints:
+  - No skip, retry inflation, allowlist/known-failure additions, timeout padding without root cause, or waiver.
+verification:
+  - Local reproduction of each required job; independent review of every fix.
+
+### TASK-048 - Physical-device acceptance kit and final release evidence
+status: todo
+owner: claude
+source: owner-direct (QUEUE-20261126 item 5)
+priority: P1
+depends-on: TASK-047
+files: release packet under docs/ or the evidence root; STATUS.md; this entry.
+objective:
+  A release packet the owner can approve in one pass: candidate SHA, artifact hashes, gate table with evidence
+  links, rollback target, and a short physical-device checklist (Android debug APK on a dedicated empty
+  profile/device; web on a phone browser) covering Start/Stop, storage-full honesty, reload with a page-held
+  capture, cross-device Stop and the Household view.
+constraints:
+  - Device steps need the owner (T3 device access disabled). Never uninstall or wipe a real-data install.
+verification:
+  - An independent reviewer confirms every gate claim links to raw evidence.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
