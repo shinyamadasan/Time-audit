@@ -2514,6 +2514,14 @@ context:
   CI/artifact checks and Android packaging where possible, preserving reviewed runtime; independent
   QA when needed. Existing-tool native project generation is allowed for local packaging only,
   with cached dependencies/toolchains; no installs, remote services or artifact substitution.
+  November26 owner amendment supersedes the prior missing-toolchain installation restriction:
+  install/download only the necessary local SDK36, Gradle8.14.3 and Android Gradle Plugin build
+  dependencies from official trusted sources. Delegate execution and independent verification
+  through T3. Complete real APK/package62 qualification, independently verify Stop attribution,
+  propose explicit wider-performance disposition without waiver/workload/assertion weakening,
+  compare with current main including merged Household My Day, and prepare device/hosted-CI evidence.
+  No application runtime, release configuration, Firebase, production or secret changes; no push,
+  merge or deploy. Reconciliation is read-only comparison/integration planning, not adoption.
 objective:
   Remove verified test/environment blockers without altering reviewed runtime, then report
   evidence-backed release readiness and outstanding packaged/device/owner requirements.
@@ -2532,10 +2540,15 @@ acceptance:
   - Qualify fixture fixes against baseline/candidate without weakening semantic/user-action assertions;
     verify collected CI counts and exact artifact fingerprints, with independent QA before adoption.
     Attempt existing local Android build tools only; report unavailable SDK/cache/device gates precisely.
+  - November26 amendment: real debug APK and62 packaged cases with exact source/manifest hashes;
+    independently verified attribution and explicit unapplied performance-test disposition;
+    read-only current-main/Household comparison, plus honest device and hosted-CI evidence gaps.
+    Keep NO-GO until all required gates pass; involve owner only for decisions/devices/boundaries.
 constraints:
   - No production, real-account/data/credentials access, Firebase rules edits, push, merge or deploy.
-  - No new infrastructure or broad architecture investigation; cached local tools and synthetic
-    loopback emulators only. No dependency installs or shared dependency target changes.
+  - No new infrastructure or broad architecture investigation; synthetic loopback emulators only.
+    Necessary Android toolchain downloads/installations are locally authorized from official trusted
+    sources; no shared existing dependency target, application runtime or release-config changes.
   - STOP on an actual permission/security boundary or a verified gate requiring unavailable
     resources, after completing independent feasible qualification work. Do not weaken checks.
 verification:
@@ -2543,18 +2556,18 @@ verification:
     baseline cross-check; complete npm test; lint/parity/rules/functions checks; CI-required
     emulator/browser/worker/artifact checks or exact unavailability evidence; git diff --check.
 blockers:
-  Continuation resolved the Focus/rules fixture failures: mandatory490/490, npm3003 passed with
-  one existing opt-in skip, rules142/142, Worker55/55 plus dry-run and all static checks pass.
-  Wider count1104 and exact expected candidate artifact pins independently reviewed and updated;
-  failure ledger unchanged. Native project generation/offline sync pass, but API36 SDK,
-  AGP8.13.0 dependencies and Gradle8.14.3 distribution/cache are absent. APK build/62 packaged
-  tests require owner-provided offline toolchain or explicit expanded download/install authority;
-  physical-device acceptance and hosted CI remain unperformed. Independent baseline attribution
-  confirms the raw wider Stop/profile failure is the pre-existing storage-quota ceiling with
-  the original operation durably retained, not a demonstrated TASK-041 regression. The default
-  workload still fails the required wider CI gate; do not silently waive it, shrink the workload,
-  enable compaction or alter runtime. See TEST_REPORT.md TASK-042 final attribution.
-  Runtime remains b18cc52. No merge, push, deploy, production or unauthorized download.
+  November26 real APK build and original package62/62 PASS; fresh independent extraction/signature/
+  provenance verification and second62/62 PASS. Toolchain blocker resolved with official scoped
+  installs; no runtime/release-config change. Required wider capacity gate stays red: original
+  GROW35 snapshots show a page-held failed capture, not proof of a durable Stop. Coordinator
+  PathB is lost after page loss and device-safe toast misleads; PathA is durable. Pre-existing is
+  not waived. Keep original workload40/all waits/default-off compaction and ledger unchanged;
+  separate red-zone capacity/durability/truthful-status fix requires owner approval. Main0ff39ec
+  includes Household absent from qualified source c7c6eb9; only read-only reconciliation performed,
+  no combined candidate qualified or merge/adoption authorized. Device access disabled; physical
+  acceptance and candidate-hosted CI remain unperformed. SDK install authority is not release,
+  runtime-fix, integration, remote-write or real-data device authority. See Nov26 completion report.
+  Runtime remains b18cc52. No merge, push, deploy, production or release-config change authorized.
 
 <!-- Paste new tasks above this line. -->
 
