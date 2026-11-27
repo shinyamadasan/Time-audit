@@ -683,3 +683,63 @@ notes (non-blocking): N1 no focus-learning-finish case for "server applied Stop,
 evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/review/VERDICT.md
 risk gate: test-only but accounting/Focus coverage → `approved` (held with the candidate), once TASK-049 lands and the unit
   job is re-run.
+
+---
+
+## TASK-049 review round 2 · 2026-11-26 · lock/claim published by hard link; removal checks file identity
+
+reviewer: independent Claude review subagent (did not write TASK-049). Range cd2032f..50d909b (fix 14aeefc, docs 50d909b). Scratch: D:/t/rev049b/{old,new} (`git archive 50d909b`; old = 806854c worker; no node_modules link; removed afterwards). My outputs: D:/ChronaSenseQualificationEvidence/20261126-queue/task-049/review2/.
+verdict: **APPROVE**. Must-fix 1 from round 1 is closed, including the claim-level variant and the mixed-file bytes/mtime problem. I found no two-holder interleaving.
+
+### Round-1 must-fix: closed
+- **Rule 1, publication** (`scripts/life-ledger-sync-worker.mjs:207-227`). The payload goes to a unique `.stale-*` temp, then `fs.link()` makes the name appear. EEXIST means the name is held. A lock or claim this worker creates is therefore never empty or partial, and every one carries a nonce. The round-1 attack needs a live generation whose bytes equal a crashed one's, and that can no longer happen.
+- **Rule 2, judgment** (`:233-265`). Bytes, mtime and `dev:ino:birthtimeNs` come from one handle, using bigint stats. If a read by name disagrees with the handle read, the file is treated as live.
+- **Rule 3, removal** (`:277-288`). Under the claim, the file is re-read through a handle. It is renamed only if the identity and the bytes are the same as what was judged and it is still stale.
+- Both round-2 regressions reproduce my round-1 interleavings with test-only gates. They are red on the 806854c worker and green on 50d909b (below).
+
+### Interleavings checked (2-3 contenders), all exclusive
+- **Name lifetime.** Only two things remove L: its holder's release, and the holder of claim(sha(bytes of L)). An inode occupies L for one continuous interval, because L is only ever filled by `link()` of a fresh temp. So once a claimant has re-checked L under its claim, L cannot change before its rename.
+- **Different-generation claimants** (C(G1) and C(G2) held at once). Each re-reads L, and only the one whose generation is actually at L removes it.
+- **Legacy or foreign empty files.** They share bytes and a claim name, and identity separates them.
+- **Crash points:**
+  - Temp written, no link yet: temp left behind; retention prunes it after its age threshold.
+  - Linked, temp not yet removed: an extra link to a dead holder's inode. Retention unlinks only that name, and the identity of L is unchanged.
+  - Renamed to a tombstone, not yet removed: the tombstone is pruned.
+  - Removed, before the new publish: an inert orphan claim.
+  - Holding a claim before the removal: the claim's pid is dead, so the claim is broken through `claim.claim-*`.
+- **Release racing a takeover.** A live holder's lock is never judged stale. If L vanishes or changes during judgment, the contender only skips.
+- **Nested claims.** A replaced claim fails the identity check, and the late contender backs off.
+- **The claim's own `finally` removal.** It removes by name, but only the live claimant ever holds that name.
+- **Retention timing.** Retention prunes `.stale-*` only once it is older than `staleLockMinutes` (`life-ledger-sync-retention.mjs:220-233`). It cannot delete an in-flight temp.
+
+### Windows / filesystem facts (probed on this machine, Node v24.19.0; `review2/linkprobe.mjs`, `review2/delpend.mjs`)
+- `fs.link` works on D: (NTFS), C:, and inside C:\Users\…\OneDrive. A second link gives EEXIST. After link and temp removal, the identity at L equals the temp's identity.
+- When a deleted name is re-created at once, NTFS reuses the same MFT record and bumps the sequence (ino Δ = 2^48), and tunneling gives the new file **the same birthtime**. Identity therefore rests on the sequence-bearing `ino`, not on birthtime.
+- On D:, `ino` is above 2^53 (`Number.isSafeInteger` = false without bigint), so `stat({ bigint: true })` is necessary, and the code uses it.
+- The holder's `rm(L)`, while a contender has L open, frees the name immediately (POSIX delete semantics), and a following `link()` succeeds. A delete-pending EPERM therefore does not get mislabelled as `lock_unsupported_filesystem` here.
+- Wedge and recursion: an identity mismatch only makes a contender back off, and the identity of a given file is stable. Recursion grows only per dead breaker, as in round 1. Re-judging staleness under the claim is correct.
+
+### Non-blocking notes
+1. **Owner-facing: `lock_unsupported_filesystem`.**
+   - The scheduler has never been registered (docs/PHASE10), so no existing setup breaks.
+   - The default and example `backupsRoot` (`Desktop\Second-Brain-Backups\life-ledger-sync`) is NTFS here. A OneDrive-redirected Desktop also works, as probed.
+   - The risk applies only if the owner puts `backupsRoot` on exFAT/FAT (USB) or on a NAS/SMB share without link support. In that case every cycle exits 1 before taking the lock and writes no status. Task Scheduler's LastTaskResult shows the failure, as for other lock errors.
+   - `EPERM` is mapped to "unsupported", so a genuine ACL denial on `link()` would get a misleading message. That is unlikely, because the temp write in the same directory has already succeeded.
+2. **DECISIONS #46 wording.**
+   - Birthtime adds nothing on NTFS, because of tunneling. NTFS uniqueness comes from the `ino` sequence number.
+   - "POSIX reuse would need an identical birthtime" does not hold on filesystems with no btime. This matters only for legacy or foreign empty files.
+3. **CODEMAP lock sentence.** It still says "an unparsable one (including a lock still being written)". After rule 1 no lock is ever being written, so the phrase is stale.
+4. **Known residue (unchanged).** Orphan `.claim-*` files are not pruned, and `isBackupsRootLockLive()` is out of scope.
+
+### Reruns (mine)
+- Red/green: the 50d909b test file with the 806854c worker gives **21 pass / 3 fail**: "two workers were inside the lock at once (D skipped:false, X skipped:false)", "D removed X's live claim", and the no-hard-links test. With the 50d909b worker it gives **24/24** (`red-on-806854c-worker.log`, `green-50d909b.log`).
+- Existing tests unchanged: the cd2032f blob (35,499 bytes) is a byte-identical prefix of the 50d909b blob, numstat +216/-0. The worker has no test hooks; the injection wraps `node:fs/promises` test-side only.
+- Loop: **150/150** consecutive `node --test scripts/life-ledger-sync-worker.test.js` runs, 24/24 each, 0 failures (`rerun-loop-150.log`).
+- Siblings: chaos 11, health 13, intervention-latch-recovery 5, restore 15, retention 13, tmp-cleanup 7, worker 24, all exit 0 (`rerun-siblings.summary`).
+- `npm test` (TMP=TEMP=D:/t): exit 0. Node runner 2,567 passed, 0 failed, 1 existing skip. Custom 455/455.
+- `npm run lint`: exit 0, 0 errors, 172 warnings (baseline).
+- Scope: only the seven TASK-049 files changed.
+
+No code or test changed. Nothing was committed, pushed, merged or deployed. The scheduler installer and `--apply` were not run. The scratch tree has been removed, and it never held a node_modules link.
+
+gate: **approved (held)**. The queue disallows `done`, and this is the lock that guards vault writes. The human merges it with the candidate.
