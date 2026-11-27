@@ -5866,3 +5866,10 @@ tests: on the round-1 worker the round-2 file runs 21 pass / 3 fail. Both ABA re
 behaviour change: a backupsRoot on a filesystem without hard links now fails loudly instead of locking. A publication temp left behind by a crash matches the retention tool's tombstone pattern, so retention prunes it.
 deviations: the reviewer's probe gates on `fs.stat(lock)`, which the worker no longer calls, so the probe would hang rather than test anything. The appended regression reproduces the same interleaving with implementation-neutral gates (before the claim is created; after the new lock name appears). No push, merge, deploy, scheduler install or `--apply` run.
 -> TASK-049 `review`.
+
+## TASK-050 · 2026-11-27 · Archive every settled accounting history kind (Option A)
+- accounting-command.js, index.html (+ www mirrors): automatic archive eligibility widened from Start/Stop/hydrate to
+  every settled kind per DECISIONS #47; whole causal chains, the timer write chain, aliases and cache witnesses
+  protected; at the storage wall a verified quota cut can free room so a page-held capture becomes durable.
+- Tests: accounting-archive-settled.test.cjs (wired into npm test), two new storage-durability browser cases.
+- Docs: DECISIONS #47 per-kind audit; CODEMAP.

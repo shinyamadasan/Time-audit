@@ -2883,7 +2883,7 @@ dependency-rule: as QUEUE-20261126 (a dependency counts when its work is on this
 implementer: Claude (Codex out of quota until Nov 29); every change gets a separate independent reviewer.
 
 ### TASK-050 - Option A: bound all settled accounting history (red zone)
-status: codex
+status: review
 owner: claude
 source: owner-direct (QUEUE-20261126-B item 1)
 priority: P0
@@ -2913,7 +2913,7 @@ verification:
     runtime-mirror --check; git diff --check.
 
 ### TASK-051 - Offline time-loss investigation (known failures F-1..F-5 and similar)
-status: codex
+status: approved
 owner: claude
 source: owner-direct (QUEUE-20261126-B item 4)
 priority: P0
