@@ -5,6 +5,35 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-11-26 — QUEUE-20261126 complete locally; release packet awaiting owner decisions
+
+The engineering queue is done on local branch `task-044-durability-integration`. Candidate `da5c4d4` is based on
+origin/main `0ff39ec`. TASK-044, 045, 046, 047 and 049 are each independently reviewed and held `approved`, because
+they are red zone. Nothing is pushed, merged or deployed. TASK-048, the release packet, is in `review`.
+
+Every required job is green locally:
+- npm test ×3: 2,567 + 455 passed, 0 failed
+- mandatory 490/490 ×5
+- wider 1,107, 0 outside the ledger
+- packaged 62/62
+- perf-profile 1/1
+- durability 3/3
+- Household 11/11
+- rules, Worker and APK parity/signature
+
+**The release is not storage-safe.** At 2,489 entries under mixed use, about 7 day-equivalents remain before the
+storage wall. A change held only in the page is lost on a forced close.
+
+Waiting on the owner:
+- (a) the storage decision: widen archive eligibility, or stop storing entries three times
+- (b) a hosted-CI push to `release/queue-20261126-rc`
+- (c) the physical-device checklist
+- (d) merge and deploy
+
+Packet: docs/RELEASE_PACKET_QUEUE_20261126.md. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/.
+
+---
+
 ## 2026-11-02 — TASK-039 development stopped; release checklist ready
 
 Local checkpoint 3632f15: pending-sync panel no longer blocks taps (CSS only). Start-time and timeout investigations
