@@ -3778,3 +3778,12 @@ Empty claim: the same steps one level up.
 "Inside the lock" means reaching the latch read, and both contenders are held there so that any overlap is observed. Every gate also falls back to the other contender settling, so neither test can hang.
 
 Not run: hosted CI and POSIX/Linux. The design relies on `link()` EEXIST atomicity and `fstat` identity, which both platforms provide (DECISIONS #46). No scheduler installer, and no `--apply` against real folders.
+
+## TASK-047 · unit job re-run after TASK-049 · 2026-11-26
+Tree `9db0bf5` (TASK-049 round 2 approved). TMP/TEMP=D:/t, one machine, quiet. Evidence:
+`D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/unit-rerun-9db0bf5/`.
+- `npm test` x3 consecutive: each exit 0; node runner 2,567 passed, 0 failed, 1 existing opt-in skip (2,568 tests) — the
+  +3 over 2,564 are TASK-049's appended lock tests. Custom runners 0 failures.
+- `node scripts/runtime-mirror.mjs --check`, `npm run lint`, `npm run check:firebase-rules`, `npm run check:functions-shared`: exit 0.
+- Combined with the TASK-047 table (rules, accounting x3 + count 490, packaged 62, worker 55, regression x4 classifier) and the
+  approved Focus-test and TASK-049 reviews, every required job is green locally. Hosted CI not run (needs owner push).

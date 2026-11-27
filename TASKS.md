@@ -2772,7 +2772,7 @@ result (Nov26): ready for review. Pins committed in 0dc2a07 (WIDER_COUNT 1107 an
   TASK-047. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/.
 
 ### TASK-047 - Resolve genuine required CI failures for the combined candidate
-status: blocked
+status: approved
 owner: codex (Claude implemented/tested Nov26 while Codex is out of quota until Nov29)
 source: owner-direct (QUEUE-20261126 item 4)
 priority: P1
@@ -2812,7 +2812,7 @@ blocker: the required `unit` job (npm test) is intermittently red, outside TASK-
   Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/ (gates/, lock-probe/).
 
 ### TASK-048 - Physical-device acceptance kit and final release evidence
-status: todo
+status: codex
 owner: claude
 source: owner-direct (QUEUE-20261126 item 5)
 priority: P1
