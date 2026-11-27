@@ -2988,6 +2988,21 @@ acceptance (for the plan, written in this queue): design alternatives with trade
   schema/RTDB impact (must be none or explicitly owner-approved); forward + rollback migration plan with synthetic
   verification; capacity target; red-zone gate.
 
+### TASK-056 - Plan Tomorrow modal height test: sub-layout-unit float noise (wider CI flake)
+status: review
+owner: claude (trivial test-only change, coordinator-implemented; independent review in the TASK-052 review)
+source: owner-direct (QUEUE-20261126-B item 5-6: hosted CI must pass)
+priority: P0
+depends-on: TASK-052
+files: tests/daily-command-center.spec.js ("Plan Tomorrow uses the approved desktop modal...") only; TEST_REPORT; this entry.
+context: TASK-052 found the test failing 10/20 on the candidate and 8/20 on 0ff39ec with box heights like 672.0000267
+  against <= 672: boundingBox() float noise from CDP quads; Chromium lays out in 1/64 px units.
+change: compare against visualViewport.height - 48 (the value the app uses) with < 1/64 px allowance; also require the
+  visual viewport not to exceed the integer viewport. Real overflow of >= 1/64 px still fails.
+result (Nov27): first attempt (exact visualViewport comparison, no allowance) 11/20 - noise is in the box, not the
+  viewport; final 30/30; mutant (CSS max-height 47.5px margin, i.e. 0.5 px overflow) fails with 672.5000267 vs
+  < 672.015625. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-056/.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

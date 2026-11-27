@@ -3962,3 +3962,10 @@ Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-050-review/ (r
 **Cleanup.** The scratch worktrees D:/t/r052main (0ff39ec) and D:/t/r052fl (flake control) were removed. In each case the node_modules junction was deleted first with `rmdir`; the target still holds 404 entries. Then `git worktree remove` ran without `--force`.
 
 Not run: hosted CI (TASK-053), physical devices, an independent reviewer rerun.
+
+## TASK-056 · 2026-11-27 · Plan Tomorrow modal height test float noise
+`node node_modules/@playwright/test/cli.js test tests/daily-command-center.spec.js -g "approved desktop modal" --workers=1`
+(TMP/TEMP=D:/t), looped. Before (TASK-052): 10/20 fail on candidate, 8/20 on 0ff39ec (box 672.0000152-672.0000267 vs
+<= 672). Attempt 1 (compare to visualViewport.height - 48, no allowance): 11/20 pass (`task-056/run-*.log`) — viewport
+was exactly 720; the noise is in boundingBox(). Final (< visible - 48 + 1/64 px): 30/30 (`task-056/v2/`). Mutation:
+CSS max-height margin 47.5px → fails (672.5000267 vs < 672.015625) (`task-056/mutant-47.5px.log`); CSS restored.
