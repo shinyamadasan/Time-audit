@@ -3637,3 +3637,85 @@ Command: `node node_modules/@playwright/test/cli.js test <every spec except the 
 | mandatory 490 | **not clean.** A 490/490 classifier combination exists, but one red-zone intermittent remains unattributed: Focus terminal Learning frontier reload timeout, 2/5 HEAD shard 2 runs vs 0/3 pre-TASK-045, 0/100 isolated on each tree |
 
 No runtime, test, ledger, skip or timeout change was made. TASK-046 goes to `review` so the reviewer can rule on the open intermittent. It may be routed to TASK-047 or treated as a TASK-045 rework trigger. It is not waived.
+
+## TASK-047 · 2026-11-26 · Required CI jobs on the combined candidate
+
+Candidate tree is `3d8c9f9` (the TASK-046 tree plus the one-test fix below). Relative to `120dba5`, the commit the TASK-046 release artifacts were built from, only `.github/workflows/ci.yml` (the TASK-046 pins), docs and `tests/accounting-staged-effects.spec.js` differ. Evidence is under `D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/`. Runs used `TMP`/`TEMP` `D:/t`, Node 24.19.0, cached Chromium, the local RTDB emulator (v4.11.2, checksum-verified cache hit) and one Playwright worker. Accounts and namespaces were synthetic. Claude ran everything as implementer/tester because Codex is out of quota.
+
+### Correction to the TASK-046 text (archive warm-up)
+
+The TASK-046 section above says TASK-045 "warms the history archive on coordinator creation by default". That is wrong. `index.html:2909` warms the archive only when `historyCut.minEnvelopeChars == null`. That happens only under the explicit `ta3-accounting-flag-history-cut` flag. The default policy sets `minEnvelopeChars` (`index.html:2785-2788`), so no warm-up runs by default (TASK-046 review, Part A). The original text is left unchanged as history.
+
+### Focus terminal Learning frontier flake (`accounting-staged-effects.spec.js:1474`)
+
+- **Root cause (test).** The route handler called `route.fetch()` before it awaited the hold. The Stop PATCH therefore reached the emulator and only the HTTP response was delayed. After `page.reload()`, the new page settled the finish through unheld GETs, so the restored `break` phase was visible for only about 90 ms. The `waitForFunction(pomodoroPhase === 'break')` raced that window. It lost when the Node→CDP round trip after the reload took longer, as late in a 264-test shard or under load.
+- **Second defect from the same cause.** In a passing run, the frontier check (400 `tickPomodoro()` calls at T0+20 min, then "no `focus-end-break` capture") usually ran on a page that was already idle. That makes the check vacuous. `probe-phase-before-nodelay` (the pre-fix test, instrumented only) logged phase `idle` before the ticks in 7/10 passing runs.
+- **Fix (commit `3d8c9f9`, test only, no runtime change).**
+  - The handler now holds every Stop PATCH before it reaches the emulator.
+  - The original page's request is aborted on release, because its document is gone after the reload. The reloaded page's own resubmitted Stop is continued to the emulator.
+  - The test now also asserts, after the reload and before the frontier ticks:
+    - the reloaded page resubmitted the Stop and it is held (`heldAfterReload > 0`);
+    - the original `focus-learning-finish` op is still queued;
+    - `pomodoroPhase` is `break`;
+    - the emulator timer is not stopped.
+  - Every existing assertion is unchanged: no `focus-end-break` candidate; after release, phase idle, remote timer stopped, exactly one entry T0→T0+5 min with `blockIntervalMin: 5`, and the original op in history.
+  - No timeout, retry, skip or ledger change.
+- **Red → green.** `probe-delay200.py` copies the spec and inserts a 200 ms pause between `reload()` and the unchanged wait. It also logs the phase around the ticks. Copies ran from `tests/zz-probe047-*.spec.js` and were deleted afterwards; the copies are kept in evidence.
+  - Pre-fix spec: **8/8 failed**, each with `page.waitForFunction: Test timeout of 30000ms exceeded` (`probe-delay200-before.{log,exit,command.txt}`).
+  - Fixed spec: **20/20 passed** (`--repeat-each=10`, both users). The phase was `break` before and after the ticks in all 20 runs (`probe-delay200-after.*`).
+  - Fixed spec without the pause: 4/4 passed in isolation (`scratch-first-artifacts`).
+- **Quiet full shard 2, five runs** (`quiet/`, launcher `run-mandatory-quiet.sh`). Before each run the launcher checked that no other Playwright, Chromium or emulator process existed. The only exclusion was the owner's idle `serve-household-preview.mjs` with its emulator (PIDs 16704/48184, 0.2 CPU-seconds per 5 s).
+  - Command: `PLAYWRIGHT_JSON_OUTPUT_NAME=<run>.json node node_modules/@playwright/test/cli.js test <10 MANDATORY_SPECS from ci.yml> --workers=1 --forbid-only --shard=2/3 --reporter=list,json --output <run>-artifacts`.
+
+  | run | result | Focus terminal (alice, bob) |
+  |---|---|---|
+  | `mandatory-2-r1` | 264/264, 0 skipped/flaky | passed 2.7 s, 2.7 s |
+  | `mandatory-2-r2` | 264/264 | passed 2.8 s, 2.9 s |
+  | `mandatory-2-r3` | 264/264 | passed 2.7 s, 2.8 s |
+  | `mandatory-2-r4` | 264/264 | passed 2.6 s, 2.8 s |
+  | `mandatory-2-r5` | 264/264 | passed 2.7 s, 2.8 s |
+
+- Shard 1 passed 186/186 and shard 3 passed 40/40, with the same command (`quiet/mandatory-{1,3}`). `node scripts/ci-test-report.mjs required 490 mandatory-1.json mandatory-2-r<n>.json mandatory-3.json` passed **490/490, 0 skipped and 0 flaky for each n = 1..5** (`quiet/mandatory-required-490-r*.log`).
+- **Under-load runs (not counted as quiet).** The first launcher's spec-list extraction did not handle CRLF and produced an empty list, so it ran every spec (`aborted-wrong-spec-list/`). Stopping that background task did not stop its bash loop. The loop kept running full-suite shards with the same file names while the corrected launcher ran. All of those outputs are kept in `concurrent-contaminated/`. They were not used for the quiet proof. Under that doubled load, the fixed test still passed in every intact shard-2 report (r1, r4, r5: 264/264). The r2/r3 files were overwritten by the stray loop, although their recorded exits were 0. Shards 1 and 3 were 186/0 and 40/0. The stray loop was killed (PIDs 15856/42056 and children) before the quiet set started.
+
+### Required jobs (`.github/workflows/ci.yml`), reproduced on `3d8c9f9`
+
+Unit, rules, Worker and packaged ran from `run-gates.sh` (`gates/`), serially.
+
+| Job | Local command(s) (same as ci.yml unless noted) | Result | Class |
+|---|---|---|---|
+| unit | `npm run check:www-parity`, `check:firebase-rules`, `check:functions-shared`, `lint`, `npm test` | parity, rules builder, functions-shared and lint (0 errors, 172 warnings) pass. **`npm test` failed once** (`gates/npm-test.log`, life-ledger lock race below). Reruns `npm-test-r2`/`r3` passed: 2,561 Node-runner + 455 custom = 3,016 passed, 0 failed, 1 existing skip | **genuine failure (pre-existing), not fixed here: blocker** |
+| rules | `provision:rtdb-emulator`; the five rules suites; `ci-node-superseded` tombstone and reliability; fences; mutation | 142/142; required 3/3 and 1/1 (the 4 and 5 superseded failures are reported as designed); 23/23; 43/43 | green |
+| accounting ×3 + accounting-count | as above | 490/490 in five quiet combinations | green (flake fixed) |
+| packaged | byte-equality step against `task-046/release-02` (built from `120dba5`; `www/` and `firebase.rules.json` are byte-identical at `3d8c9f9`); `CHRONASENSE_RELEASE_DIR=… npx playwright test tests/accounting-release-artifacts.spec.js --workers=1 --forbid-only`; `ci-test-report required 62` | web `bf81c9e5…1dfe`, bundle `6c73eb28…c275` and rules `93f0a774…be00` all OK (`gates/packaged-pins-r2.log`); 62/62; classifier PASS | green; **hosted-only:** `npx cap add android` + `build-release-artifacts.mjs --gradle-online` (the local build is TASK-046's offline D: toolchain build) |
+| worker | `npm test --prefix workers/chronasense-conversational-bridge`; `npm run check:bundle --prefix …` | 55/55; Wrangler dry-run bundle passed (1549.08 KiB) | green |
+| regression ×4 + regression-report | the exact `ci-run-wider.mjs` spec set and split (75 files, sorted, minus the 10 mandatory specs and the release spec) with `--workers=1` added, then `legacy any` per shard and `legacy 1107` aggregate (`wider/`, `run-wider-quiet.sh`) | shards 284/271/337/215, each classifier 0 outside. **Aggregate: ran 1107, passed 808, 297 known, 2 history-only, 0 outside the baseline, 17 baseline now passing**, exit 0 | green; note that hosted CI uses Playwright's default worker count, not 1 |
+| release-gate | needs every job above | follows from the rows above. Locally it would be red only through the unit-job race | — |
+
+- `gates/packaged-pins.log` (first attempt) and its first retry printed MISMATCH. The launcher's shell extraction of the pins was wrong: it kept a trailing CR from the CRLF working copy of `ci.yml`, and the retry's `grep -P` is unsupported in this locale. The printed hashes were already equal to the pins. `packaged-pins-r2.log` reads them with Node and passes. The Git index stores `ci.yml` with LF, so the hosted checkout is not affected.
+- Hosted-only steps that cannot be reproduced on this Windows machine are environment limitations, not failures: `actions/setup-node`/`setup-java` with npm cache, `npm ci --legacy-peer-deps` (local `node_modules` is the junction to the identical lockfile install), `npx playwright install --with-deps chromium` on Ubuntu, artifact upload/download and the online Gradle build.
+- The perf spec in wider shard 4 wrote `perf-profile.json` into the worktree root. It was moved to `wider/perf-profile.root-output.json`. `review-artifacts/` predates this task and was left untouched.
+
+### Genuine required-CI failure outside TASK-047 scope: Life Ledger worker stale-lock takeover race
+
+- **Symptom.** `scripts/life-ledger-sync-worker.test.js:340` "Finding 3: two concurrent contenders racing the same stale lock -- exactly one obtains execution authority" fails with `2 !== 1`. Both contenders proceed.
+  - Whole-file rate on the candidate: **5/40** (`gates/lock-file-repeat.log`, failing logs `gates/lock-file-fail-*.log`, all this one test).
+  - Isolated (`--test-name-pattern`): 0/40.
+  - **Pre-existing:** on a raw export of origin/main `0ff39ec`, where the worker and its test are byte-identical, the whole file fails **4/40** (`lock-probe/main-0ff39ec-repeat.log`).
+  - It reaches CI through `npm test` in the required `unit` job, at roughly 10% per run.
+- **Root cause (code reading confirmed by a trace).** `acquireLock()` (`scripts/life-ledger-sync-worker.mjs:168-201`) judges staleness from content it read earlier, then takes over with `fs.rename(lockPath, tombstone)`. That rename moves whatever file is at `lockPath` at that moment. The failing interleaving: A and B both read the dead-pid lock. A renames it, creates its own fresh lock and is running. B then renames A's fresh lock away (it succeeds, because B's verdict was about the old content) and creates its own. Both hold "authority".
+  - `lock-probe/probe-lock-trace.py` (scratch export only) logs the two contenders reading `pid=999999 stale=true` in the same window (`trace-pass-sample.log`).
+  - Yielding at the takeover point (`probe-lock-delay.py`, `PROBE_LOCK_DELAY_MS=0,0`) raised the isolated failure rate from 0/20 to 3/20 (`probe-lock-delay.log`, `probe-lock-sweep.log`).
+  - Timer granularity on Windows made a fully deterministic delay pair impractical (`10,13`: 3/10). That is recorded, not hidden.
+- **Why not fixed here.** The fix is a runtime change to the Life Ledger sync worker. For example, verify that the renamed tombstone is the lock that was judged stale, and restore it otherwise; or use a takeover the filesystem makes atomic. That file is outside TASK-047's accounting/household/test-fixture scope. The owner instruction says to stop and record a blocker when a real fix needs runtime code. Loosening the test assertion would weaken what it proves. Nothing was changed, skipped, retried or ledgered.
+
+### Hosted CI: prepared command (owner action; not run)
+
+The branch's upstream is configured as `origin/main` (`branch.task-044-durability-integration.merge = refs/heads/main`), so a bare `git push` must not be used. `ci.yml` runs on push to `release/**`, which is the pattern already used for `release/task-039-rc-1ed7da0`. This pushes the candidate commit to a new release branch without touching `main` or opening a PR:
+
+```
+git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration rev-parse refs/heads/task-044-durability-integration
+git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration push origin refs/heads/task-044-durability-integration:refs/heads/release/task-047-rc
+```
+
+The first command prints the SHA being pushed. Confirm that it is the reviewed candidate before running the push. The source is the local branch ref (explicit refspec), and the destination is a new `release/` branch. Expect the `unit` job to hit the Life Ledger lock race on roughly 1 run in 10 until that blocker is fixed.

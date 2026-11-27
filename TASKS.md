@@ -2772,8 +2772,8 @@ result (Nov26): ready for review. Pins committed in 0dc2a07 (WIDER_COUNT 1107 an
   TASK-047. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/.
 
 ### TASK-047 - Resolve genuine required CI failures for the combined candidate
-status: codex
-owner: codex
+status: blocked
+owner: codex (Claude implemented/tested Nov26 while Codex is out of quota until Nov29)
 source: owner-direct (QUEUE-20261126 item 4)
 priority: P1
 depends-on: TASK-046
@@ -2795,6 +2795,21 @@ constraints:
   - No skip, retry inflation, allowlist/known-failure additions, timeout padding without root cause, or waiver.
 verification:
   - Local reproduction of each required job; independent review of every fix.
+result (Nov26): Focus flake FIXED and ready for review. Commit 3d8c9f9 changes only that test: the Stop is held before it
+  reaches the emulator, and the test now also asserts that it is resubmitted and held across the reload. The 200 ms-pause
+  variant was 8/8 red before the fix and 20/20 green after. Quiet shard 2 passed 5/5 at 264/264, and `required 490` PASS x5.
+  The other required jobs reproduce green on 3d8c9f9: rules, packaged pins + 62/62, Worker 55/55 + bundle, wider 1107 with
+  0 outside the ledger, and npm test 3016/0 on reruns. Hosted-only steps (Ubuntu setup, npm ci, online Gradle build) are
+  documented as environment limitations. The archive warm-up correction is appended in TEST_REPORT. The owner's hosted-CI
+  push command is in TEST_REPORT (not run; the branch upstream is origin/main, so never use a bare `git push`).
+blocker: the required `unit` job (npm test) is intermittently red, outside TASK-047 file scope.
+  `scripts/life-ledger-sync-worker.test.js:340` Finding 3 ("exactly one contender obtains execution authority") fails about
+  5/40 whole-file runs on the candidate and 4/40 on origin/main 0ff39ec (pre-existing; worker and test are byte-identical).
+  Root cause: a time-of-check/time-of-use race in `acquireLock()` (scripts/life-ledger-sync-worker.mjs:168-201). The
+  staleness verdict comes from an earlier read, but the takeover rename moves whatever lock is present, so a late
+  contender renames the winner's fresh lock away and both proceed. The fix is Life Ledger worker runtime code, so it needs
+  a Tech Lead/owner scoping decision (new task or a TASK-047 scope extension). No skip, retry or ledger entry was made.
+  Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/ (gates/, lock-probe/).
 
 ### TASK-048 - Physical-device acceptance kit and final release evidence
 status: todo
