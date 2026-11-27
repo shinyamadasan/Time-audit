@@ -2740,8 +2740,8 @@ verification:
     unchanged; accounting browser specs; runtime-mirror --check; git diff --check; SELF_REVIEW.md + QA.md.
 
 ### TASK-046 - Combined-tree qualification: accounting, wider workload, release artifacts, Android packaged
-status: codex
-owner: codex
+status: review
+owner: codex (Claude finished implementation/testing Nov26 after Codex quota exhaustion; unavailable until Nov29)
 source: owner-direct (QUEUE-20261126 item 3)
 priority: P0
 depends-on: TASK-045
@@ -2762,6 +2762,14 @@ acceptance:
   - An independent reviewer reruns key gates and APPROVES. No expectation edit that hides a behavior change.
 verification:
   - Exact commands, counts, hashes and evidence paths in TEST_REPORT.md.
+result (Nov26): ready for review. Pins committed in 0dc2a07 (WIDER_COUNT 1107 and the web/bundle trees; independent
+  byte review APPROVE). npm 3016/0, rules/fence/mutation, Worker 55/55, release/APK parity/signature, packaged 62/62,
+  perf-profile 1/1, durability 3/3, wider 1107 aggregate classifier PASS (0 outside the ledger), Household 11/11 (HEAD
+  and pre-TASK-045). Headroom: about 7 day-equivalents at E=2489 (review F1 wording fixed). OPEN for reviewer: mandatory
+  490 is not clean. accounting-staged-effects.spec.js:1474 (Focus terminal Learning frontier, break phase not restored
+  after reload within 30s) timed out in 2/5 HEAD shard-2 runs and 0/3 pre-TASK-045 runs, and did not reproduce in
+  isolation (0/100 on each tree). It is unattributed and not waived. Reviewer decides between TASK-045 rework and
+  TASK-047. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/.
 
 ### TASK-047 - Resolve genuine required CI failures for the combined candidate
 status: todo

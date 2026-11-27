@@ -3486,3 +3486,154 @@ Evidence root is `D:/ChronaSenseQualificationEvidence/20261126-queue/task-045/`.
 - `npx playwright test $MANDATORY_SPECS --workers=1 --forbid-only --shard=<1..3>/3 --reporter=list,json --output <evidence>/mandatory-<shard>-artifacts` used all ten paths from CI. Shards passed 186/186 in 749.475 seconds, 264/264 in 883.130 seconds and 40/40 in 216.448 seconds. All shard processes exited 0. `node scripts/ci-test-report.mjs required 490 <evidence>/mandatory-1.json <evidence>/mandatory-2.json <evidence>/mandatory-3.json` passed with 490 passed, zero failed, zero skipped and zero flaky. The first launcher stopped before browser execution because its path regex omitted the digit in `v1`. The corrected launcher ran all shards. Its PowerShell metadata append failed after capturing the test exits. The per-shard `.meta` files retain the exact commands and the JSON reports retain the results. See `verification-progress.log`, `mandatory-{1,2,3}.{log,json,meta}` and `mandatory-count.log`.
 - `node scripts/runtime-mirror.mjs --write` regenerated the two changed mirrors. `node scripts/runtime-mirror.mjs --check` passed for all 111 runtime files. `git diff --check`, `node --check accounting-command.js`, `node --check tests/accounting-storage-durability.spec.js` and `npm run lint` passed. Lint reported zero errors and 172 warnings. The touched file's three warnings match the baseline lint findings by rule and identifier. The Self Review and QA checks found the changed handlers resolved, the heartbeat cleanup and initial restore order intact, and the device-owner and accounting acknowledgment guards intact. The archive's failure boundary leaves live history and the committed projection intact.
 - Physical-device quota and unload behavior and independent review remain pending. An unavailable archive preserves live history, so sustained use can still reach quota. If the browser terminates the page before a retry succeeds, changes held only in that page may be lost.
+
+## TASK-046 · 2026-11-26 · Combined candidate qualification
+
+Runtime source is commit `120dba59365330233f7ee95d8defbe9ff6caca3e` on `task-044-durability-integration`. The only tracked change after it is the `.github/workflows/ci.yml` pin commit described below. Evidence paths in this section are under `D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/`. Browser accounts, entries and namespaces were synthetic. Runs used Node 24.19.0, cached Chromium and the local RTDB emulator. `TMP` and `TEMP` were `D:/t` for `npm test` and browser runs. Coverage was uninstrumented. Codex ran the gates up to the packaged suite and the capacity probe. After Codex quota ran out, Claude took over as implementer and tester. Claude finished the mandatory, wider, Household and Worker items with one-worker reruns on an otherwise idle machine (`claude-quiet-reruns.ps1`, outputs prefixed `claude-`). "Pre-TASK-045" means `pre-task045-source/`, a `git -c core.autocrlf=false archive` of `6029be3`. Its runtime files and the specs compared here are byte-identical to that commit.
+
+### Unit, static, emulator and Worker gates
+
+- `npm test` exited 0 with 3,016 passed (2,561 Node-runner and 455 custom), zero failed and one existing opt-in skip. See `npm-test.log`.
+- `node scripts/runtime-mirror.mjs --check` reported 111 matching files. `npm run check:firebase-rules`, `npm run check:functions-shared` and `npm run lint` exited 0. See `mirror.log`, `rules-builder.log`, `functions-shared.log` and `lint.log`.
+- Rules emulator suites: `node --test firebase-rules-emulator.test.js task-completion-emulator.test.js nudge-rules-emulator.test.js time-ack.test.js scripts/verify-installed-rules.test.js` passed 142/142. `node --test brain-dump-fence-sdk.test.js online-planner-sdk.test.js` passed 23/23. `node --test firebase-rules-mutation.test.js` passed 43/43. See `rules.log`, `fences.log` and `mutation.log`.
+- `node scripts/ci-node-superseded.mjs entry-tombstone-rules-emulator.test.js` and `node scripts/ci-node-superseded.mjs entry-reliability-sdk.test.js` exited 0, with 3/3 and 1/1 required cases. Their pre-existing 4 and 5 superseded failures are visible in `tombstone.log` and `reliability.log`.
+- Worker:
+  - `npm ci --prefix <evidence>/worker-source` installed the locked Worker dependencies on D:.
+  - `npm test --prefix workers/chronasense-conversational-bridge`, run from the worktree with an ignored junction to those dependencies, passed 55/55 (`worker-test-worktree.log`). Claude reran it and got 55/55 with exit 0 (`claude-worker-test-worktree.log`).
+  - `npm run check:bundle --prefix <evidence>/worker-source` passed the Wrangler dry run (`worker-bundle-final.log`).
+  - The worktree run is authoritative. `worker-test-final.log` (exit 1) ran inside the standalone copy `<evidence>/worker-source`. That copy has no `.git` (`fatal: not a git repository` → `git check-ignore .deploy-vars.json` failed). It also has no repo-relative `../../functions/src/envelope.js` (`ERR_MODULE_NOT_FOUND` in `plan-create`, `plan-mutation`, `read` and `two-user`). Those failures are missing inputs in the copy, not Worker behavior. `worker-test.log`, the first worktree attempt, lacked dependencies. Both failed setup attempts are retained.
+
+### Exact release artifacts
+
+- `node scripts/build-release-artifacts.mjs --commit 120dba59365330233f7ee95d8defbe9ff6caca3e --out <evidence>/release-02` ran from a Git export on D:. It used the existing Java 21, SDK 36, AGP 8.13.0 and Gradle 8.14.3 toolchain. Cached Capacitor 8.3.3 generated the native project from that export. The first attempt failed during `cap sync` because the staging export lacked the extensionless npm bin shim. Copying the local lockfile CLI shims and putting that staging bin on the process PATH resolved the lookup. Offline Gradle executed all 153 tasks. See `build.py`, `retry-build.ps1`, `cap-add.log`, `release-build-02.log` and `release-02/gradle.log.txt`.
+- `python <evidence>/verify-apk-raw-blobs.py` read the ZIP entries directly and compared their SHA-256s to raw Git blobs, without using the builder's extraction. All 111 runtime files matched both root and `www/`. The APK adds two empty Cordova files, for 113 files. The bundled Capacitor config has no remote server URL. The first external byte check used a default Windows `git archive` that applied CRLF conversion. The raw-blob check removed that environment dependency. See `independent-apk-byte-check.json`, `independent-apk-raw-blobs.log` and the original failed check.
+- SDK build-tools 35.0.0 `apksigner.bat verify --verbose --print-certs <evidence>/release-02/chronasense-debug.apk` passed scheme v2 with one Android Debug signer. `aapt.exe dump badging` confirmed `com.timeaudit.app`, min SDK 24, target and compile SDK 36, and the debug artifact. APK SHA-256 `f99b5a80d1ae879df0e711586f5ae05f6d9abb38e18f42fcff69c5a17eaf8dd6` (5,967,177 bytes). Manifest SHA-256 `74ade476802991fd4e927e8767d99c917c6476b6ea45cd9e4e3a41e2f041505b`. See `apk-signature.log`, `apk-badging.log` and `release-02/release-manifest.json`.
+- CI pins:
+  - Web tree `bf81c9e5a021283fe158eb2ee8290da7bda9ef55b0f6dfa3554c421659ee1dfe` and Android tree `6c73eb28dafbcf96bfff878e94f158ac1433f723b413d4eed4a884870188c275` match the manifest.
+  - Relative to pinned `c7c6eb9`, five files changed: `accounting-command.js`, `daily-command-center.js`, `index.html`, `partner-view-model.js` and `storage.js`. Five were added: `household-food-source.js`, `household-my-day-model.js`, `household-my-day.css`, `household-my-day.js` and `meal-ready-food.js`. None were removed. The recorded per-path old and new SHA-256s reproduce both old trees and both new trees.
+  - Rules SHA-256 remains `93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00`.
+  - The wider count rises from 1,104 to 1,107 for the three cases TASK-045 already added in `accounting-storage-durability.spec.js`. The opt-in Household 11 run separately.
+  - See `independent-apk-byte-check.json`, `ci-artifact-pin-check.log` and `wider-collection.log`.
+- With `CHRONASENSE_RELEASE_DIR=<evidence>/release-02`, `node node_modules/@playwright/test/cli.js test tests/accounting-release-artifacts.spec.js --workers=1 --forbid-only --reporter=list,json --output <evidence>/packaged-artifacts` passed 62/62 (31 per bundle), with zero failures, skips or flakes. `node scripts/ci-test-report.mjs required 62 <evidence>/packaged.json` passed. See `packaged.log`, `packaged.json` and `packaged-classifier.log`. This exercises the real bundles in Chromium.
+- Independent review (`review/VERDICT.md`, Claude review sub-agent) re-derived every web and APK hash from raw Git blobs and reproduced the old pins from `b18cc52` and `c7c6eb9`. It re-verified the signature, independently collected 1,107 wider tests, and reran packaged 62/62 and the durability spec 3/3. Verdict: APPROVE for release bytes, CI pins and packaged. Nit: the ci.yml comment "(74 files)" counts files that contribute tests; 75 spec files are passed, because `household-my-day.spec.js` collects 0 without `MEAL_PREP_TEST_HOSTING`. The comment was left as reviewed.
+
+### Mandatory accounting suite (10 specs, 490 tests, CI three-shard, one-worker layout)
+
+Command per shard: `npx playwright test <MANDATORY_SPECS from ci.yml> --workers=1 --forbid-only --shard=<n>/3 --reporter=list,json --output <evidence>/<run>-artifacts`.
+
+- Codex's first runs overlapped two wider chains, two "wider-concurrent" shards, Household runs and a Gradle daemon. Shard 1 (`mandatory-1`) had 135 passed, 8 failed and 43 not run (serial skips after the failures). Shard 2 (`mandatory-2`) had 261 passed and 3 failed. Shard 3 (`mandatory-3`) had 40/40 passed. Failure detail:
+  - The shard 1 failures were 30-second test or `beforeAll` timeouts, plus two assertions in tests that time out in the same flow. Those were `first-start-upgrade` bob deep-equality and `FA1-V1` "confirmed work and break survive repeated reload" `toBeDefined`. `mandatory-recheck-1` passed 186/186.
+  - The shard 2 failures were G2-CV1 (timeout), O1 alice "ACK before choice true" (`blockStartTime`/`startedAt` = T0+90 min instead of T0) and Focus terminal bob (timeout).
+- O1 is load-sensitive and pre-existing. Under load, `mandatory-2-diagnostic` (HEAD) and `mandatory-o1-pre-task045` (pre-TASK-045) failed with the identical assertion. Quiet `--repeat-each=3` passed 12/12 on HEAD (`claude-o1-head`) and 12/12 on pre-TASK-045 (`claude-o1-pre045`). It also passed in every quiet full shard 2 below.
+- Quiet full shard 2 runs (each 264 tests, about 10.5 minutes):
+
+  | run | tree | result |
+  |---|---|---|
+  | `claude-mandatory-2` | HEAD | 263 passed, **1 failed** |
+  | `claude-mandatory-2-pre045` | pre-TASK-045 | 264/264 |
+  | `claude-mandatory-2-head-r2` | HEAD | 264/264 |
+  | `claude-mandatory-2-pre045-r2` | pre-TASK-045 | 264/264 |
+  | `claude-mandatory-2-head-r3` | HEAD | 264/264 |
+  | `claude-mandatory-2-pre045-r3` | pre-TASK-045 | 264/264 |
+  | `claude-mandatory-2-head-r4` | HEAD | 264/264 |
+
+- **Open intermittent (unattributed):** `accounting-staged-effects.spec.js:1474 alice: Focus terminal Learning frontier survives interrupted receipt, reload and delayed Stop ACK` timed out in `claude-mandatory-2`. It failed at line 1503. After `page.reload()`, which navigated in 472 ms, `waitForFunction(readyState === 'complete' && accountingIdentity() && pomodoroPhase === 'break')` did not become true in the remaining 28 seconds. The trace shows no page error, only the expected offline font, sound and focus-bridge requests. The page had logged `[accounting] Focus effect retained Interrupted terminal receipt` before the reload. See `claude-mandatory-2-artifacts/…bea45…/trace.zip`, extracted at `claude-focus-terminal-trace/`.
+  - HEAD occurrences: 2 of 5 full shard 2 runs. That is this quiet run plus the bob variant in loaded `mandatory-2`; Codex's isolated bob rerun `mandatory-focus-terminal-diagnostic` passed. TASK-045's own shard 2 run, on the same runtime, also passed it.
+  - Pre-TASK-045: 0 of 3 quiet full shard 2 runs.
+  - In isolation it did not reproduce on either tree. `claude-focus-terminal-{head,pre045}` (both variants, `--repeat-each=10`) passed 20/20 each. `claude-focus-seq-{head,pre045}` (with its in-shard predecessors, Focus source lease and Focus capture failure, `--repeat-each=8`) passed 80/80 each.
+  - TASK-045 touches this path's environment. It adds a `beforeunload` guard (only when `failedCaptureCount()` is nonzero) and warms the history archive on coordinator creation by default.
+  - The evidence neither proves the failure pre-existing nor shows that TASK-045 introduced it (1/4 vs 0/3 quiet). It is recorded for the reviewer and TASK-047, not retried away.
+- `node scripts/ci-test-report.mjs required 490 mandatory-recheck-1.json claude-mandatory-2.json mandatory-3.json` FAILS: 489 passed, 1 failed, the Focus terminal case above (`claude-mandatory-required-490.log`). The same classifier over `mandatory-recheck-1.json claude-mandatory-2-head-r2.json mandatory-3.json` passes 490/490 with zero skips or flakes (`claude-mandatory-required-490-r2.log`). Both are reported. The passing combination is not offered as proof that the intermittent is absent.
+
+### Wider browser suite (1,107 tests in 4 shards vs `scripts/ci-known-failures.json`)
+
+Command: `node node_modules/@playwright/test/cli.js test <every spec except the 10 mandatory and the release spec> --workers=1 --forbid-only --shard=<n>/4 --reporter=list,json --output …`, then `node scripts/ci-test-report.mjs legacy any <shard>.json`. The ledger was not edited.
+
+- Codex runs, all made concurrently with other browser suites:
+
+  | shard | run | ran | passed | failed | skipped | outside ledger |
+  |---|---|---|---|---|---|---|
+  | 1 | `wider-1` | 284 | 226 | 54 | 4 | 6 |
+  | 2 | `wider-2` | 271 | 182 | 89 | 0 | 0 (classifier PASS) |
+  | 2 | `wider-concurrent-2` | 271 | 182 | 89 | 0 | 0 (classifier PASS) |
+  | 3 | `wider-3` | 337 | 228 | 109 | 0 | 3 |
+  | 4 | `wider-4` | 215 | 160 | 55 | 0 | 0 (classifier PASS) |
+  | 4 | `wider-concurrent-4` | 215 | 159 | 56 | 0 | 1 |
+
+  The shard totals are 284 + 271 + 337 + 215 = 1,107.
+- Every outside-ledger result in those runs was environmental:
+  - `wider-1` (6), all load or emulator timing. The `accounting-storage-durability` failure was `"beforeAll" hook timeout of 30000ms` in `startEmulator()`. Its two dependents were skipped serially. The spec passed 3/3 standalone for Codex and for the reviewer, and 3/3 inside quiet `claude-wider-1`. The two actual MV3 stop/upgrade cases and the two `analytics-truth` `assembleTodayTimeline` / Today pulse cases passed in `wider-1-diagnostic`. All six passed 6/6 in quiet `claude-wider1-outside-head` (classifier 0 outside).
+  - `wider-3` (3): `personal-day-legacy-recovery` "offer never claims ownership", `plan-linkage-up-next` Z and `planning-continuity` "3 priorities fill the cap". The last one was a 30-second test timeout while adding 13 tasks; it failed again in the still-loaded `wider-3-diagnostic`. Quiet `claude-planning-{head,pre045}` ran these three specs on both trees. All three cases passed on both. The only failures were 14 identical known-ledger `plan-linkage-up-next` cases on each tree (classifier 0 outside, 14 known, 2 baseline now passing).
+  - `wider-concurrent-4` (1), **owner-stall classification: environmental, not TASK-045**. `zz-owner-stall.spec.js :: owner stall shape (off): established device, 1.7M runtime-frame legacy slot, 91.8% full, reload` failed only with `Fixture "trace recording" timeout of 30000ms exceeded during teardown`. No assertion failed: the spec has no `expect`, and its result is a measurement report. The JSON shows no stdout from the test body. The same test passed in `wider-4` (7.9 s). Run alone it passed on HEAD (`claude-owner-stall-head`, 7.0 s) and on pre-TASK-045 (`claude-owner-stall-pre045`, 7.2 s), with identical reports:
+    - 2,489 entries before and after, with the same committed-entries digest `cfbeef45574ab5a7…`;
+    - the 966,944-character `legacy-accounting-caches` capture retained in its slot and listed as stuck;
+    - fresh `hydrate-accounting` = `storage-full`, `ownApplied: true`;
+    - 8 quota-failed writes and 4,812,082 total characters;
+    - see `claude-owner-stall-*-report.json`.
+- Quiet reruns of the shards that had outside-ledger results, on HEAD:
+  - Shard 1, `claude-wider-1` (13.1 min): 284 ran, 234 passed, 50 failed (48 known-ledger and 2 history-only MV3 fixtures from local commit `73739e9`), 0 skipped and **0 outside the ledger**. Classifier exit 0.
+  - Shard 3, `claude-wider-3` (15.7 min): 337 ran, 232 passed, 105 failed (all known-ledger), 0 skipped and **0 outside**. Classifier exit 0.
+  - **Aggregate**, CI's `legacy "$WIDER_COUNT"` check: `node scripts/ci-test-report.mjs legacy 1107 claude-wider-1.json wider-2.json claude-wider-3.json wider-4.json` gave `expected 1107 tests to run: yes`, 808 passed, 299 failed (297 known baseline and 2 history-only), 0 skipped, **0 outside the recorded baseline** and 17 baseline tests now passing. Exit 0. See `claude-wider-aggregate-1107.log`.
+  - Shards 2 and 4 are Codex's runs; they were concurrent but are classifier-clean. `zz-perf-profile` passed inside `wider-4` (4.4 min), in addition to its standalone 1/1.
+- The Codex shard 4 runs (`zz-owner-stall`, `zz-overnight-integration`) wrote `owner-scale.json` and `integration-clean.json` into the worktree root, because `OWNER_OUT` and `INTEG_OUT` were not set. They were moved untracked to `wider-4-root-outputs/`, and Claude's runs set both variables to the evidence directory.
+
+### Household My Day (opt-in, 11 tests)
+
+- Codex's runs first failed with `Could not start Authentication Emulator, port taken`. A stale Meal Prep `firebase emulators:start --only auth,firestore,hosting --project demo-meal-prep` held 127.0.0.1:9099 (node PID 2588) and its Firestore child held 127.0.0.1:8080 (java PID 33288, `--project_id demo-meal-prep`). Codex recorded both in `pre-restart-meal-processes.json` and stopped them (`stopped-meal-pids.txt`). After that the emulators started. Each later Codex run then failed one serial test under concurrent load, on both the candidate and `0ff39ec`, and different tests failed in different runs:
+  - test 1, a 5-second `toHaveText` on the partner heading, in `household-candidate-rerun` and `household-candidate-postpackage`;
+  - test 4, `toHaveCount`, in `household-restarted` and `household-baseline-postpackage`.
+- Claude checked first that TCP 9099 and 8080 were free; the only 4500 listener was a UDP system service. Claude then ran `firebase.cmd emulators:exec --config firebase.local.json --only auth,firestore --project demo-meal-prep "node <tree>/node_modules/@playwright/test/cli.js test --config <tree>/playwright.config.js household-my-day.spec.js --workers=1 --forbid-only --reporter=list,json --output …"` from `meal-test-hosting/`, with `MEAL_PREP_TEST_HOSTING=<evidence>/meal-test-hosting` and `CI=true`.
+- **HEAD 11/11 passed in 45.2 s; pre-TASK-045 11/11 passed in 42.3 s.** Zero failed, skipped or flaky. See `claude-household-{head,pre045}.{log,json,command.txt,ports-before.txt}`.
+
+### Storage capacity evidence
+
+- `node node_modules/@playwright/test/cli.js test tests/zz-perf-profile.spec.js --workers=1 --forbid-only --reporter=list,json --output <evidence>/perf-standalone-artifacts` passed 1/1 in 8.2 minutes. The spec is the unchanged blob `8de432f122deeb80715a7103565b8df127e4599a`, run with default `E=2489`, `PERF_OPS=0,40` and default runtime flags. See `perf-standalone.json`, `perf-profile-standalone.json` and `perf-standalone.log`. The same command targeting `tests/accounting-storage-durability.spec.js`, with output in `storage-durability-artifacts`, passed 3/3.
+- Mixed-workload probe:
+  - Command: `node node_modules/@playwright/test/cli.js test --config <evidence>/playwright.config.mjs mixed-settled.spec.mjs --workers=1 --forbid-only --reporter=list,json --output <evidence>/mixed-settled-artifacts`. It passed 1/1 in 17.9 minutes.
+  - This scratch probe reused the owner-scale seed and the real loopback app and SDK. It is not in `tests/`, and no runtime changed.
+  - Each day-equivalent ran 19 actions under a compressed clock: four ordinary starts and stops, heartbeat writes and two due pings, one scheduled automatic log, one break and one away interval, a completed Focus work phase and exit, and one entry edit verified on the emulator.
+  - The first scratch attempt sampled a transient captured hydrate on day 2 and stopped. The settled probe waits for normal reconciliation before measuring. See `mixed-run.json`, `mixed-settled-run.json` and `mixed-headroom-settled.json`.
+- Measurements:
+  - At 2,489 initial entries, total localStorage characters (keys and values) were 4,311,664 at boot. After days 1–6 they were 4,545,965 / 4,640,529 / 4,800,709 / 4,902,521 / 5,012,980 / 5,129,633. That is +234,301 / +94,564 / +160,180 / +101,812 / +110,459 / +116,653 characters per day.
+  - There were 2,543 committed entries at day 6.
+  - There were zero queued, durable-intake or page-held captures at every daily measurement.
+  - The highest per-action measurement was 5,144,900 characters.
+- **Failed writes on days 0–1 (review finding F1).** The probe's write log recorded failed `localStorage.setItem` calls on `ta3-entries:uid_X`. That key is the derived compatibility entries cache (`storage.js` `persistCompatibilityCache`). There were 9 such failures at the baseline sample and 29 by the end of day 1. At E=2489 the roughly 1.4M-character cache cannot fit beside the roughly 4.3–4.5M-character accounting envelope. It fits only after the first automatic archive cut on day 2. That cut took the envelope from 4,541,238 to 3,208,659 characters, while non-envelope storage grew from about 4.7K to about 1.43M characters.
+  - No accounting, intake or capture write failed in the log.
+  - The day 0–1 totals therefore exclude that cache. The projection below starts at day 2 for that reason.
+  - Error counts come from a rolling window of the last 400 writes. An empty `{}` on days 2–6 means none in that window, not proof of none all day.
+- **Projection.**
+  - Mean growth after the first archive cut (days 2–6) was 122,276 characters per day-equivalent. With 113,247 characters left at day 6, the estimated 5,242,880-character wall falls 6.93 days from the seeded start, about one day-equivalent after day 6. Using days 3–6 gives 7.03 days.
+  - The headroom at owner scale (E=2489) under this mix is therefore **about 7 day-equivalents from a fresh seed**, which is the product fact to carry forward.
+  - This linear projection is workload-specific:
+    - the wall is the Chromium/WebView quota assumption, and other engines differ;
+    - entries are synthetic, padded to about 676 characters each;
+    - the 19-action day runs under a compressed clock;
+    - archive batches and temporary intake writes can move the first failing write.
+  - The run stopped at day 6, before any accounting write failed. See `mixed-projection.json` for the arithmetic and per-command history groups.
+
+### Pins committed
+
+`.github/workflows/ci.yml` changes only `WIDER_COUNT` 1104→1107, `RELEASE_WEB_TREE` → `bf81c9e5…1dfe` and `RELEASE_BUNDLE_TREE` → `6c73eb28…c275`, plus their two comment lines. `MANDATORY_COUNT` 490, `MANDATORY_SPECS` and `RELEASE_RULES_SHA256` are unchanged. Every value is reproduced above from raw Git blobs and the built APK, and was independently verified (`review/VERDICT.md` §1–2). No test, ledger, skip, timeout or runtime file changed in TASK-046.
+
+### Result
+
+| Gate | Result |
+|---|---|
+| npm test | 3,016 passed, 0 failed, 1 existing skip |
+| mirror, lint, rules/functions builders | PASS |
+| rules, fence and mutation emulator suites | 142/142, 23/23, 43/43 |
+| superseded-node required cases | 3/3, 1/1 |
+| Worker | 55/55 (worktree; standalone-copy failure was missing inputs) and Wrangler bundle PASS |
+| release build, raw-blob parity, APK v2 signature | PASS; independently re-verified |
+| CI pins | committed with justification; independently verified |
+| packaged | 62/62 (twice: Codex and reviewer) |
+| `zz-perf-profile` (unchanged, E=2489, 0,40) | 1/1 standalone, and passed in wider shard 4 |
+| durability spec | 3/3 (×3) |
+| mixed-workload headroom | about 7 day-equivalents from seed at E=2489 to the 5,242,880-character wall; compatibility-cache writes failed on days 0–1; no accounting write failed |
+| wider (1,107) | aggregate classifier PASS, 0 outside the ledger, using quiet shards 1 and 3 |
+| owner-stall outside-ledger result | environmental (trace-teardown timeout under load); passes alone on HEAD and pre-TASK-045 with identical output |
+| Household | 11/11 HEAD and 11/11 pre-TASK-045 |
+| mandatory 490 | **not clean.** A 490/490 classifier combination exists, but one red-zone intermittent remains unattributed: Focus terminal Learning frontier reload timeout, 2/5 HEAD shard 2 runs vs 0/3 pre-TASK-045, 0/100 isolated on each tree |
+
+No runtime, test, ledger, skip or timeout change was made. TASK-046 goes to `review` so the reviewer can rule on the open intermittent. It may be routed to TASK-047 or treated as a TASK-045 rework trigger. It is not waived.
