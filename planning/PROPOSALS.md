@@ -378,8 +378,9 @@ physical records (~1.44M), plus the first hydrate input (~1.44M) until the first
 - **Option A (in current scope):** widen automatic archive eligibility (DECISIONS #45) from Start/Stop/hydrate to settled,
   acknowledged ping, scheduled-log, break/away, Focus and edit history, using the same verified IndexedDB archive. Buys weeks
   to a few months; does not change the growth from entries themselves. Red zone; needs requalification (TASK-046 gates).
-- **Option B (architecture; owner approval required):** stop keeping three full copies of entries in the localStorage
-  envelope (e.g. move committed/physical views or the initial hydrate frame to IndexedDB, or keep one canonical copy).
+- **Option B (architecture; owner approval required):** stop keeping three full copies of entries in localStorage (steady
+  state: envelope committed + envelope physical + the `ta3-entries` cache; e.g. drop or derive the `ta3-entries` cache, move
+  the committed/physical views to IndexedDB, or keep one canonical copy).
   The lasting fix; touches entry storage and sync (red zone), needs its own design, DECISIONS entry and full qualification.
 
 **Recommendation (Claude/PM):** A before release, B approved as the next project. North-star #3 (never lose logged time)

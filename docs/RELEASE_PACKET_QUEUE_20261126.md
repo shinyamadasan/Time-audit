@@ -151,7 +151,7 @@ together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch
 | TASK-041 (runtime b18cc52) | APPROVE (fresh-context implementation QA, cycle 2). It was not a release authorization. | — (TASK-041 entry stays `blocked` for its original pre-queue reasons, superseded by this queue) | `TEST_REPORT.md` "TASK-041 … owner-decision implementation qualification"; probes at `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/chronasense-task041-evidence-20261124/independent-qa-cycle2/probe.log`. The verdict text exists only in TEST_REPORT; there is no standalone verdict file. |
 | TASK-044 (integration merge 9eb6cf2) | **UNVERIFIED: no separate independent review is recorded.** TASK-044 was a conflict-resolution merge approved by the Tech Lead. Its byte claims (accounting runtime equals b18cc52, Household equals 0ff39ec) are recorded only in TEST_REPORT. The TASK-046 reviewer later re-derived the full web/APK trees from raw blobs (`review/indep-bytes.json`), which covers the combined result but not the merge step itself. | approved (held) | `$E/task-044/{mirror.log,npm-test-longtmp.log}` |
 | TASK-045 | APPROVE WITH NOTES: 1 MAJOR (archive scope, §3.1), 4 MINOR, 1 NIT; no blocker | approved (held) | `REVIEW.md` "TASK-045 · Capture durability…"; reviewer outputs `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/` (†), probe `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/probe/eligible.probe.cjs` |
-| TASK-046 | APPROVE. Release bytes, pins and packaged approved separately (`VERDICT.md`, whose blocking documentation finding F1 on the capacity wording was fixed in TEST_REPORT before close). The Focus flake was ruled pre-existing and routed to TASK-047. | approved (held) | `$E/task-046/review/VERDICT.md`, `review/rerun-*`, `review/probe-*` |
+| TASK-046 | APPROVE. Release bytes, pins and packaged approved separately (`VERDICT.md`, whose blocking documentation finding F1, the unreported day 0–1 `ta3-entries` write failures, was fixed in TEST_REPORT before close). The Focus flake was ruled pre-existing and routed to TASK-047. | approved (held) | `$E/task-046/review/VERDICT.md`, `review/rerun-*`, `review/probe-*` |
 | TASK-047 | APPROVE WITH NOTES (N1–N4, §3.7) | approved (held) | `$E/task-047/review/VERDICT.md`, `review/rev-*` |
 | TASK-049 round 1 | CHANGES REQUIRED. Empty-generation ABA reproduced 5/5. | — | `$E/task-049/review/probe-empty-generation-aba.log` |
 | TASK-049 round 2 | APPROVE, with non-blocking notes 1–4 (§3.4) | approved (held) | `$E/task-049/review2/` |
@@ -202,7 +202,7 @@ together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch
 - **Pre-existing known failures include time-loss scenarios.** The 297 known-baseline wider failures also fail
   on live main. They include time-loss-shaped scenarios, e.g. daily-use-reliability F-1, F-2 and F-3 ("in an
   OFFLINE session … must not lose the session"). This release neither fixes nor worsens them
-  (`$E/task-046` wider classifier; `scripts/ci-known-failures.json`).
+  (`$E/task-046` and `$E/task-047/wider` classifiers; `scripts/ci-known-failures.json`; unchanged on prior production main b0bbc6f per TEST_REPORT TASK-043).
 
 ### 3.2 Page-held captures are lost on forced close
 

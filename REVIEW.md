@@ -819,3 +819,50 @@ verdict: **CHANGES REQUIRED** (small, docs-only). Every numeric gate and verdict
 Of the TASK-041 reviewer notes, only the equal-time sort note is not carried, and it was closed with a test. The UNVERIFIED list is complete apart from must-fix 4.
 
 gate: **codex (rework)**. Must-fixes 1–5 are docs-only. When fixed and re-reviewed, this packet lands as `approved` (held), not `done`: it carries release authority over red-zone runtime and the push/merge/deploy steps, so the human acts.
+
+---
+
+## TASK-048 review round 2 · 2026-11-26 · Release packet docs/RELEASE_PACKET_QUEUE_20261126.md (HEAD ca723fa)
+
+reviewer: independent Claude re-review subagent. I did not write the packet or the ca723fa fixes. I changed only the three trivial wording fixes listed below, this entry and TASK-048's `status:`. Nothing was committed, pushed, merged or deployed, and the §4b push was **not** run.
+verdict: **APPROVE**. All 5 round-1 must-fixes and all 4 non-blocking additions are in, and each one checks out against git or raw evidence. I found no regression in the rest of the packet.
+
+### Round-1 must-fixes
+1. **§4(b) push order: fixed.** There are three numbered steps: `rev-parse` of the branch, then the docs-only guard (the output must list only `.md` files, otherwise stop), then `push origin <printed SHA>:refs/heads/release/queue-20261126-rc`. The push uses the SHA, not the branch name. The exact-`da5c4d4` alternative is kept. No bare `git push` appears anywhere; the only other pushes are the §4(d)/(e) `git push origin main` steps, which are the intended deploy and rollback. **I ran the guard myself:** `git diff --name-only da5c4d493af5908cd2c7e27547eba0519b3e149f HEAD` at ca723fa lists only `REVIEW.md`, `STATUS.md`, `TASKS.md`, `docs/RELEASE_PACKET_QUEUE_20261126.md` and `planning/PROPOSALS.md`, so it is `.md` only. `git show --stat ca723fa` touches only REVIEW.md, TASKS.md, the packet and PROPOSALS. The untracked `review-artifacts/` folder is not committed and does not reach the push.
+2. **§5.0 / P0 / P1 device isolation: fixed.** A separate Android user profile is now explicitly *not* isolation, with the reasons (install for all users, shared code, update in place or key block). The rule is now: STOP if the package is installed in any profile. The new P0 runs `pm list users` and then `pm list packages --user <id> com.timeaudit.app` for every user, expects every listing to be empty, and says to STOP on any hit. The profile option was dropped, which round 1 allowed as one of its two alternatives.
+3. **Storage-copy description: fixed and consistent.** I checked it against `task-046/mixed-projection.json`:
+   - Day 0 envelope is 4,307,364 characters, and the `hydrate-accounting` group holds 1,443,950 (the first hydrate frame, ~1.44M ✓).
+   - Day 1 envelope is **4,541,238** and day 2 is **3,208,659** ✓. On day 2, hydrate-accounting drops from 1,493,964 to 48,579.
+   - Non-envelope storage (`chars` − `envelopeChars`) goes from 4,300 / 4,727 to 1,431,870 on day 2, and is 1,446,210 by day 6. So the cache fits only after the cut ✓.
+   - `ta3-entries:uid_X` errors are 9 and then 29, with `{}` from day 2 ✓.
+   - §3.1, §3.1 "Owner decision" and §4(a) B all describe the steady state as envelope committed + envelope physical + the `ta3-entries` cache, with the hydrate frame as an extra envelope copy before the first cut.
+   - The PROPOSALS source paragraph matches. **Its Option B bullet did not:** it still said "three full copies … in the localStorage envelope (e.g. move committed/physical views or the initial hydrate frame …)". I fixed it as trivial fix 3 below.
+4. **400-write window: fixed.** §3.1 now says no accounting write failure appeared *in the probe's error window*, and that the window covers only the last 400 writes. This matches TASK-046 `VERDICT.md`:91 and TEST_REPORT:3604. TASKS.md also lists it as a scoped claim.
+5. **TASKS.md TASK-048 result: fixed.** The "option B … not recorded" line is removed. The 400-write scope and a round-1 note were added.
+
+### Non-blocking additions
+All four are present:
+- the 297 known failures, including the OFFLINE F-1/F-2/F-3 scenarios in §3.1. The F-1 quote matches the title in the wider log: "…in an OFFLINE session -> "accidental" must not lose the session";
+- the `npm ci --offline` note in §3.5;
+- phone cleanup in §5.5a: SW, site data, `adb reverse --remove`, stop the server, and uninstall only on the dedicated device;
+- TASK-046 F1 in §2.1.
+
+### The rest of the ca723fa diff
+I re-checked the other new facts:
+- **Line counts.** `git show --numstat`: b18cc52 is 56/2, c2b6f95 is 10/2 and 53/22. The 0ff39ec..da5c4d4 totals are 66/4 and 53/22 ✓.
+- **Gate trees.** c2b6f95→120dba5 changes only DECISIONS, REVIEW and TASKS. 120dba5→fc29b2c changes only ci.yml and docs. fc29b2c→3d8c9f9 changes a test spec plus docs. 3d8c9f9→50d909b changes the worker and its test plus docs. 50d909b→9db0bf5 and 9db0bf5→da5c4d4 change docs only. So "same runtime as da5c4d4" and "only non-doc changes after 3d8c9f9 are the Life Ledger worker and its test" are true.
+- **Evidence paths.** `preserved-scratch/rev045/perf.log` exists. `task-047/run-gates.sh:6` has `REL=…/task-046/release-02`.
+- **Step references.** W1–W3 exist in §5. S2 lists three outcomes.
+
+### Trivial fixes I made (uncommitted, docs only)
+1. **§2.1 TASK-046.** The packet described F1 as "on the capacity wording". F1 (`VERDICT.md`:82) is actually about the unreported day 0–1 `ta3-entries` write failures. Reworded to say that.
+2. **§3.1 known failures citation.** It now cites both the `$E/task-046` and `$E/task-047/wider` classifiers. It also cites "unchanged on prior production main b0bbc6f per TEST_REPORT TASK-043", which is the evidence for "also fail on live main" (b0bbc6f is an ancestor of 0ff39ec).
+3. **`planning/PROPOSALS.md` Option B.** Changed to "three full copies of entries in localStorage (steady state: envelope committed + envelope physical + the `ta3-entries` cache; …)", which matches the packet's §4(a) B.
+
+After these fixes the guard still lists only `.md` files.
+
+### Remaining non-blocking notes (no action required)
+- §3.1 gives the cache as "~1.42-1.43M". In the probe the non-envelope storage grows from 1.43M to 1.45M by day 6. That is approximate and fine.
+- P0 does not catch a package that was uninstalled with `-k` (data kept, which `pm list packages -u` would show). This is an unlikely edge case on a dedicated device.
+
+gate: **approved (held)**. The packet carries release authority over red-zone runtime (entry storage, accounting, crash recovery) and the push, merge and deploy steps. Only the owner acts: hosted CI (§4b), the storage decision (§4a), the device kit (§5), then the merge and deploy (§4d). The trivial fixes above still need to be committed before step 1 of §4(b).

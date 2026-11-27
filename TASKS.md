@@ -2812,7 +2812,7 @@ blocker: the required `unit` job (npm test) is intermittently red, outside TASK-
   Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/ (gates/, lock-probe/).
 
 ### TASK-048 - Physical-device acceptance kit and final release evidence
-status: codex
+status: approved
 owner: claude
 source: owner-direct (QUEUE-20261126 item 5)
 priority: P1
