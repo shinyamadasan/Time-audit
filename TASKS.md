@@ -2829,7 +2829,7 @@ verification:
   - An independent reviewer confirms every gate claim links to raw evidence.
 
 ### TASK-049 - Life Ledger sync worker stale-lock takeover race (unblocks TASK-047 unit job)
-status: review
+status: codex
 owner: claude (implementer; Codex out of quota until Nov 29)
 source: owner-direct (QUEUE-20261126 item 4 "required CI qualification"; Tech Lead scoping, Nov 26)
 priority: P1

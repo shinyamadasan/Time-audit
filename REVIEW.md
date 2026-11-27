@@ -613,3 +613,58 @@ verdict: **APPROVE**. No blocking finding. The open mandatory intermittent is **
 Scratch trees D:/t/rev/{head,pre} were removed after their node_modules junctions were deleted first. The shared node_modules is intact (404 entries). No repo file changed except this entry and TASK-046's status. Nothing was committed, pushed or deployed.
 
 gate: **approved (held)**. This is red zone: the combined candidate carries TASK-045 accounting retention and capture-durability runtime and refreshed release pins. The human merges, and there is no auto-merge.
+
+---
+
+## TASK-049 review · 2026-11-26 · Life Ledger worker stale-lock takeover race
+
+reviewer: independent Claude review subagent (did not write TASK-049). Range b227889..806854c (fix 015c298, docs 806854c). Scratch trees: D:/t/rev049/{old,new} (`git archive`, no worktree, no node_modules link). My outputs: D:/ChronaSenseQualificationEvidence/20261126-queue/task-049/review/.
+verdict: **CHANGES REQUIRED**. The fix closes the TASK-047 interleaving, and every gate reruns green. But the invariant it claims ("at most one holder, even when several contenders race the same stale lock") is still breakable, deterministically, through an empty lock generation. TASK-049 goes back to `status: codex`.
+
+### Must-fix
+1. **Byte identity is not generation identity for an empty (or not-yet-written) lock, so two workers can hold the lock at once.** Locations: `scripts/life-ledger-sync-worker.mjs:197-217` (`judgeLockFile`), `:238-245` (byte-only re-check under the claim) and `:183-192` (`tryCreateLockFile`: the file exists, empty, between `open('wx')` and `writeFile`). DECISIONS #46 argues that "every lock and claim payload carries a random nonce, so two generations never share bytes or a claim name". That holds only once the payload is written. Every empty generation has bytes `""` and the same claim `<lock>.claim-<sha256("")>`.
+   - Scenario: L is empty and its mtime is at least 30 min old. That happens when a worker was killed or crashed between `wx` and the write, or when the write failed. `tryCreateLockFile` leaves the empty file behind on a write error.
+     1. D reads `""`, stats it as aged, and judges it stale. D then stalls after its `stat`.
+     2. B breaks L, runs and releases.
+     3. X opens a new L with `wx`. The file is still empty because X has not written yet.
+     4. D takes the now-free claim, re-reads L, finds `"" === judged.raw`, and renames X's live lock to a tombstone. D creates its own lock and proceeds.
+     5. X writes into its now-unlinked handle and also proceeds.
+     6. Both are inside the lock. X's later `releaseLock` also deletes D's lock.
+   - The same ABA works one level up on an aged empty claim file.
+   - Reproduced: `review/probe-empty-generation-aba.mjs` (test-side fs wrapping only, gates on D's first `stat`) against 806854c printed **5/5 "VIOLATION: two holders at once"** (`review/probe-empty-generation-aba.log`). Pausing D after its `readFile` instead happens to be saved, because the later `stat` reads X's fresh mtime. That is luck of ordering, not design: `judgeLockFile` judges bytes from one file and mtime from whatever file is there later.
+   - Production likelihood is low: the scheduler uses `IgnoreNew`, and the race needs three runs plus a crashed empty lock. But it is exactly the class of race the task's objective rules out, and the DECISIONS #46 proof is wrong as written.
+   - Required: bind the judged generation to the file, not only its bytes. Choose one of the two approaches below, or another one that closes the race:
+     - (a) Read bytes and identity from **one open handle** (`fh.stat()` + `fh.readFile()`; ino + birthtimeMs + size). Under the claim, re-open, then require the same identity and the same bytes, and re-judge staleness before the rename.
+     - (b) Make a lock appear only with its full payload. Write a unique tmp, `fs.link(tmp, lock)` (EEXIST if held), then rm the tmp. A live generation is then never empty or partial, so it can never equal a crashed one's bytes.
+   - Add a deterministic regression for this interleaving. It must be red on 806854c and green after the fix, with test-side injection only. Correct the DECISIONS #46 argument to match. Keep everything else.
+
+### Checked and fine (non-blocking notes)
+- **Interleavings, 2-3 contenders (non-empty generations).** Each case below behaves correctly:
+  - Fresh lock with a live pid: never claimed.
+  - Dead-pid lock: exactly one claimant removes it. A late claimant re-reads and gets ENOENT or different bytes, and backs off. This is the TASK-047 case, now covered by the red-to-green regression.
+  - Claimant crashes before the removal: its claim is judged dead and broken through `claim.claim-*`.
+  - Claimant crashes after the removal: L is created directly. The orphan claim is never consulted again.
+  - Nested dead claims: recovered (new test 2).
+  - Release racing a takeover: not reachable, because a live holder's lock is never stale.
+  - Windows: rename of a file open with FILE_SHARE_DELETE is allowed, and the tombstone frees the name. A non-ENOENT read, rename or rm error (AV handle, delete-pending) now throws before any lock is held: the process exits non-zero, leaves nothing behind, and the next cycle retries. That is not a wedge. Direct `rm` in `releaseLock` is pre-existing.
+- **Recursion** grows a level only per dead breaker. The filename component grows by 23 chars per level, so it hits ENAMETOOLONG at about 10 nested dead breakers. That would throw, not wedge, and is theoretical.
+- **30-minute mtime ageing (behavior change).** A legitimate just-created lock is never misjudged by mtime: it would need a clock skew of 30 min or more inside a microsecond window. A crashed empty lock now costs about 2 skipped cycles (scheduler 15 min, `IgnoreNew`, 5-min limit). Skipped runs return at `:415-417` before writing any run log or outbox status, so the UI shows the last status. That is acceptable. Optional: have `tryCreateLockFile` remove its own file when the write fails. Approach (b) above makes this moot.
+- **Leftovers.**
+  - Orphan `.claim-*` files are inert, except the shared empty-generation claim name (must-fix 1).
+  - Retention never prunes them, but neither retention nor tmp-cleanup can delete a live lock or claim: tmp-cleanup touches only its two fixed `.tmp` names, and `LOCK_TOMBSTONE_RE` matches only `.stale-*`.
+  - Claim tombstones use the lock prefix, so retention prunes them.
+  - `isBackupsRootLockLive()` (`:266-275`) calls an unparsable lock not live, while the worker holds it for 30 min. The only effect is that tmp-cleanup may delete its two fixed `.tmp` names while a lock is empty or corrupt. No live writer can be writing them then. That is harmless, and it was out of scope.
+- PID reuse and cross-host pid checks are pre-existing and outside this task.
+
+### Reruns (mine)
+- Red/green: the new test file against b227889's worker ran **18 pass / 3 fail**. The regression failed with `a late contender with a stale verdict must back off, not also proceed` (false !== true). Against 806854c it ran **21/21**.
+- Existing tests unchanged: the numstat is +155/-0. The b227889 blob is a byte-identical prefix of the 806854c blob (26,561 bytes, LF; the 27,126 in CHANGELOG is the CRLF checkout). The worker has no test hooks: the injection wraps `fs.readFile` on the shared `node:fs/promises` object, test-side only.
+- Loop: **150/150** consecutive `node --test scripts/life-ledger-sync-worker.test.js` runs, 21/21 each, 0 failures (`review/rerun-loop-150.log`). The implementer's `loop-200.log` shows 0/200.
+- Siblings: chaos 11, health 13, intervention-latch-recovery 5, restore 15, retention 13, tmp-cleanup 7, worker 21, all exit 0 (`review/rerun-siblings.summary`).
+- `npm test` (TMP=TEMP=D:/t): exit 0. Node runner 2,564 passed, 0 failed. Custom 455/455 (`review/rerun-npm-test.{log,exit}`).
+- `npm run lint`: exit 0, 0 errors, 172 warnings (baseline).
+- Scope: only the seven files TASK-049 lists changed.
+
+No code or test changed. Nothing was committed, pushed, merged or deployed. The scheduler installer and `--apply` were not run. D:/t/rev047 was not touched.
+
+gate: **codex (rework)**. When it is approved, it lands as `approved` (held): this queue disallows `done`.
