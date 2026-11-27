@@ -5852,3 +5852,17 @@ behaviour change: an unparsable lock (for example empty, from a worker that cras
 residue: a breaker that dies after its target is gone leaves a few-byte `.claim-*` file that nothing reads and retention does not prune. `isBackupsRootLockLive()` is unchanged.
 deviations: none. No push, merge, deploy, scheduler install or `--apply` run.
 -> TASK-049 `review`.
+
+## TASK-049 November26 round 2 - empty-generation ABA closed (Claude as implementer/tester; Codex out of quota)
+changed: `scripts/life-ledger-sync-worker.mjs` lock section only.
+- Publication: `tryCreateLockFile(filePath, lockPath)` writes the nonced payload to a unique `.stale-*`-named temp, `fs.link()`s it to the lock or claim name (EEXIST = held), then removes the temp. A lock or claim therefore never exists empty or partial.
+- Unsupported filesystems: when hard links are refused (`EPERM/ENOTSUP/EOPNOTSUPP/ENOSYS/EISDIR/EXDEV`), it throws `lock_unsupported_filesystem`. There is no `wx` fallback.
+- Judgment: the new `readLockGeneration()` replaces `judgeLockFile()`. It reads the name, then reads bytes plus bigint `dev:ino:birthtimeNs` and mtime through one open handle. A generation counts as settled only if both reads agree. The new `isGenerationStale()` holds the judgment.
+- Removal: under the claim, the lock is removed only if it has the same identity and the same bytes as the judged generation and is still stale.
+- `tombstonePathFor()` is factored out. `isLockStale()`, `newLockPayload()`, the claim naming and the tombstone pattern are unchanged.
+
+`scripts/life-ledger-sync-worker.test.js`: three tests are appended (empty-lock ABA, empty-claim ABA, no-hard-links error). The 806854c blob (35,499 bytes, LF) is a byte-identical prefix. DECISIONS #46: the proof is corrected and rewritten around the three rules. CODEMAP: lock-hardening sentence.
+tests: on the round-1 worker the round-2 file runs 21 pass / 3 fail. Both ABA regressions fail ("two workers were inside the lock at once"; "D removed X's live claim"). After the fix it runs 24/24, and **200/200** consecutive runs of the worker file failed 0 times. Mutants: rule 1 reverted → 23/1 (only the no-hard-links test fails); identity check removed → 24/24. Each rule closes the race on its own. Six sibling files pass. npm test passes: exit 0, 2,567 Node-runner passed, 0 failed, 1 existing skip; custom 455/455. Lint: 0 errors, 172 baseline warnings. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-049/round2/.
+behaviour change: a backupsRoot on a filesystem without hard links now fails loudly instead of locking. A publication temp left behind by a crash matches the retention tool's tombstone pattern, so retention prunes it.
+deviations: the reviewer's probe gates on `fs.stat(lock)`, which the worker no longer calls, so the probe would hang rather than test anything. The appended regression reproduces the same interleaving with implementation-neutral gates (before the claim is created; after the new lock name appears). No push, merge, deploy, scheduler install or `--apply` run.
+-> TASK-049 `review`.

@@ -3744,3 +3744,37 @@ Crash recovery is covered by the new tests and the unchanged ones:
 - Two levels of abandoned claims from dead breakers are recovered, with no lock, claim or tombstone left over (new).
 
 Not run: hosted CI, and POSIX/Linux. The design relies only on `O_EXCL` create and rename semantics that both platforms share; see DECISIONS #46. The scheduler installer and `--apply` against real folders were not run.
+
+## TASK-049 round 2 · 2026-11-26 · empty-generation ABA (REVIEW must-fix 1)
+
+Environment: Windows 10, NTFS on C: and D:, Node v24.19.0. Worktree `task-044-durability-integration` at cd2032f (round-1 review committed) plus this change. `TMP=TEMP=D:/t`. Evidence: `D:/ChronaSenseQualificationEvidence/20261126-queue/task-049/round2/`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Round-2 test file on the round-1 worker (`git archive cd2032f` into D:/t/r049red; worker = 806854c) | **red: 21 pass / 3 fail**. Empty lock: "two workers were inside the lock at once (D skipped:false, X threw ENOENT)". Empty claim: "D removed X's live claim". The no-hard-links test fails because the old worker has no such path. | `red-on-806854c-worker.log`, `mutants.log` |
+| Worker file after the fix | 24/24 | `loop-200.log` |
+| 200 consecutive runs of `node --test scripts/life-ledger-sync-worker.test.js` | **0/200 failed**, 24/24 every run | `loop-200.log` |
+| Mutant m1: rule 1 reverted to `open('wx')`+write, identity kept | 23/1, only the no-hard-links test fails. Both ABA regressions stay green, so rule 3 alone closes the race. | `mutants.log` |
+| Mutant m2: identity comparison removed, link publication kept | 24/24. Rule 1 alone closes the race. | `mutants.log` |
+| Existing tests unchanged | the 806854c blob (35,499 bytes LF) is a byte-identical prefix; numstat +216/-0 | — |
+| chaos 11, health 13, intervention-latch-recovery 5, restore 15, retention 13, tmp-cleanup 7, worker 24 | all exit 0 | `siblings.summary` |
+| `npm test` | exit 0. Node runner 2,567 passed, 0 failed, 1 existing skip (2,564 + 3 new). Custom 455/455. | `npm-test.log`, `npm-test.exit` |
+| `npm run lint` | exit 0, 0 errors, 172 warnings (baseline; none in the worker) | `lint.log` |
+
+How the regressions force the interleavings: all injection is test-side. They wrap `open`, `link`, `rename` and `readFile` on the shared `node:fs/promises` object and restore them in `finally`. Contenders are tagged with `AsyncLocalStorage`. The gates do not depend on the implementation: a "create" is `open(name,'wx')` or `link(_, name)`.
+
+Empty lock:
+1. An aged empty lock exists. D judges it stale and is stalled before it creates `<lock>.claim-*`.
+2. B breaks the lock, runs and releases.
+3. X creates a new lock and is stalled as soon as the name exists.
+4. D resumes. It must back off.
+
+Empty claim: the same steps one level up.
+1. An aged empty lock and an aged empty claim exist. D is stalled before `<claim>.claim-*`.
+2. B recovers and leaves no lock or claim.
+3. A second aged empty lock appears (same bytes, same claim name). X creates that claim and is stalled.
+4. D resumes. It must not rename X's claim, and it must back off.
+
+"Inside the lock" means reaching the latch read, and both contenders are held there so that any overlap is observed. Every gate also falls back to the other contender settling, so neither test can hang.
+
+Not run: hosted CI and POSIX/Linux. The design relies on `link()` EEXIST atomicity and `fstat` identity, which both platforms provide (DECISIONS #46). No scheduler installer, and no `--apply` against real folders.
