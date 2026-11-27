@@ -126,23 +126,33 @@ async function resolveConfig(options, { cwd = process.cwd() } = {}) {
 //   - a lock with a parsable, confirmed-DEAD pid is stale and reclaimable, regardless of age.
 //   - a lock whose content parses but has no usable pid falls back to the age ceiling
 //     (its startedAt) as a documented, conservative last resort.
-//   - a lock whose content does not parse at all — including one a live contender has created
-//     with `wx` but not yet written — is aged by the file's own mtime against the same ceiling,
-//     so a lock that is still being written is never mistaken for a crashed one (TASK-049).
+//   - a lock whose content does not parse at all (an empty or partial file left by an older
+//     worker version that died between creating and writing it, or a foreign file) is aged by
+//     the file's own mtime against the same ceiling (TASK-049).
 //
 // TASK-049 — a takeover removes only the exact stale lock generation that was judged. The
 // earlier rename-to-tombstone takeover moved whatever file sat at the lock path at rename time,
 // so a contender holding a stale verdict could rename away a winner's FRESH lock and both would
-// proceed. Now every removal of a judged-stale lock happens under a per-generation CLAIM file,
-// `<lock>.claim-<sha256(judged bytes)>`, created with `wx`. Under the claim the lock is re-read
-// and removed only if its bytes still equal the judged bytes; then a new lock is created with
-// `wx`. Why this is exclusive on NTFS and POSIX alike: the only things that ever remove a lock are
-// its own holder's release and the holder of that generation's claim; `wx` (O_CREAT|O_EXCL /
-// CREATE_NEW) admits one creator per name; and every lock payload carries a random nonce, so two
-// generations never share bytes (nor a claim name). Between the re-read and the removal nobody
-// else can change that generation: its holder is dead (that is what "stale" means) and the claim
-// excludes every other remover. A live holder's lock is therefore never removed, and while it
-// exists no `wx` create can succeed.
+// proceed. Three rules now make that impossible:
+//   1. Publication. A lock or claim name only ever appears already holding its full payload,
+//      which carries a random nonce: the payload is written to a unique temp file, then
+//      hard-linked into place (`link()` fails with EEXIST if the name exists — one atomic step on
+//      NTFS and POSIX alike). There is no empty or half-written window, so no two generations this
+//      worker creates ever share bytes. A filesystem without hard links (FAT/exFAT, some network
+//      shares) gets a clear `lock_unsupported_filesystem` error, never a weaker fallback.
+//   2. Judgment. Bytes, age and file identity (dev, ino, birthtime) are read through ONE open
+//      handle, so a verdict never mixes one file's bytes with a later file's mtime; and a name
+//      whose bytes changed between a read by name and the handle read is never judged stale.
+//   3. Removal. A judged-stale generation is removed only under its per-generation CLAIM,
+//      `<file>.claim-<sha256(judged bytes)>`, itself created by rule 1. Under the claim the name is
+//      re-read through one handle and removed only if it is the very file judged (same identity
+//      AND same bytes) and still stale; then a new lock is published by rule 1.
+// Why this is exclusive: the only things that ever remove a lock are its own holder's release and
+// the holder of that generation's claim, and the claim excludes every other remover. A live
+// generation created after the verdict has different bytes (rule 1) and a different identity, so
+// it is never mistaken for the judged one — not even when the judged one was an old empty file,
+// whose bytes and claim name every empty file shares. A live holder's lock is never removed, and
+// while it exists no `link()` can create the name.
 //
 // Crash recovery is the same rule applied one level up: a claim file carries its own pid and
 // nonce, and a claim left behind by a contender that died mid-takeover is judged by exactly the
@@ -180,45 +190,80 @@ function newLockPayload() {
   });
 }
 
-async function tryCreateLockFile(lockPath, payload) {
+// A unique `<lock>.stale-<pid>-<ms>-<hex>` name. It is used for removal tombstones and for the
+// publication temp file, so anything a crash leaves under it is pruned by the retention tool.
+function tombstonePathFor(lockPath) {
+  return `${lockPath}.stale-${process.pid}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+// Error codes with which link() reports "this filesystem has no hard links" (Windows reports
+// ERROR_INVALID_FUNCTION on FAT/exFAT as EISDIR).
+const LINK_UNSUPPORTED_CODES = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EISDIR', 'EXDEV']);
+
+// Rule 1 (publication): makes `filePath` appear already holding a full, nonced payload, or not at
+// all. Returns false when the name already exists.
+async function tryCreateLockFile(filePath, lockPath) {
+  const tempPath = tombstonePathFor(lockPath);
   try {
-    const handle = await fs.open(lockPath, 'wx');
-    await handle.writeFile(payload, 'utf8');
-    await handle.close();
-    return true;
-  } catch (err) {
-    if (err.code === 'EEXIST') return false;
-    throw err;
+    await fs.writeFile(tempPath, newLockPayload(), { encoding: 'utf8', flag: 'wx' });
+    try {
+      await fs.link(tempPath, filePath);
+      return true;
+    } catch (err) {
+      if (err.code === 'EEXIST') return false;
+      if (LINK_UNSUPPORTED_CODES.has(err.code)) {
+        throw new LifeLedgerSyncWorkerError('lock_unsupported_filesystem',
+          `Cannot create ${filePath}: the single-instance lock needs hard links, which this filesystem refused (${err.code}). Put backupsRoot on NTFS (or another filesystem with hard links).`);
+      }
+      throw err;
+    }
+  } finally {
+    // The temp is never at a lock or claim name; one left behind is pruned by retention.
+    await fs.rm(tempPath, { force: true }).catch(() => {});
   }
 }
 
-// Reads one lock (or claim) file and judges it. Returns null when the file is already gone.
-async function judgeLockFile(filePath) {
-  let raw;
+// Rule 2 (judgment): a lock (or claim) generation is described from ONE open handle (its bytes,
+// age and identity all belong to the same file), and it counts as settled only if those bytes
+// equal a read of the name made just before the handle was opened. A name whose content changed
+// while it was being judged is therefore never taken for an abandoned one. Null: it is gone.
+async function readLockGeneration(filePath) {
+  let rawByName;
+  let handle;
   try {
-    raw = await fs.readFile(filePath, 'utf8');
+    rawByName = await fs.readFile(filePath, 'utf8');
+    handle = await fs.open(filePath, 'r');
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     throw err;
   }
+  try {
+    const raw = await handle.readFile('utf8');
+    const stats = await handle.stat({ bigint: true });
+    return {
+      raw,
+      settled: raw === rawByName,
+      identity: `${stats.dev}:${stats.ino}:${stats.birthtimeNs}`,
+      mtimeMs: Number(stats.mtimeMs)
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function isGenerationStale(generation) {
+  if (!generation.settled) return false; // changed while being judged: someone is alive there
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(generation.raw);
   } catch {
-    let stats;
-    try {
-      stats = await fs.stat(filePath);
-    } catch (err) {
-      if (err.code === 'ENOENT') return null;
-      throw err;
-    }
-    return { raw, stale: Date.now() - stats.mtimeMs >= STALE_LOCK_MS };
+    return Date.now() - generation.mtimeMs >= STALE_LOCK_MS;
   }
-  return { raw, stale: isLockStale(parsed) };
+  return isLockStale(parsed);
 }
 
 async function removeViaTombstone(filePath, lockPath) {
-  const tombstonePath = `${lockPath}.stale-${process.pid}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const tombstonePath = tombstonePathFor(lockPath);
   await fs.rename(filePath, tombstonePath);
   await fs.rm(tombstonePath, { force: true });
 }
@@ -226,24 +271,21 @@ async function removeViaTombstone(filePath, lockPath) {
 // Creates `filePath` exclusively, breaking it first only if it holds a stale generation.
 // Returns true when this process now owns `filePath`; false means "someone else does" (skip).
 async function acquireExclusiveFile(filePath, lockPath) {
-  if (await tryCreateLockFile(filePath, newLockPayload())) return true;
-  const judged = await judgeLockFile(filePath);
-  if (!judged || !judged.stale) return false;
+  if (await tryCreateLockFile(filePath, lockPath)) return true;
+  const judged = await readLockGeneration(filePath);
+  if (!judged || !isGenerationStale(judged)) return false;
 
   const generation = crypto.createHash('sha256').update(judged.raw).digest('hex').slice(0, 16);
   const claimPath = `${filePath}.claim-${generation}`;
   if (!(await acquireExclusiveFile(claimPath, lockPath))) return false; // another contender is breaking it
   try {
-    let current;
-    try {
-      current = await fs.readFile(filePath, 'utf8');
-    } catch (err) {
-      if (err.code === 'ENOENT') return false; // already broken and released by an earlier claimant
-      throw err;
-    }
-    if (current !== judged.raw) return false; // a different generation now — not ours to remove
+    // Rule 3 (removal): only the very file judged — same identity AND bytes — and still stale.
+    const current = await readLockGeneration(filePath);
+    if (!current) return false; // already broken and released by an earlier claimant
+    if (current.identity !== judged.identity || current.raw !== judged.raw) return false; // a later generation
+    if (!isGenerationStale(current)) return false;
     await removeViaTombstone(filePath, lockPath);
-    return await tryCreateLockFile(filePath, newLockPayload());
+    return await tryCreateLockFile(filePath, lockPath);
   } finally {
     await removeViaTombstone(claimPath, lockPath);
   }
