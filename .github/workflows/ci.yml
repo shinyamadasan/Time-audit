@@ -32,11 +32,11 @@ env:
     tests/accounting-timeout-diagnostics.spec.js
     tests/accounting-first-start-upgrade.spec.js
   MANDATORY_COUNT: 490
-  # Every other browser spec (73 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
-  WIDER_COUNT: 1104
-  # Candidate b18cc52 expected web/Android bundle bytes and Stage B rules; APK qualification remains required.
-  RELEASE_WEB_TREE: a05827bd8e0614051e327e00906919970d37060886a41637cc4a09311a5046b8
-  RELEASE_BUNDLE_TREE: 564715514086dde6338f0871bd2bb88570d9d6aee569f8d57286cca352118f62
+  # Every other browser spec (74 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
+  WIDER_COUNT: 1107
+  # Combined TASK-044/045 web and Android bundle bytes and Stage B rules.
+  RELEASE_WEB_TREE: bf81c9e5a021283fe158eb2ee8290da7bda9ef55b0f6dfa3554c421659ee1dfe
+  RELEASE_BUNDLE_TREE: 6c73eb28dafbcf96bfff878e94f158ac1433f723b413d4eed4a884870188c275
   RELEASE_RULES_SHA256: 93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00
 
 jobs:
