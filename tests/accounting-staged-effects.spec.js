@@ -1479,12 +1479,15 @@ for (const uid of ['alice', 'bob']) {
     });
     expect(await page.evaluate(() => enterFocusMode({ task: 'Terminal Learning', workMinutes: 5, autoStart: true,
       learningPlan: { planId: 'proof-plan', phaseId: 'proof-phase', lessonId: 'proof-lesson', stepId: 'proof-step' } }))).toBe(true);
-    let release, stopSubmitted = false; const held = new Promise(resolve => { release = resolve; });
+    let release, stopSubmitted = false, reloaded = false, heldAfterReload = 0;
+    const held = new Promise(resolve => { release = resolve; });
     const pattern = `http://127.0.0.1:${emulator.port}/rooms/uid_${uid}.json*`;
     await page.route(pattern, async route => {
       if (route.request().method() !== 'PATCH' || !route.request().postDataJSON().timer?.stopped) return route.continue();
-      const response = await route.fetch(); stopSubmitted = true; await held;
-      try { await route.fulfill({ response }); } catch { /* original page may already have reloaded */ }
+      // Hold every Stop before it reaches the emulator: the server has not applied it, so no read can ACK it until release.
+      const fromOriginalPage = !reloaded; if (reloaded) heldAfterReload++; stopSubmitted = true; await held;
+      // The original document is gone after the reload, so its request is dropped; the reloaded page's own Stop is delivered.
+      try { await (fromOriginalPage ? route.abort('failed') : route.continue()); } catch { /* request already cancelled */ }
     });
     await page.evaluate(at => {
       window.__setNow(at);
@@ -1500,7 +1503,13 @@ for (const uid of ['alice', 'bob']) {
       const original = await page.evaluate(() => accountingCoordinator().snapshot().queue.find(op => op.input.name === 'focus-learning-finish'));
       expect(original).toBeDefined();
       expect(await page.evaluate(() => accountingCoordinator().snapshot().effects.length)).toBe(1);
-      await page.reload(); await page.waitForFunction(() => document.readyState === 'complete' && accountingIdentity() && pomodoroPhase === 'break');
+      reloaded = true; await page.reload();
+      await page.waitForFunction(() => document.readyState === 'complete' && accountingIdentity() && pomodoroPhase === 'break');
+      // The Stop is still unacknowledged after the reload: the reloaded page resubmits it and it stays held.
+      await expect.poll(() => heldAfterReload).toBeGreaterThan(0);
+      expect(await page.evaluate(id => accountingCoordinator().snapshot().queue.some(op => op.id === id), original.id)).toBe(true);
+      expect(await page.evaluate(() => pomodoroPhase)).toBe('break');
+      expect((await remote(world, uid)).timer.stopped).toBeFalsy();
       await page.evaluate(at => { window.__setNow(at); for (let i = 0; i < 400; i++) tickPomodoro(); }, T0 + 20 * MIN);
       const candidates = await page.evaluate(() => [...accountingCoordinator().snapshot().queue,
         ...accountingCoordinator().captures(roomCode).map(item => item.captured)]);
