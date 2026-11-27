@@ -33,10 +33,10 @@ env:
     tests/accounting-first-start-upgrade.spec.js
   MANDATORY_COUNT: 490
   # Every other browser spec (74 files). Only failures recorded in scripts/ci-known-failures.json are tolerated; they are reported.
-  WIDER_COUNT: 1107
-  # Combined TASK-044/045 web and Android bundle bytes and Stage B rules.
-  RELEASE_WEB_TREE: bf81c9e5a021283fe158eb2ee8290da7bda9ef55b0f6dfa3554c421659ee1dfe
-  RELEASE_BUNDLE_TREE: 6c73eb28dafbcf96bfff878e94f158ac1433f723b413d4eed4a884870188c275
+  WIDER_COUNT: 1111
+  # Combined TASK-044/045/050 web and Android bundle bytes and Stage B rules.
+  RELEASE_WEB_TREE: 2cec5b191d5f496f5e13af3e9c0d2904829846e54762cd0d50fc7d5c3ee26f2c
+  RELEASE_BUNDLE_TREE: f8b9fc7819bf54b304d0f1413ae0bc541b2fa5b5140520c6a0c598b9c1f8afa5
   RELEASE_RULES_SHA256: 93f0a77424e730aa5996825af4183e0d42d5f29251260b8f85eea3756645be00
 
 jobs:
