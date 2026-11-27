@@ -2872,6 +2872,119 @@ constraints:
 verification:
   - Red->green regression; 200-run loop; npm test (TMP/TEMP=D:/t); independent review APPROVE.
 
+### QUEUE-20261126-B - Owner decision A+B (read this first for TASK-050..055)
+source: owner-direct, 2026-11-26 thread message "my decision is A+B": implement Option A before this release;
+  queue Option B as the next dedicated storage project; standing approval for local engineering, independent reviews,
+  iterative fixes and testing within this scope; push the exact independently verified candidate to a NEW release
+  branch for hosted CI with an explicit remote refspec (never the default push destination, never main); complete
+  hosted CI and Android verification; prepare the device checklist naming only owner-required steps.
+hard-stops (owner-only): merge, deploy, release-gate bypass, production data, Firebase security settings/rules.
+dependency-rule: as QUEUE-20261126 (a dependency counts when its work is on this branch and its checks pass).
+implementer: Claude (Codex out of quota until Nov 29); every change gets a separate independent reviewer.
+
+### TASK-050 - Option A: bound all settled accounting history (red zone)
+status: codex
+owner: claude
+source: owner-direct (QUEUE-20261126-B item 1)
+priority: P0
+depends-on: TASK-048
+files: accounting-command.js; index.html (accounting history/archive sections only, via CODEMAP); www/ mirrors;
+  focused tests; DECISIONS.md (#45 amendment or #47); CODEMAP.md if structure moves; CHANGELOG/TEST_REPORT; this entry.
+objective:
+  Smallest safe extension of the existing verified IndexedDB archive + locked history cut (DECISIONS #45) so that every
+  settled, acknowledged accounting history kind (ping, scheduled/automatic log, save-entry/edit, Focus, break/away,
+  undo, and any other kind found by audit) is eligible, leaving growth driven only by new entries themselves.
+acceptance:
+  - Per-kind audit first (in DECISIONS): for each history kind, what makes it settled; which dependency/source/effect/
+    observation/receipt protections apply; which kinds must never be archived (and why). No kind archived while any
+    pending op, unacknowledged fact, unfiled time, held evidence or UNKNOWN depends on it.
+  - Same safety contract as #45: a record leaves the envelope only after its archive copy is read back and matches;
+    IDB failure keeps everything; no schema/rules change; existing envelope/archive formats; no startup auto-repair.
+  - Existing records preserved: forward migration from a pre-A state (0ff39ec-written and da5c4d4-written synthetic
+    envelopes) loses nothing (prove entry digests, unfiled time and pending ops identical before/after).
+  - Capacity: TASK-046 mixed probe rerun (same harness) shows per-day growth after the first cut and a projection in
+    day-equivalents at E=2489; report history vs entry contributions. Target >= 30 day-equivalents; if not met, report
+    the measured figure and why (that remaining growth belongs to Option B) — never shrink the workload.
+  - Red->green focused tests per new kind; existing accounting regressions, npm test, mandatory 490, perf-profile
+    unchanged, durability spec pass; root/www parity; Hard Rules 4/6/7/8/9 untouched.
+  - Independent review APPROVE; at most two fix/review cycles before escalating. Gate: `approved` (held).
+verification:
+  - npm test; mandatory 490 (3 shards, one worker, quiet); zz-perf-profile + storage-durability specs; mixed probe;
+    runtime-mirror --check; git diff --check.
+
+### TASK-051 - Offline time-loss investigation (known failures F-1..F-5 and similar)
+status: codex
+owner: claude
+source: owner-direct (QUEUE-20261126-B item 4)
+priority: P0
+depends-on: none (analysis on the TASK-048 tree in a separate scratch checkout; no runtime change)
+files: docs/OFFLINE_TIME_LOSS_TRIAGE_20261126.md; this entry. No runtime or test change in this task.
+objective:
+  For every known-baseline failure in scripts/ci-known-failures.json that is shaped like lost/incorrect logged time
+  (daily-use-reliability F-1..F-5 and any other entry), reproduce on the candidate, find the root cause, and classify:
+  RELEASE-BLOCKING (this release can lose or corrupt time in ordinary use, including anything TASK-041/045/050 made
+  worse or newly reachable) vs DEFERRED (pre-existing on live main, not worsened, with frequency/impact and a proposed
+  fix task). Compare against live main 0ff39ec behavior.
+acceptance:
+  - Each case: repro command, observed vs expected, root cause (file:line), present on 0ff39ec? worsened? user impact,
+    classification with rationale, proposed fix scope. Independent reviewer confirms classifications.
+  - Any RELEASE-BLOCKING case becomes its own fix task (recorded by Claude) before release.
+
+### TASK-052 - Requalification of the A candidate (capacity, durability, recovery, Household, migration, rollback)
+status: todo
+owner: claude
+source: owner-direct (QUEUE-20261126-B items 2-3)
+priority: P0
+depends-on: TASK-050 (and any release-blocking fix from TASK-051)
+objective:
+  Independent full local qualification of the candidate after A, including synthetic forward-migration and rollback.
+acceptance:
+  - All TASK-046/047 gates on the new candidate (npm test, mandatory 490, wider classifier, household 11, packaged,
+    worker, rules) with release artifacts rebuilt from the exact commit, pins refreshed with byte justification,
+    independent APK parity/signature.
+  - Reload/crash recovery: page-held capture, reload mid-archive-cut, kill during IDB write, multi-tab, at-wall.
+  - Migration (synthetic data only, never real records): state written by 0ff39ec -> candidate (forward) and
+    candidate -> 0ff39ec (rollback, i.e. archived history absent from envelope): no lost entries/unfiled time/pending
+    ops, no crash, no false recovery modal; document any rollback limitation precisely.
+  - Independent reviewer reruns key gates and APPROVES.
+
+### TASK-053 - Hosted CI on a new release branch + Android verification
+status: todo
+owner: claude
+source: owner-direct (QUEUE-20261126-B items 5-6)
+priority: P0
+depends-on: TASK-052
+objective:
+  Push the exact independently verified candidate SHA with an explicit refspec to a NEW branch
+  (`git push origin <SHA>:refs/heads/release/<name>`; never main, never a bare push), monitor hosted CI to completion,
+  diagnose any hosted-only failure at root cause (fix via a reviewed task, re-push a new verified SHA to a new branch),
+  and complete all Android verification possible without a physical device (hosted APK build vs local parity, packaged
+  suite, emulator if available).
+
+### TASK-054 - Physical-device acceptance checklist (owner steps only)
+status: todo
+owner: claude
+source: owner-direct (QUEUE-20261126-B item 7)
+priority: P1
+depends-on: TASK-053
+objective:
+  Refresh the release packet and device checklist for the final candidate; list ONLY the steps the owner personally
+  must perform, each with action / expected / record; everything else already done with evidence.
+
+### TASK-055 - Option B: one stored copy of time entries (next dedicated storage project)
+status: todo
+owner: claude
+source: owner-direct (QUEUE-20261126-B item 8) - queued, not part of this release
+priority: P1 (next project after this release)
+depends-on: release of QUEUE-20261126 (owner)
+objective:
+  Durable fix for duplicate time-entry storage: in steady state each entry is held three times in localStorage
+  (envelope committed view, envelope physical records, `ta3-entries` compatibility cache; plus the first hydrate frame
+  before the first cut). Plan: docs/STORAGE_OPTION_B_PLAN.md (design options, migration, rollback, verification).
+acceptance (for the plan, written in this queue): design alternatives with trade-offs; chosen direction with entry
+  schema/RTDB impact (must be none or explicitly owner-approved); forward + rollback migration plan with synthetic
+  verification; capacity target; red-zone gate.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
