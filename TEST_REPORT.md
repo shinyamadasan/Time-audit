@@ -3719,3 +3719,28 @@ git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integr
 ```
 
 The first command prints the SHA being pushed. Confirm that it is the reviewed candidate before running the push. The source is the local branch ref (explicit refspec), and the destination is a new `release/` branch. Expect the `unit` job to hit the Life Ledger lock race on roughly 1 run in 10 until that blocker is fixed.
+
+## TASK-049 · 2026-11-26 · Life Ledger worker stale-lock takeover race
+
+Environment: Windows 10 NTFS, Node v24.19.0, worktree `task-044-durability-integration` at b227889 plus this change, `TMP=TEMP=D:/t`. Evidence: `D:/ChronaSenseQualificationEvidence/20261126-queue/task-049/`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| New regression on the old code | **red 20/20** (`a late contender with a stale verdict must back off` false !== true). The two other new tests are also red on the old code: a live breaker's claim was ignored, and an empty lock still being written was broken. | `red-before-fix.log`, `red-repeat-20.log` |
+| Worker file after the fix | 21/21 | `green-after-fix.log` |
+| 200 consecutive runs of `node --test scripts/life-ledger-sync-worker.test.js` | **0/200 failed**, 21/21 every run, including the TASK-047 "Finding 3" test | `loop-200.sh`, `loop-200.log` |
+| Mutant: byte check under the claim removed | regression red (20 pass, 1 fail) → it guards the fix | `mutation-no-byte-check.log` |
+| chaos 11, health 13, intervention-latch-recovery 5, restore 15, retention 13, tmp-cleanup 7 | all pass | `sibling-*.log`, `sibling-tests.summary` |
+| `npm test` | exit 0; Node runner 2,564 passed, 0 failed, 1 existing skip (2,561 + 3 new); custom 455/455 | `npm-test.log`, `npm-test.exit` |
+| `npm run lint` | exit 0, 0 errors, 172 warnings (TASK-047 baseline; none in the worker) | `lint.log`, `lint.exit` |
+
+How the regression forces the interleaving: the test wraps `readFile` on the shared `node:fs/promises` object, test-side only, and restores it in `finally`. It tags the two in-process contenders with `AsyncLocalStorage`. Both contenders read the dead lock, and the test asserts they read the same bytes. A then takes over and is held at its first read inside the lock (the latch check). Only then does B act on its verdict. Fallbacks resolve each gate when a contender settles, so a contender that takes another path cannot hang the test. The worker has no test hooks.
+
+Crash recovery is covered by the new tests and the unchanged ones:
+- A dead-PID lock is recovered (existing test).
+- A PID-less lock with an aged `startedAt` is recovered (existing).
+- An aged unparsable lock is recovered, while a fresh one is held (new).
+- A live breaker's claim is honoured (new).
+- Two levels of abandoned claims from dead breakers are recovered, with no lock, claim or tombstone left over (new).
+
+Not run: hosted CI, and POSIX/Linux. The design relies only on `O_EXCL` create and rename semantics that both platforms share; see DECISIONS #46. The scheduler installer and `--apply` against real folders were not run.
