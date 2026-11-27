@@ -563,3 +563,158 @@ test('G: outbox status while latched says action is required, never synced, neve
     ))
   ))
 ));
+
+// ===========================================================================
+// TASK-049 — a takeover removes only the exact stale lock generation it judged
+// ===========================================================================
+
+// (Import declarations are hoisted, so these are in scope for the whole module.)
+import { AsyncLocalStorage } from 'node:async_hooks';
+import crypto from 'node:crypto';
+
+const TASK049_LOCK_FILENAME = 'life-ledger-sync-worker.lock';
+const TASK049_DEAD_PID = 999999; // a PID astronomically unlikely to be a live process
+
+function task049Deferred() {
+  let resolve;
+  const promise = new Promise(r => { resolve = r; });
+  return { promise, resolve };
+}
+
+// Mirrors the worker's documented claim naming: `<file>.claim-<first 16 hex of sha256(bytes)>`.
+function task049ClaimPath(filePath, judgedBytes) {
+  return `${filePath}.claim-${crypto.createHash('sha256').update(judgedBytes).digest('hex').slice(0, 16)}`;
+}
+
+async function task049LockArtifacts(backupsRoot) {
+  return (await fs.readdir(backupsRoot)).filter(name => name.startsWith(TASK049_LOCK_FILENAME)).sort();
+}
+
+test('TASK-049: a contender acting on a stale verdict never removes the winner\'s fresh lock', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          const lockPath = path.join(backupsRoot, TASK049_LOCK_FILENAME);
+          const latchPath = path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME);
+          const deadLock = JSON.stringify({ pid: TASK049_DEAD_PID, startedAt: new Date().toISOString(), hostname: 'test' });
+          await fs.writeFile(lockPath, deadLock, 'utf8');
+
+          // The exact TASK-047 interleaving, forced deterministically. Both contenders read the
+          // dead lock and form a "stale" verdict on the same bytes; A then takes over and is
+          // running inside the lock (held at its first post-lock read, the latch check); only then
+          // does B act on its now-outdated verdict. B must back off.
+          const contender = new AsyncLocalStorage();
+          const verdictRead = { A: task049Deferred(), B: task049Deferred() };
+          const aHoldsLock = task049Deferred();
+          const bSettled = task049Deferred();
+          const lockReads = { A: 0, B: 0 };
+          const judgedBytes = {};
+          let aGatedAtLatch = false;
+          const realReadFile = fs.readFile;
+          fs.readFile = async function task049ReadFile(filePath, ...rest) {
+            const who = contender.getStore();
+            if (who === 'A' && String(filePath) === latchPath && !aGatedAtLatch) {
+              aGatedAtLatch = true;
+              aHoldsLock.resolve();
+              await bSettled.promise;
+            }
+            const result = await realReadFile.call(this, filePath, ...rest);
+            if (who && String(filePath) === lockPath && lockReads[who]++ === 0) {
+              judgedBytes[who] = result;
+              verdictRead[who].resolve();
+              if (who === 'A') await verdictRead.B.promise;
+              else await aHoldsLock.promise;
+            }
+            return result;
+          };
+          let aOutcome;
+          let bOutcome;
+          try {
+            const argv = ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot];
+            const a = contender.run('A', () => runLifeLedgerSyncWorker(argv, { cwd }));
+            const b = contender.run('B', () => runLifeLedgerSyncWorker(argv, { cwd }));
+            // Never hang if a contender takes a path that skips its gate point.
+            a.finally(() => aHoldsLock.resolve()).catch(() => {});
+            b.finally(() => { verdictRead.B.resolve(); bSettled.resolve(); }).catch(() => {});
+            bOutcome = await b;
+            bSettled.resolve();
+            aOutcome = await a;
+          } finally {
+            fs.readFile = realReadFile;
+          }
+
+          assert.equal(judgedBytes.A, deadLock, 'A judged the dead lock');
+          assert.equal(judgedBytes.B, deadLock, 'B judged the same dead lock before A took it over (race reproduced)');
+          assert.equal(aGatedAtLatch, true, 'A was running inside the lock while B acted');
+          assert.equal(aOutcome.skipped, false, 'the first contender to act obtains execution authority');
+          assert.equal(bOutcome.skipped, true, 'a late contender with a stale verdict must back off, not also proceed');
+          assert.equal(bOutcome.reason, 'already_running');
+          assert.deepEqual(await task049LockArtifacts(backupsRoot), [], 'no lock, claim or tombstone left behind');
+        })
+      ))
+    ))
+  ))
+));
+
+test('TASK-049: a takeover abandoned mid-way is honoured while its breaker lives and recovered once it is dead', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          const argv = ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot];
+          const lockPath = path.join(backupsRoot, TASK049_LOCK_FILENAME);
+          const deadLock = JSON.stringify({ pid: TASK049_DEAD_PID, startedAt: new Date().toISOString(), hostname: 'test' });
+          await fs.writeFile(lockPath, deadLock, 'utf8');
+          const claimPath = task049ClaimPath(lockPath, deadLock);
+
+          // A LIVE breaker is mid-takeover of the dead lock: nobody else may break it.
+          const liveClaim = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), hostname: 'test', nonce: 'live-breaker' });
+          await fs.writeFile(claimPath, liveClaim, 'utf8');
+          const whileBreakerLive = await runLifeLedgerSyncWorker(argv, { cwd });
+          assert.equal(whileBreakerLive.skipped, true, 'a live breaker\'s claim is never stolen');
+          assert.equal(await fs.readFile(lockPath, 'utf8'), deadLock, 'the judged lock is left for the live breaker');
+          assert.equal(await fs.readFile(claimPath, 'utf8'), liveClaim);
+
+          // That breaker died mid-takeover, and so did the breaker that tried to break ITS claim:
+          // two abandoned levels. The next run must still recover, not wedge.
+          const deadClaim = JSON.stringify({ pid: TASK049_DEAD_PID, startedAt: new Date().toISOString(), hostname: 'test', nonce: 'dead-breaker-1' });
+          await fs.writeFile(claimPath, deadClaim, 'utf8');
+          const claimOfClaimPath = task049ClaimPath(claimPath, deadClaim);
+          const deadClaimOfClaim = JSON.stringify({ pid: TASK049_DEAD_PID, startedAt: new Date().toISOString(), hostname: 'test', nonce: 'dead-breaker-2' });
+          await fs.writeFile(claimOfClaimPath, deadClaimOfClaim, 'utf8');
+          const afterBreakersDied = await runLifeLedgerSyncWorker(argv, { cwd });
+          assert.equal(afterBreakersDied.skipped, false, 'abandoned breakers must not wedge the lock');
+          assert.equal(afterBreakersDied.result.outcome, 'no_source');
+          assert.deepEqual(await task049LockArtifacts(backupsRoot), [], 'the dead lock, both dead claims and all tombstones are gone');
+        })
+      ))
+    ))
+  ))
+));
+
+test('TASK-049: an unparsable lock is aged by its file time -- a lock still being written is held, an aged one is recovered', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          const argv = ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot];
+          const lockPath = path.join(backupsRoot, TASK049_LOCK_FILENAME);
+          // What a contender sees between a winner's `wx` open and its write: an empty lock.
+          await fs.writeFile(lockPath, '', 'utf8');
+          const whileBeingWritten = await runLifeLedgerSyncWorker(argv, { cwd });
+          assert.equal(whileBeingWritten.skipped, true, 'a just-created, not-yet-written lock is never broken');
+          assert.equal(await fs.readFile(lockPath, 'utf8'), '');
+
+          // The same unparsable lock, abandoned long ago (writer crashed after `wx`, before writing).
+          const longAgo = new Date(Date.now() - 60 * 60 * 1000);
+          await fs.utimes(lockPath, longAgo, longAgo);
+          const afterAbandoned = await runLifeLedgerSyncWorker(argv, { cwd });
+          assert.equal(afterAbandoned.skipped, false, 'an aged unparsable lock is still recovered');
+          assert.equal(afterAbandoned.result.outcome, 'no_source');
+          assert.deepEqual(await task049LockArtifacts(backupsRoot), []);
+        })
+      ))
+    ))
+  ))
+));

@@ -1057,3 +1057,17 @@ If IndexedDB or archive verification fails, the live history remains intact. At 
 Known limit (independent review, Nov 26): automatic archiving covers only Start, Stop and hydrate records. Pings, automatic logs, edits, Focus, break/away and undo history, and the committed entries themselves, still grow without bound, so real daily use can still reach the quota, later than before. At that point the page-held path above keeps the loss visible rather than silent, but archiving cannot free space while a page-held capture blocks commits. TASK-046 measures headroom under a realistic mixed workload; widening archive eligibility is a follow-up decision, not part of this one.
 
 ---
+
+## 46. The Life Ledger worker breaks a stale lock only through a per-generation claim (November 26, 2026, TASK-049)
+
+The worker used to break a stale lock by renaming whatever file sat at the lock path. A contender holding an old "stale" verdict could therefore rename away a winner's fresh lock, and both would run (TASK-047 measured about 1 failure in 10 runs of the Finding 3 test).
+
+Now a stale lock is removed only by the holder of `<lock>.claim-<first 16 hex of sha256(judged bytes)>`, created with `wx`. Under the claim, the worker re-reads the lock and removes it only if its bytes still equal the bytes it judged. Then it creates its own lock with `wx`. Every lock and claim payload carries a random nonce, so two generations never share bytes or a claim name. Only two things ever remove a lock: its holder's release, and the holder of that generation's claim. A stale lock's holder is dead, and the claim shuts out every other remover, so the re-read and the removal see the same file. `wx` (`O_CREAT|O_EXCL` on POSIX, `CREATE_NEW` on NTFS) lets only one process create a given name. So no live holder's lock is ever removed, and while one exists no create can succeed.
+
+Rejected alternative: rename the lock to a tombstone, compare the bytes, and rename it back if it was the wrong one. Between those two renames the lock path is empty, and a third contender can create a lock while the original holder is still running. A single fixed breaker file was also rejected: breaking a crashed breaker would bring back the same race one level up. With one claim per generation, a claim abandoned by a dead process is judged by the same liveness and age rules and broken through its own claim. Each extra level exists only because a process died at that point, so no crash can wedge the lock permanently.
+
+A lock that does not parse, including one created with `wx` and not yet written, is now aged by the file's mtime against the same 30-minute ceiling. Before, it was broken at once, which was a second way to steal a live lock. Every removal renames the file to the existing `<lock>.stale-<pid>-<ms>-<hex>` tombstone pattern first, which frees the name at once even if another process has it open on Windows. The retention tool already prunes those tombstones.
+
+Known residue: a process that dies holding a claim after its target is gone leaves a few-byte `.claim-*` file that nothing reads again. The retention tool does not prune it. `isBackupsRootLockLive()`, used by tmp-cleanup, still treats an unparsable lock as not live. That function is outside TASK-049 scope and is unchanged.
+
+---

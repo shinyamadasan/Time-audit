@@ -119,20 +119,38 @@ async function resolveConfig(options, { cwd = process.cwd() } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Single-instance lock (Review Findings 3 & 4)
+// Single-instance lock (Review Findings 3 & 4, TASK-049)
 //
 // Finding 4 — liveness is authoritative, never overridden by age:
 //   - a lock with a parsable, confirmed-LIVE pid is held, full stop, regardless of age.
 //   - a lock with a parsable, confirmed-DEAD pid is stale and reclaimable, regardless of age.
-//   - a lock whose content can't even be parsed / has no usable pid falls back to the age
-//     ceiling as a documented, conservative last resort (liveness cannot be established any
-//     other way here).
+//   - a lock whose content parses but has no usable pid falls back to the age ceiling
+//     (its startedAt) as a documented, conservative last resort.
+//   - a lock whose content does not parse at all — including one a live contender has created
+//     with `wx` but not yet written — is aged by the file's own mtime against the same ceiling,
+//     so a lock that is still being written is never mistaken for a crashed one (TASK-049).
 //
-// Finding 3 — atomic takeover: breaking a stale lock is a rename-to-a-unique-tombstone, not an
-// unconditional rm+open. `fs.rename` on a shared source path is atomic — if two contenders both
-// judge the same lock stale and both attempt to rename it away, exactly one rename succeeds; the
-// loser gets ENOENT (the source is already gone) and backs off safely as "already running",
-// never throwing an unhandled exception and never allowing both contenders through.
+// TASK-049 — a takeover removes only the exact stale lock generation that was judged. The
+// earlier rename-to-tombstone takeover moved whatever file sat at the lock path at rename time,
+// so a contender holding a stale verdict could rename away a winner's FRESH lock and both would
+// proceed. Now every removal of a judged-stale lock happens under a per-generation CLAIM file,
+// `<lock>.claim-<sha256(judged bytes)>`, created with `wx`. Under the claim the lock is re-read
+// and removed only if its bytes still equal the judged bytes; then a new lock is created with
+// `wx`. Why this is exclusive on NTFS and POSIX alike: the only things that ever remove a lock are
+// its own holder's release and the holder of that generation's claim; `wx` (O_CREAT|O_EXCL /
+// CREATE_NEW) admits one creator per name; and every lock payload carries a random nonce, so two
+// generations never share bytes (nor a claim name). Between the re-read and the removal nobody
+// else can change that generation: its holder is dead (that is what "stale" means) and the claim
+// excludes every other remover. A live holder's lock is therefore never removed, and while it
+// exists no `wx` create can succeed.
+//
+// Crash recovery is the same rule applied one level up: a claim file carries its own pid and
+// nonce, and a claim left behind by a contender that died mid-takeover is judged by exactly the
+// same liveness/age rules and broken through ITS OWN claim (`<claim>.claim-<sha256>`). Each extra
+// level exists only because the level below was abandoned by a dead process, so a dead holder or
+// a dead breaker can never wedge the lock permanently. Every removal is a rename to a unique
+// `<lock>.stale-<pid>-<ms>-<hex>` tombstone (frees the name at once even if another contender
+// has the file open on Windows; the retention tool prunes these) followed by an rm.
 // ---------------------------------------------------------------------------
 
 function pidIsRunning(pid) {
@@ -153,6 +171,15 @@ function isLockStale(existing) {
   return ageMs >= STALE_LOCK_MS;
 }
 
+function newLockPayload() {
+  return JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || null,
+    nonce: crypto.randomUUID()
+  });
+}
+
 async function tryCreateLockFile(lockPath, payload) {
   try {
     const handle = await fs.open(lockPath, 'wx');
@@ -165,40 +192,67 @@ async function tryCreateLockFile(lockPath, payload) {
   }
 }
 
+// Reads one lock (or claim) file and judges it. Returns null when the file is already gone.
+async function judgeLockFile(filePath) {
+  let raw;
+  try {
+    raw = await fs.readFile(filePath, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    let stats;
+    try {
+      stats = await fs.stat(filePath);
+    } catch (err) {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    }
+    return { raw, stale: Date.now() - stats.mtimeMs >= STALE_LOCK_MS };
+  }
+  return { raw, stale: isLockStale(parsed) };
+}
+
+async function removeViaTombstone(filePath, lockPath) {
+  const tombstonePath = `${lockPath}.stale-${process.pid}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  await fs.rename(filePath, tombstonePath);
+  await fs.rm(tombstonePath, { force: true });
+}
+
+// Creates `filePath` exclusively, breaking it first only if it holds a stale generation.
+// Returns true when this process now owns `filePath`; false means "someone else does" (skip).
+async function acquireExclusiveFile(filePath, lockPath) {
+  if (await tryCreateLockFile(filePath, newLockPayload())) return true;
+  const judged = await judgeLockFile(filePath);
+  if (!judged || !judged.stale) return false;
+
+  const generation = crypto.createHash('sha256').update(judged.raw).digest('hex').slice(0, 16);
+  const claimPath = `${filePath}.claim-${generation}`;
+  if (!(await acquireExclusiveFile(claimPath, lockPath))) return false; // another contender is breaking it
+  try {
+    let current;
+    try {
+      current = await fs.readFile(filePath, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return false; // already broken and released by an earlier claimant
+      throw err;
+    }
+    if (current !== judged.raw) return false; // a different generation now — not ours to remove
+    await removeViaTombstone(filePath, lockPath);
+    return await tryCreateLockFile(filePath, newLockPayload());
+  } finally {
+    await removeViaTombstone(claimPath, lockPath);
+  }
+}
+
 async function acquireLock(backupsRoot) {
   await fs.mkdir(backupsRoot, { recursive: true });
   const lockPath = path.join(backupsRoot, LOCK_FILENAME);
-  const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || null });
-
-  if (await tryCreateLockFile(lockPath, payload)) return lockPath;
-
-  // A lock already exists. Decide staleness from its content.
-  let existing;
-  try {
-    existing = JSON.parse(await fs.readFile(lockPath, 'utf8'));
-  } catch {
-    existing = null;
-  }
-  if (!isLockStale(existing)) {
-    return null; // held by a live (or unverifiable-and-fresh) owner — caller should skip this cycle
-  }
-
-  // Atomic takeover attempt: claim the stale lock by renaming it to a name only this process
-  // could have generated. If another contender wins the rename first, ours gets ENOENT here —
-  // that is a clean "lost the race", not an error.
-  const tombstonePath = `${lockPath}.stale-${process.pid}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  try {
-    await fs.rename(lockPath, tombstonePath);
-  } catch (err) {
-    if (err.code === 'ENOENT') return null; // another contender already took it over
-    throw err;
-  }
-  await fs.rm(tombstonePath, { force: true });
-
-  // We exclusively cleared the stale lock. Create our own — if some third process somehow beat
-  // us to a brand-new lock in this narrow window, back off safely rather than fight over it.
-  if (await tryCreateLockFile(lockPath, payload)) return lockPath;
-  return null;
+  return (await acquireExclusiveFile(lockPath, lockPath)) ? lockPath : null;
 }
 
 async function releaseLock(lockPath) {
