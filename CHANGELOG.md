@@ -5873,3 +5873,51 @@ deviations: the reviewer's probe gates on `fs.stat(lock)`, which the worker no l
   protected; at the storage wall a verified quota cut can free room so a page-held capture becomes durable.
 - Tests: accounting-archive-settled.test.cjs (wired into npm test), two new storage-durability browser cases.
 - Docs: DECISIONS #47 per-kind audit; CODEMAP.
+
+## TASK-050 November27 - implementer addendum (Claude as implementer/tester; Codex out of quota; supersedes the short coordinator entry above where they differ)
+changed:
+- `accounting-command.js`:
+  - `cutHistory(state, { atQuota })` now calls an optional page `historyCut.protect(state, candidates, pending)` hook. If the hook throws or returns something other than a Set, every record is kept.
+  - Checkpoint and sink ids are now fresh against every live, queued, source and dropped id. This fixes a pre-existing bug: a cut at the same generation reused `ckpt-<gen>-<n>` and made the envelope unreadable.
+  - A walk no longer folds a sink into itself.
+  - New `relieveHistory(owner)`: after a real quota failure, `drainOnce()` runs one verified cut under the account lock (batch 1, no threshold) and retries the drain once. This resolves the TASK-045 MINOR. `drainLocked` now marks capture-unconfirmed results with `quota` when the flush failed on quota.
+- `index.html`, accounting archive section only:
+  - The automatic policy now offers every settled kind: `local-applied`, or `coalesced` with `aliasOf`, and no held `evidence`.
+  - New `accountingArchiveProtected()` keeps four groups:
+    1. Whole dependency chains behind the committed record, the timer, every pending item, the live Focus producer and ordinary recovery. This answers the coordinator's TASK-051 triage note.
+    2. The timer write chain back to its ping.
+    3. Records sharing an eventKey with a pending item, and aliases of unsettled originals.
+    4. Cache witnesses, via new `accountingCacheWitnesses()`.
+  - `retainUnconfirmedCompatibilityCaches()` is refactored, behaviour preserved, onto the shared `accountingRecordCacheImages()`, `accountingCompatibilityCacheImage()` and `accountingCacheFrameKnown()`.
+- `www/` mirrored.
+- New `accounting-archive-settled.test.cjs` (6 tests), wired into `npm test`.
+- `tests/accounting-storage-durability.spec.js`: 4 cases appended (7 in total):
+  - all kinds with protections;
+  - at-wall relief through real IndexedDB;
+  - lineage regression, in two variants (expired resume false/true).
+- DECISIONS #47 (per-kind audit) and the #45 known-limit amendment. CODEMAP TASK-045 section.
+
+tests: see the TEST_REPORT TASK-050 section.
+- Unit: 5/6 red on 98b32b4; 6/6 green.
+- Browser: 2 red on 98b32b4 (all 30 kinds stayed live); 7/7 green.
+- Mutants M1–M5 and M1+M2 are each caught.
+- Mixed probe at E=2489: 27,389.75 chars/day from day 2, or 26.49 day-equivalents with the unchanged day-end estimator. The peak/minimum estimator gives about 12.7–13.4K/day and about 50 day-equivalents. Before this change: 122,276/day and about 7 day-equivalents.
+- Forward migration from 0ff39ec and da5c4d4 envelopes loses nothing.
+- Gate counts: see TEST_REPORT.
+
+behaviour change:
+- Settled pings, logs, edits, Focus, break/away, undo, native-usage and recovery records now leave the envelope once a verified IndexedDB copy exists and nothing that is still pending, cached or displayed walks them.
+- At a real quota failure, one extra verified cut may run before the page-held notice.
+
+residue:
+- The da5c4d4-shape pre-existing stall: a legacy capture larger than what relief can free stays page-held. The pre-A tree behaves identically.
+- Remaining growth of about 13K/day is entry duplication plus drop-map keys. This is Option B (TASK-055).
+- Another tab's live Focus chain is covered only by the coordinator's direct-dependency pin.
+- The CI pin `WIDER_COUNT` 1107 and the release pins need refreshing for the 4 new durability tests in TASK-052. `MANDATORY_COUNT` 490 is unchanged because the durability spec is not mandatory. ci.yml is not touched.
+
+deviations:
+- `docs/OFFLINE_TIME_LOSS_TRIAGE_20261126.md` (TASK-051) was left uncommitted and unedited.
+- The migration verifier's archive-count check was made conditional after two runs: a cut cannot run below keep 50 plus batch 25 unless relief ran, and a pre-A control archives nothing. The four final candidate/control runs used one harness version (v1). The later 0ff39ec pre-A control used v2, which differs only in making `failedCaptureCount` optional, because 0ff39ec predates it (`migration/harness.sha256`).
+- No push, merge, PR or deploy. No Firebase rules, config, credentials or production data.
+
+-> TASK-050 `review` (already set by the coordinator in 0744ea2).

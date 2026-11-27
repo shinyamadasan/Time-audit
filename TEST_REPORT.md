@@ -3807,3 +3807,51 @@ the gates below, then stopped on a usage limit before writing this section. Numb
   4,602,030 / 4,629,254 / 4,654,208 / 4,681,650; mean growth from day 2 = 27,390 chars/day (was 122,276); projection
   26.5-27.1 day-equivalents at E=2489 (was 6.9-7.0). Below the 30-day target: remaining growth is the entries
   themselves, stored three times (Option B, TASK-055). The probe ran on 70986e0; 681870b is docs-only on top.
+
+## TASK-050 · 2026-11-27 · implementer addendum (corrections and full counts)
+
+The coordinator section above was written while my gate run was still in progress. This addendum corrects it from the same raw evidence. Evidence root: `D:/ChronaSenseQualificationEvidence/20261126-queue/task-050/`. TMP=TEMP=D:/t.
+
+**Corrections to the coordinator section:**
+- 4 browser cases were added, not 2. The new cases are 4–7: all kinds with protections; at-wall relief through real IndexedDB; and the lineage regression in two variants (resume expired false/true). The storage-durability spec is 7/7, and the "8/8" in `specs.log` is those 7 plus zz-perf-profile.
+- The 0ff39ec release conflict is classified as pre-existing, intended behaviour; see the migration table.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Quiet check before every gate | Only MCP servers and the owner's idle RTDB emulator (java 48184, port 60432) were running. There was no other Playwright, Chromium or emulator process before mandatory-1, -2, -3, the specs or npm test. | `gates/run.meta` |
+| Mandatory, 3 shards, one worker, HEAD 681870b | 186 + 264 + 40 = **490 passed, 0 failed, 0 skipped**. `ci-test-report required 490`: PASS. | `gates/mandatory-*.log`, `mandatory-required-490.log` |
+| storage-durability + zz-perf-profile | 8 passed (7 durability + perf). The perf blob is unchanged against 6029be3 and 98b32b4 (`8de432f1…`). | `gates/specs.log`, `perf-profile-blob.log` |
+| `npm test` | Exit 0. Node runner: 2,574 tests, 2,573 passed, 0 failed, 1 existing skip (+6 new). Custom runners: 455/455. | `gates/npm-test.log` |
+| `runtime-mirror --check` / `git diff --check 98b32b4 HEAD` | Mirror: exit 0, 111-file closure byte-identical. Diff check: exit 0. | `gates/` |
+| Unit red→green (`accounting-archive-settled.test.cjs`) | On 98b32b4: 1 pass / 5 fail. After the change: 6/6. Mutant with no fresh checkpoint ids: the same-generation test fails with "Unreadable accounting envelope". | `red-unit/` |
+| Browser red→green | On 98b32b4, cases 4 and 5 fail; a kinds probe shows all 30 settled kinds left live. After the change: 7/7. | `red-browser/head-runtime*.log` |
+| Protection mutants | Each mutant fails case 4: M1 closure, M2 timer chain, M3 alias/eventKey, M4 cache witness, M5 evidence. M1 fails the expired-resume lineage case. M1+M2 fails lineage. | `red-browser/mutations/` |
+| Hard Rules 4/6/7/8/9 | The diff does not touch `_stopHeartbeat`, the heartbeat IIFE, `doPing`, the timer restore block or entry schema/sync. The only `timerOwnerDeviceId` lines are the moved cache-image helper (same text, re-indented). | `git diff 98b32b4 HEAD` |
+
+**Forward migration.** The v1 harness was used for the four candidate/control runs. A v2 harness, which only makes `failedCaptureCount` optional, was used for the 0ff39ec control, because 0ff39ec predates TASK-045. Hashes are in `migration/harness.sha256`. Every run passed (exit 0).
+
+| Run | Entries/physical | Pending | Unfiled | Legacy | Live or archived | Archived | Release |
+|---|---|---|---|---|---|---|---|
+| 0ff39ec → candidate | identical, 2,507 | identical (3) | held byte for byte (1 copy) | identical | 0 missing | 66; history 115→58; 4,797,371→3,113,712 chars | filed once; unfiled not sent; `legacy-accounting-caches` conflict |
+| 0ff39ec → 0ff39ec (control) | identical | identical | held | identical | 0 missing | 0 | **identical to the candidate** (same conflict) |
+| da5c4d4 → candidate | identical | identical, plus a new read-only hydrate | held | identical | 0 missing | 17 by at-wall relief; history 68→51 | not filed: 1 page-held, `accounting-recovery-unconfirmed` |
+| da5c4d4 → da5c4d4 (control) | identical | same | held | identical | 0 missing | 0 | **identical to the candidate** (stall) |
+| da5c4d4 without unfiled entry → candidate | identical | identical | — | identical | 0 missing | 0 (73 records < keep 50 + batch 25) | filed once |
+
+Classification:
+- **0ff39ec conflict.** This is the existing legacy-source resolution. The device-only entry that the pre-A page captured is held for the user and never sent. Pre-A behaves the same way.
+- **da5c4d4 stall.** The pre-A page could not store a 1.4M legacy capture, so the capture is page-held and missing from the dump. Relief frees 17 records, which is not enough room for it alongside the ~1.4M entry cache. Pre-A behaves the same way. TASK-050 neither causes nor worsens this. It is a residual for Option B (TASK-055) and the owner. Nothing is lost while the page is open; the #45 forced-close limit applies.
+
+**Capacity.** The same TASK-046 harness was used (`mixed/harness.sha256`), at E=2489 on 70986e0. Day 0–6 totals: 4,311,664 / 4,553,813 / 4,572,091 / 4,602,030 / 4,629,254 / 4,654,208 / 4,681,650. The peak fell from 5,144,900 to 4,681,650.
+
+- **Unchanged day-end estimator:** 27,389.75 chars/day from day 2, or 26,540 from day 3. That gives **26.49 / 27.15 day-equivalents**, below the 30 target. Before this change it was 122,276/day, about 7 day-equivalents.
+- **Daily per-action peak/minimum:** about 12.7–13.4K/day, about **50 day-equivalents**. History is a bounded 53–77-record sawtooth. Day-end samples rise through the sawtooth phase (64→77 records), which inflates the day-end rate.
+- **Remaining growth, about 13K/day:**
+  - compatibility entry cache, about +3.6K;
+  - envelope outside history, about +10.7K: the new entry in the committed and physical views, `droppedIds`/`droppedEventKeys` residue at about 3–4K/day, and checkpoints.
+
+  This is entry duplication plus the drop maps, not settled history, so it belongs to Option B (TASK-055).
+
+**CI pins.** `MANDATORY_COUNT` 490 is unchanged (the durability spec is not mandatory). `WIDER_COUNT` 1107 and the release pins must include the 4 new durability cases. Refreshing them is left to TASK-052; ci.yml is not touched.
+
+Not run: hosted CI, and physical-device quota and unload behaviour.
