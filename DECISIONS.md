@@ -1054,7 +1054,7 @@ A failed import leaves the original read-backed intake in storage. A failed capt
 
 If IndexedDB or archive verification fails, the live history remains intact. At persistent full storage, the page can warn and retry while open. A forced close or process termination can still lose a page-held operation. Device-level browser quota and unload behavior need physical-device verification.
 
-Known limit (independent review, Nov 26): automatic archiving covers only Start, Stop and hydrate records. Pings, automatic logs, edits, Focus, break/away and undo history, and the committed entries themselves, still grow without bound, so real daily use can still reach the quota, later than before. At that point the page-held path above keeps the loss visible rather than silent, but archiving cannot free space while a page-held capture blocks commits. TASK-046 measures headroom under a realistic mixed workload; widening archive eligibility is a follow-up decision, not part of this one.
+Known limit (independent review, Nov 26): automatic archiving covers only Start, Stop and hydrate records. Pings, automatic logs, edits, Focus, break/away and undo history, and the committed entries themselves, still grow without bound, so real daily use can still reach the quota, later than before. At that point the page-held path above keeps the loss visible rather than silent, but archiving cannot free space while a page-held capture blocks commits. TASK-046 measures headroom under a realistic mixed workload; widening archive eligibility is a follow-up decision, not part of this one. *Amended Nov 27 by Decision 47 (TASK-050): every settled kind is now eligible, and the verified cut can run once at the wall to free room for a page-held capture.*
 
 ---
 
@@ -1079,5 +1079,96 @@ With one claim per generation, a claim abandoned by a dead process is judged by 
 Proof: round-2 regressions in `scripts/life-ledger-sync-worker.test.js` (the reviewer's empty-lock interleaving, and the empty-claim variant) fail on the round-1 worker and pass now. They still pass with rule 1 reverted to `open('wx')`+write, so rule 3 closes the race on its own. They also still pass with rule 3's identity comparison removed, so rule 1 closes it on its own. Under the claim, a generation newer than the verdict is rejected for its bytes (rule 1), its identity, or its fresh mtime. A third regression shows that a filesystem without hard links gets the clear error and keeps no lock (evidence: `task-049/round2/`).
 
 Known residue: a process that dies holding a claim after its target is gone leaves a small `.claim-*` file that nothing reads again. The retention tool does not prune it. `isBackupsRootLockLive()`, used by tmp-cleanup, still treats an unparsable lock as not live. That function is outside TASK-049 scope and is unchanged.
+
+---
+
+## 47. Archive every settled accounting history kind, and let the verified cut run at the wall (November 27, 2026, TASK-050)
+
+Decision 45 archived only ordinary Start, Stop and hydrate records. This decision widens the automatic policy to every settled kind. The safety contract from #45 is unchanged:
+- A record leaves the envelope only after its full IndexedDB copy is read back and still equals the live record.
+- If IndexedDB is missing, fails or is full, every record stays.
+- There is no change to the schema, the rules, the envelope format or the archive format, and there is no startup repair.
+- The cut still runs only inside a locked commit, plus the single at-wall case described below.
+
+**Per-kind audit.** A record is *settled* in one of two cases:
+- It has phase `local-applied`: its facts are in the committed value and nothing about it is still being sent.
+- It has phase `coalesced` with an `aliasOf`: it is a duplicate that resolved to an earlier record.
+
+A record that carries held `evidence` is never offered. Every other phase is unsettled and stays live: queued, captured, sent, `unknown`, `inspection-unconfirmed`, refused-but-retained, or page-held.
+
+| Kind (`input.name`) | What still reads it after it settles | What keeps it while it is needed |
+|---|---|---|
+| `ping` | `materializeNativeAccountingPing` follows the timer's `_csWrite` chain back to the latest ping. | The timer write chain (rule 2). The coordinator pins the serverTimer writer. |
+| `start-timer`, `stop-and-log`, ordinary start/stop/resume, `reset-timer`, `switch-task`, `switch-mid-block`, `takeover-timer`, `start-sprint` | `ordinaryProvisionalState` walks the lineage back to the Start. The offline display and Stop resolve through it (TASK-051 triage). | The whole-chain closure from every pending item's `dependsOn`/`aliasOf`/`requestDependency`/`sourceId` and from `_ordinaryProvisionalRecovery` (rule 1). The timer write chain (rule 2). |
+| `automatic-log`, `scheduled-log`, `save-entry`, `quick-save`, `retro-edit`, `retro-log`, `quick-retro-log`, `retro-bulk-category`, `same-as-last-log`, `common-log`, `sleep-log`, `delete-entry`, `clear-selected-entries`, `activity-cleanup`, `repairDataDoctor*` | `retainUnconfirmedCompatibilityCaches` recognises a stale `ta3-entries` or `ta3-focus-redemptions` cache only through history images. `accountingExistingEvent` treats a dropped eventKey as settled. | Cache witnesses (rule 4). A candidate whose eventKey is still pending elsewhere (rule 3). |
+| `start-break`, `break-end`, `start-away`, `end-away` | History frames explain the timer, away and break caches. | Cache witnesses (rule 4). The timer write chain (rule 2). |
+| `enter-focus`, `focus-start`, `focus-end-work`, `focus-end-break`, `focus-exit`, `focus-skip-break`, `focus-takeover`, `focus-learning-finish` | `focusSourceLease` walks the full `dependsOn` chain without resolving checkpoints. | Closure from this page's live `_focusProducer.parentId`, when the owner matches (rule 1). The coordinator's effect and receipt pins. Focus cache witnesses (rule 4). |
+| `undo` | Nothing walks history: the Undo receipt is self-contained in `lastUndoAction`. | The coordinator's receipt and effect pins. |
+| `native-usage` | — | The coordinator keeps the newest record per device. |
+| `recovery`, `hydrate-accounting` | Observations settle through `resolveDropped` and checkpoints. | The coordinator's observation and provisional-owner pins. |
+| coalesced aliases | — | Kept while the original is unsettled and not yet dropped (rule 3). |
+
+These are never archived:
+- `legacy-*` capture records, which are the only copy of pre-accounting device data.
+- Records with a resolution.
+- Checkpoints.
+- Unsettled phases.
+- Records with held evidence.
+- The committed record and the current timer writer.
+- Owners of effects, receipts and provisional observations.
+- The direct dependencies of pending items.
+- Everything that `accountingArchiveProtected()` keeps.
+
+No pending op, unacknowledged fact, unfiled record, held evidence or UNKNOWN outcome loses a record it depends on.
+
+**Page protections.** `accountingArchiveProtected(state, candidates, pending)` is the read-only `historyCut.protect` hook. If it throws, or returns something other than a Set, the cut keeps every record. It keeps four groups of records:
+
+1. **Whole causal chains.** It follows the whole chain through `dependsOn`, `aliasOf` and `requestDependency`, resolved through checkpoints, behind:
+   - the committed record;
+   - the timer writer;
+   - every pending item;
+   - this page's live Focus producer and ordinary recovery.
+
+   The TASK-045 cut kept only a pending op's *direct* dependency, but readers of pending ops walk all the way to the root. An expired offline resume whose Start had been archived therefore lost its Start. The lineage regression in the durability spec shows this. Its expired-resume variant fails with rule 1 removed, and the test as a whole fails with rules 1 and 2 removed.
+2. **The timer write chain** back to its ping, using `materializeNativeAccountingPing`'s own stop rules.
+3. **Candidates whose eventKey is still pending,** and aliases of unsettled originals.
+4. **Sole witnesses of a stale compatibility cache value** that the committed value does not explain. If the entry cache cannot be read, every stale candidate is kept.
+
+**At-wall relief (the #45 MINOR).** Before this change, a page-held capture blocked commits, and the cut runs only in commits. So archiving could never free room at the wall.
+
+Now, when `drainOnce` gets a real quota failure, it runs `relieveHistory(owner)` once under the same account lock. Relief runs the same verified cut with batch 1 and no threshold, and saves only if something was dropped. If it saved, the drain is retried once. A non-quota error never triggers relief. If relief or the save fails, the envelope stays byte-identical.
+
+Limits of the relief:
+- It frees at most the verified records beyond the newest 50.
+- The first attempt may only *offer* records to IndexedDB. The next reconciliation tick, at the existing interval, finds them verified.
+- A capture larger than what relief can free stays page-held and visible, exactly as in #45.
+
+**Two pre-existing cut bugs fixed:**
+- A quota cut at the same generation as a commit cut reused `ckpt-<gen>-<n>`, which produced duplicate ids and an unreadable envelope. Checkpoint and sink ids are now fresh against every live, queued, source and dropped id.
+- A walk that passed through an existing sink could fold that sink into itself. The sink is now excluded from the walk's own lookup.
+
+**Capacity.** This is the TASK-046 mixed probe, with the same harness and workload, at E=2489. History is now a bounded sawtooth of 53–77 records. The peak total fell from 5,144,900 to 4,681,650 characters. The two estimators disagree:
+- The unchanged script's day-end estimator measures 27,389.75 characters per day from day 2. That projects 26.49 day-equivalents, against about 7 before. Day-end samples climb the sawtooth phase, which inflates this linear rate.
+- The daily per-action peaks and minima both grow by about 12.7–13.4K per day. That projects about 50 day-equivalents.
+
+The remaining growth of about 13K per day breaks down as:
+- about 3.6K in the compatibility entry cache;
+- about 10.7K in the envelope outside history: the new entry in the committed and physical views, the `droppedIds`/`droppedEventKeys` residue (about 3–4K per day), and checkpoints.
+
+This growth comes from new entries and the drop maps, not from settled history, so it belongs to Option B (TASK-055). The peak estimator meets the ≥30 target and the day-end estimator misses it; both numbers are reported.
+
+**Forward migration.** Envelopes written by the pre-A builds 0ff39ec and da5c4d4 were opened under the candidate. Every entry digest, physical record, pending op and legacy record was identical. Every pre-A record was either live or in the verified archive.
+
+- **0ff39ec dump:** the candidate archived 66 records. Every pre-A copy of the device-only (unfiled) entry is still held byte for byte, in the legacy record the pre-A page captured. Releasing the network filed the offline session exactly once and never sent the unfiled entry.
+- **da5c4d4 dump:** it was written while a 1.4M legacy capture was page-held, which the pre-A page could not store. That capture is absent from the dump, so the reload reports `accounting-recovery-unconfirmed`. A pre-A control run of the same dump on da5c4d4 itself behaves identically: one page-held capture, the offline Start and Stop still pending with identical facts and visibly paused, and nothing filed or sent twice. The candidate additionally freed 17 records through at-wall relief. That is not enough room for the 1.4M capture next to the about 1.4M entry cache. This stall is pre-existing and not caused by TASK-050. Entry and cache duplication is Option B's problem.
+- **Control without the unfiled entry:** the offline session files normally.
+
+Evidence is in `task-050/migration/`.
+
+**Residuals:**
+- The Focus producer root is page-local, so another tab's live Focus chain is covered only by the coordinator's direct-dependency pin.
+- The drop maps grow by one key per archived record.
+- A forced close while a capture is page-held can still lose it, as in #45.
+- The da5c4d4-shape stall above.
 
 ---

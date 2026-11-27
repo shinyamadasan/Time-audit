@@ -26,15 +26,26 @@
 
 ## TASK-045 accounting storage capacity and capture durability
 
-- `accountingCompactionFlags()` configures verified history archiving on normal commits,
-  with the default policy limited to settled ordinary Start and Stop and coherent hydrates
-  without held evidence. `cutHistory()` keeps the committed frame and pending evidence intact.
+- `accountingCompactionFlags()` configures verified history archiving on normal commits.
+  Since TASK-050 (Decision 47) the default policy offers every settled kind
+  (`local-applied`, or `coalesced` with `aliasOf`) without held evidence. `cutHistory(state, { atQuota })`
+  keeps the committed frame and pending evidence intact, asks the optional `historyCut.protect(state,
+  candidates, pending)` hook which ids to keep (a throw or non-Set keeps everything), and gives
+  each checkpoint/sink a fresh id. `relieveHistory(owner)` runs one at-quota cut (batch 1, no
+  threshold) under the account lock when `drainOnce()` hits a real quota failure, then retries the drain once.
+- `index.html` `accountingArchiveProtected()` (the `protect` hook) keeps whole dependency chains
+  behind the committed record, the timer, pending items, the live Focus producer and ordinary
+  recovery; the timer write chain to its ping; candidates sharing a pending eventKey; aliases
+  of unsettled originals; and `accountingCacheWitnesses()` (sole witnesses of a stale
+  compatibility cache value). Shared helpers with `retainUnconfirmedCompatibilityCaches()`:
+  `accountingRecordCacheImages()`, `accountingCompatibilityCacheImage()`, `accountingCacheFrameKnown()`.
 - `failedCaptureCount()`, `pageHeldAccountingText()`, and `showAccountingStorageFull()`
   distinguish page-held changes from storage-full imports. The existing accounting recheck
   retries page-held bytes under the account lock. The page warns before unload while any
   capture is page-held.
-- Loopback fault injection is in `tests/accounting-storage-durability.spec.js`. Decision 45
-  records the quota measurements and archive policy.
+- Loopback fault injection is in `tests/accounting-storage-durability.spec.js`; coordinator cut
+  units in `accounting-archive-settled.test.cjs`. Decision 45 records the quota measurements and
+  archive policy; Decision 47 the per-kind audit.
 
 ## TASK-041 historical orphan-heartbeat recovery - November 24 local only
 
