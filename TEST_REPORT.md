@@ -3969,3 +3969,8 @@ Not run: hosted CI (TASK-053), physical devices, an independent reviewer rerun.
 <= 672). Attempt 1 (compare to visualViewport.height - 48, no allowance): 11/20 pass (`task-056/run-*.log`) — viewport
 was exactly 720; the noise is in boundingBox(). Final (< visible - 48 + 1/64 px): 30/30 (`task-056/v2/`). Mutation:
 CSS max-height margin 47.5px → fails (672.5000267 vs < 672.015625) (`task-056/mutant-47.5px.log`); CSS restored.
+
+### TASK-056 follow-up (2026-11-27): allowance tightened to 1/128 px after independent review
+Review found a 1/64 px allowance caught an exactly-one-layout-unit overflow only 7/10. Now `< visible - 48 + 1/128`:
+20/20 green; mutant max-height margin 47.984375px (1/64 px overflow) fails 10/10; CSS restored.
+Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-056/v3/.

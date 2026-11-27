@@ -949,3 +949,89 @@ Each run used one worker with TMP/TEMP=D:/t, and a process check before each run
 - No rules, schema or `storage.js` change. Hard Rules 4/6/7/8/9 are not in the diff, and the moved cache-image helper's text is unchanged.
 
 gate: **approved (held)**. This is red zone (accounting history, envelope writes at the storage wall, "never lose logged time"), so `main` is not merged. TASK-052 requalification, hosted CI and the owner's merge decision remain.
+
+## TASK-052 + TASK-056 · Requalification of the Option A candidate; Plan Tomorrow float-noise test · 2026-11-27
+
+reviewer: independent Claude review subagent, continuing a reviewer run that stopped on a usage limit. I implemented neither task. Reviewed HEAD `8c22798` (1d216ff ci.yml, 35aa9cd docs/evidence, 8c22798 test). Artifacts are built from `cd48824`. Reruns and logs: `D:/ChronaSenseQualificationEvidence/20261126-queue/task-052-review/` (`run.meta` = first reviewer, `run2.meta`/`run3.meta` = mine; scripts `run-review{,2,3}.sh`). I changed only this entry and the two `status:` lines. Nothing was committed, pushed, merged or deployed.
+
+### Verdict
+- **TASK-052: APPROVE.** Every gate claim matches raw evidence, and the key gates reproduce under quiet reruns at HEAD. Rejected runs are excluded and labelled, and the one real outside-baseline failure is reported honestly, not hidden.
+- **TASK-056: APPROVE.** The allowance is legitimate precision. One claim is overstated (finding 1, non-blocking).
+
+### 1. Gate claims vs raw evidence (implementer runs at 1d216ff)
+- Every `run-*.meta` records HEAD 1d216ff, a quiet-check before each browser run and an after-check after it. Exits and counts match the TEST_REPORT table: npm test 2,574/2,573/0/1 skip + 455/455; mandatory 186+264+40 = 490 with required-490 PASS; household 11/11; packaged r3 62/62 with required-62 PASS; perf 1/1; durability 7/7; fault r2 6/6; rollback r2 4/4.
+- **Exclusions are correct, not cherry-picked.**
+  - Packaged run A: a foreign Meal-Prep Playwright appears right after it (`REFUSED mandatory-1`).
+  - Packaged r2: the pin parse produced empty env vars, so all three pins read MISMATCH. It also overlapped a Meal-Prep run.
+  - Wider shard 4 r1: contaminated by Meal-Prep at its end.
+  - All three are kept and labelled. The report does not use the r1 aggregate PASS. It reports the clean r2 aggregate as **exit 1** (the Plan Tomorrow flake outside the baseline), which is what led to TASK-056.
+- **Fault r1 F2 and rollback r1 R2 failures are not hidden.**
+  - F2 r1 failed in the harness (`cut completed before the reload window`, `fault-recovery-r1.log:14`). The runtime had already cut correctly; the harness lost the race to the window.
+  - R2 r1 failed `pendingIdentical` because of the page-held legacy capture. r2 adds the R2C same-version control, which shows identical behaviour.
+  - Both r1 sources and logs are kept.
+
+### 2. Pins, WIDER_COUNT, byte identity (independent)
+- `git show --stat 1d216ff`: only `.github/workflows/ci.yml` (4 lines). `git diff --name-only cd48824 HEAD`: ci.yml, CHANGELOG, TASKS, TEST_REPORT and `tests/daily-command-center.spec.js`. So `www/`, root runtime and rules are byte-identical between the build commit and HEAD.
+- APK re-hash: `15f0f7787510cfb0b1c51ea7e1adc2bc4fb3aa4085d39beba9280af10054f884`, 5,970,217 bytes. Matches.
+- I wrote my own script (`task-052-review/apkcheck.py`, not the implementer's `verify-apk-raw-blobs.py`):
+  - The APK's `assets/public` has 113 entries. 111 are byte-equal to `git cat-file blob HEAD:www/<p>` and to the root blobs. The only extras are `cordova.js` and `cordova_plugins.js`, both 0 bytes. No www file is missing.
+  - Web tree from git blobs = `2cec5b19…6f2c`. Bundle tree from the APK = `f8b9fc78…afa5`. Rules = `93f0a774…be00`. All equal the ci.yml pins.
+  - The same derivation from `120dba5` blobs reproduces the old pins (`bf81c9e5…1dfe`, `6c73eb28…188c275`). The only runtime files that differ between 120dba5 and cd48824 are `accounting-command.js` and `index.html` (root and www).
+  - `capacitor.config.json` in the APK has `server: {androidScheme: https}` and **no `server.url`**.
+- `apksigner verify --verbose --print-certs` (build-tools 35.0.0): exit 0, **Verifies**, v2, 1 signer, Android Debug cert SHA-256 `dc0b164f…05cb`.
+- `playwright test <75 wider files> --list` gives **1111 tests in 74 files** (household collects 0, as in CI, which sets no `MEAL_PREP_TEST_HOSTING`). That equals `WIDER_COUNT`. `--list` on the 10 mandatory files gives 490.
+
+### 3. Fault injection and migration/rollback: do the harnesses test what they claim?
+- **F2 r2.** The only change from r1 is `AccountingHistoryArchive.verified = () => null` in the old page, with the real set still observed through `__realVerified`. The archive write and read-back still complete (`verified` ≥ 25, `preArchived` 25), while no commit can drop anything.
+  - That persisted state (IndexedDB written and read back, envelope uncut) is exactly the reload window. The envelope is a single `setItem` and the verified set lives only in memory. The reload loads fresh, unpatched code.
+  - The first reviewer's F2 rerun passed (quiet): window at step 59, 0 dropped at reload, no modal, entries and pending equal, the new page cuts 26 with 0 missing and integrity zero, the Stop files once (server 2,491).
+- **F3** holds a real IndexedDB transaction open (25 puts, uncommitted) and closes the persistent context. **F4** uses two real tabs under the Web Lock. **F5** fills real localStorage to 5,242,758 chars. F1a, F1b and F5 run at E=300, not owner scale; the report does not claim owner scale for them. All reports show no page errors and no modal.
+- **F1b** (held Start lost on reload) is the documented #45 forced-close limit. It is pre-existing and warned by beforeunload. The test shows no phantom entry, no false claim and no running timer.
+- **Forward migration.** Generator and `verify-forward.spec.mjs` are byte-identical to task-050 (sha `310d8020…`, `febe7d05…`; the config differs only in `testDir`).
+  - Report: entries and physical keys identical (2,507), pending preserved, offline session filed once (2,508), `unfiledSent` 0, history 116→58.
+  - The 0ff39ec→0ff39ec control gives the same release outcome.
+  - Nit: TEST_REPORT says "67 archived". The report has 67 dropped and 68 archive rows.
+- **Rollback.** The first reviewer reran rules, R1 and R2 (quiet, 3/3) with one **added** assertion: on roll-forward the unfiled cache is byte-identical and still contains the device-only entry. It passed. R2C was not rerun; I accept the implementer's r2 R2C (quiet, exit 0).
+- **Unfiled time and the page-memory-only copy: no recorded time at risk.**
+  - The page-held object is the `legacy-accounting-caches` *capture*, a derived copy of the `ta3-entries` cache. The source cache stays durable and byte-identical across candidate→0ff39ec, through writes returning on 0ff39ec, and on roll-forward (`unfiledCacheIdentical: true` in R2 rollback, final and roll-forward).
+  - After every reload the capture is re-derived under a new id.
+  - The offline Start and Stop stay durable in the queue (`durablePendingIdentical: true`). They are never filed twice.
+  - The residual is usability, not loss: at E≈2,500 with an unexplained cache entry, logging stays paused (`accounting-recovery-unconfirmed`) and the offline session stays queued on **both** versions, identical to the R2C control and to the da5c4d4 finding in the TASK-050 review. It belongs to Option B (TASK-055). The owner should know before release that such a device pauses logging until it is resolved.
+
+### 4. TASK-056
+- **Diff.** `toBeLessThanOrEqual(viewport.height-48)` becomes `expect(visible).toBeLessThanOrEqual(viewport.height)` plus `toBeLessThan(visible-48+1/64)`. `visible` is the value the app feeds into `--pt-visible-height`, so the bound is at least as tight as before. Nothing is skipped and nothing is allow-listed.
+- **Measured (instrumented, then restored).**
+  - Unmutated box: 672.0000095 (DOM rect 672, CSS max-height 672px).
+  - CDP noise is about ±4e-5 px, which is three orders of magnitude below the 1/64 allowance.
+- **Reruns.** Prior x15 15/15 (quiet). My unmutated x10 10/10 (quiet).
+- **Invalid first-reviewer mutant (excluded).** Its `sed '2s/ - 48px)/…/'` hit the **width** rule `calc(100vw - 48px)` first, which is a no-op at 1280 px, so its "pass" proves nothing.
+- **My correctly targeted max-height mutants (quiet):**
+
+| Overflow | max-height margin | Result |
+|---|---|---|
+| 0.5 px | 47.5px | 1/1 fail (672.5000267 vs < 672.015625) |
+| 1/64 px | 47.984375px | **7/10 fail, 3/10 pass** (boxes 672.0156269–672.0156460; negative noise lands below the bound) |
+| 2/64 px | 47.96875px | 10/10 fail |
+
+### Findings (none blocking)
+1. **LOW, TASK-056 claim overstated.** The test comment and the TASKS/TEST_REPORT text say "any real overflow is at least 1/64px and still fails". An overflow of exactly one layout unit is caught only about 70% of the time; 2/64 px or more is caught deterministically.
+   - Visually this is irrelevant, so the change is still a legitimate precision fix and not a weakening.
+   - Optional tightening: compare against `visible-48+1/128` (half a layout unit). That still tolerates the about 4e-5 noise with a margin of about 200x, and makes a 1/64 overflow fail every time.
+   - Otherwise correct the wording. Left to the coordinator; it should not hold hosted CI.
+2. **Process note.** The first reviewer's TASK-056 mutant is invalid (wrong rule), as described in section 4. It is superseded by `t056-mutant2-*` and `t056-mutant3-*`.
+3. **Doc nit.** "67 archived" in the forward-migration paragraph should read 67 dropped / 68 archive rows.
+
+### Reruns used (all quiet: one worker, TMP/TEMP=D:/t, two process checks 30 s apart before and an after-check, owner idle PIDs excluded)
+| Run | HEAD | Result |
+|---|---|---|
+| npm test (first reviewer) | 8c22798 | exit 0; 2,574/2,573/0/1 skip; custom 455/455 |
+| mandatory shard 2/3 (first reviewer) | 8c22798 | 264 passed |
+| wider shard 4/4 + classifier (first reviewer) | 8c22798 | ran 215, 160 passed, 55 failed, **0 outside baseline**; Plan Tomorrow passes |
+| wider aggregate (mine): implementer shards 1–3 + reviewer shard 4, `legacy 1111` | — | **exit 0**: ran 1111, 812 passed, 299 failed, 0 outside baseline, 297 known, 2 history-only, 17 now passing |
+| household (first reviewer; ports 9099/8080/5000 free) | 8c22798 | 11/11 |
+| fault F2; rollback rules+R1+R2 (first reviewer) | 8c22798 | 1/1; 3/3 |
+| TASK-056 x15 (first reviewer); x10 + mutants (mine) | 8c22798 | 15/15; 10/10; see section 4 |
+
+Shards 1–3 and mandatory shards 1 and 3 come from the implementer at 1d216ff. The only change from 1d216ff to 8c22798 is docs plus one test body in a shard-4 file, so they remain valid. After my runs the worktree is clean (`?? review-artifacts/` only); `plan-tomorrow.css` and the spec are byte-identical to their pre-run copies. No stray root JSON outputs. The first reviewer's outputs are already in `task-052-review/root-outputs/`.
+
+gate: **approved (held)** for both. TASK-052 qualifies a red-zone candidate (accounting history archive, envelope at the storage wall, migration and rollback of logged time). TASK-056 is a reversible test-only change, but it rides on the same held branch. Next: TASK-053 pushes 8c22798 (or a successor, if finding 1 is taken up) to a new release branch for hosted CI. The owner's merge decision remains.

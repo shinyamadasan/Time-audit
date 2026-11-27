@@ -207,11 +207,11 @@ test('Plan Tomorrow uses the approved desktop modal and existing preparation flo
   expect(size.width).toBe(880);
   // max-height is the visual viewport height minus 48px (plan-tomorrow-ui.js sets --pt-visible-height from
   // visualViewport.height). boundingBox() reports CDP quad geometry with float noise (e.g. 672.0000267 for a
-  // 672px box), while Chromium lays out in 1/64px units, so allow less than one layout unit: any real overflow
-  // is at least 1/64px and still fails.
+  // 672px box, noise about 4e-5px), while Chromium lays out in 1/64px units, so allow half a layout unit: any
+  // real overflow is at least 1/64px and always fails.
   const visible = await page.evaluate(()=>window.visualViewport?.height || window.innerHeight);
   expect(visible).toBeLessThanOrEqual(viewport.height);
-  expect(size.height).toBeLessThan(visible-48+1/64);
+  expect(size.height).toBeLessThan(visible-48+1/128);
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Prepare once for tomorrow');
   await page.locator('#plan-tomorrow-add button').click();
   await page.locator('#plan-tomorrow-confirm').click();

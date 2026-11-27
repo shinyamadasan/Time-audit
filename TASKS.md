@@ -2931,7 +2931,7 @@ acceptance:
   - Any RELEASE-BLOCKING case becomes its own fix task (recorded by Claude) before release.
 
 ### TASK-052 - Requalification of the A candidate (capacity, durability, recovery, Household, migration, rollback)
-status: review
+status: approved
 owner: claude
 source: owner-direct (QUEUE-20261126-B items 2-3)
 priority: P0
@@ -2989,7 +2989,7 @@ acceptance (for the plan, written in this queue): design alternatives with trade
   verification; capacity target; red-zone gate.
 
 ### TASK-056 - Plan Tomorrow modal height test: sub-layout-unit float noise (wider CI flake)
-status: review
+status: approved
 owner: claude (trivial test-only change, coordinator-implemented; independent review in the TASK-052 review)
 source: owner-direct (QUEUE-20261126-B item 5-6: hosted CI must pass)
 priority: P0
