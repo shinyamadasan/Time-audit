@@ -571,3 +571,45 @@ verdict: **APPROVE WITH NOTES**. No blocker. One MAJOR finding is a scope and re
 - Review-environment incident (no repo effect): removing the scratch worktree followed its node_modules junction and emptied the shared `task-043-household-my-day/node_modules`. The task-044 and meal-prep worktrees link to it. I restored it with `npm ci --offline --legacy-peer-deps` from the local npm cache (602 packages, lockfile identical, no network). Under the allow-scripts policy the install scripts for protobufjs and sharp did not run. All tests above except the perf, red and green runs were run after the restore.
 
 gate: **approved (held)**. This is red zone: accounting history retention, capture durability and storage-full behaviour. The human merges. There is no auto-merge, push or deploy.
+
+## TASK-046 · Combined-tree qualification (TASK-044 + TASK-045) · 2026-11-26
+reviewer: independent Claude review subagent (did not run TASK-046). HEAD fc29b2c (pins 0dc2a07, runtime 120dba5); pre-TASK-045 baseline 6029be3. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/ (my outputs under `review/`, prefixed `rerun-`/`probe-`). The earlier release-bytes, pins and packaged-62 review (`review/VERDICT.md`) is not repeated here.
+verdict: **APPROVE**. No blocking finding. The open mandatory intermittent is **PRE-EXISTING** and was reproduced deterministically on the pre-TASK-045 tree. It is a race in the test's reload sync point, not a TASK-045 effect. TASK-045 is **not** sent back for rework. The flake is routed to TASK-047 as a genuine required-CI failure to fix at its root.
+
+### Part A — gate claims checked against raw evidence
+- Wider aggregate: I reran `node scripts/ci-test-report.mjs legacy 1107 claude-wider-1.json wider-2.json claude-wider-3.json wider-4.json`. It exited 0: ran 1107, passed 808, 297 known, 2 history-only, **0 outside**, 17 baseline now passing. The output is byte-identical (sorted) to `claude-wider-aggregate-1107.log` (`review/rerun-wider-aggregate-1107.log`). Shards 2 and 4 are Codex's concurrent runs, but they are classifier-clean.
+- Household: I reran it on HEAD (`emulators:exec … household-my-day.spec.js --workers=1`, ports 9099/8080 checked free first) and got **11/11 in 44.2 s**, exit 0 (`review/rerun-household-head.{log,json,exit}`). The recorded `claude-household-{head,pre045}.json` stats show 11 expected, 0 unexpected, 0 skipped and 0 flaky each.
+- Worker: `claude-worker-test-worktree.log` shows tests 55, pass 55, fail 0, and the exit file shows 0.
+- Owner-stall: both `claude-owner-stall-*.json` show 1/1. The two reports differ only in the random stuck-capture op id and the tree path, which supports the environmental (trace-teardown under load) classification.
+- Mandatory classification: `mandatory-recheck-1` is 186/0 and `mandatory-3` is 40/0. O1 failed with the same `toMatchObject` assertion in loaded `mandatory-o1-pre-task045` (pre-TASK-045) and `mandatory-2-diagnostic` (HEAD), and passed 12/12 quiet on each tree. Both 490 classifier combinations reproduce as reported: FAIL 489/1 with `claude-mandatory-2`, and PASS 490/490 with `claude-mandatory-2-head-r2`.
+- Doc correction (non-blocking; fix in the next TEST_REPORT append): the TASK-046 text says TASK-045 "warms the history archive on coordinator creation by default". That is wrong. index.html:2909 warms only when `historyCut.minEnvelopeChars == null`, which happens only under the explicit `ta3-accounting-flag-history-cut` flag. The default policy sets `minEnvelopeChars` (index.html:2785-2788), so there is no warm-up by default. The TASK-045 review already says this.
+
+### Part B — `accounting-staged-effects.spec.js:1474` Focus terminal Learning frontier (reload → wait for `pomodoroPhase === 'break'`)
+- Code analysis of the TASK-045 hunks on this path. None of them can delay or block the restore:
+  - beforeunload (index.html:5208-5212) acts only when `failedCaptureCount() > 0`. This test's fault throws on the **envelope** save (`AccountingCommand.BASE` with `effectReceipts`). Only `capture()` intake failures populate `failed` (accounting-command.js:264-270), so the count is 0. The trace has no dialog, and the reload completed normally.
+  - Archive warm-up does not run by default (see above).
+  - `cutHistory` (accounting-command.js:538-544) now runs on every commit, but it returns at `plain.length <= keep + batch` (50 + 25). That is far above this fresh world's history, so there is no IndexedDB access and no lock.
+  - The `hydrateAccounting` change (index.html:3270-3271) adds work only when the page holds captures. `renderTimeAckStatus` adds an O(n) count only.
+  - Nothing new awaits on the account lock before `restoreFocusSession`.
+- Trace of the failing quiet run (`claude-focus-terminal-trace/`):
+  - Reload returned at +427 ms, and the waitForFunction was issued about 46 ms later.
+  - The screencast at about +92 ms after load shows the BREAK overlay ("take a breather · 5 min").
+  - By +179 ms Focus had ended: the Learning Plans "FOCUS COMPLETE — Did you finish this step?" was showing while the Stop ACK was still held.
+  - The page then made only a few `GET rooms/uid_alice.json` reads and stayed idle until the timeout.
+- Mechanism (instrumented probe; scratch copies of both trees outside the repo, with only this test patched — `review/probe-patch.py`):
+  - The probe logs `pomodoroPhase`, `readyState` and the coordinator's queue/effects/committed-focus on every 1 ms tick and every requestAnimationFrame.
+  - On both trees the sequence is the same: `readyState complete` → about 20 ms later `break` → about 90 ms later committed focus `none`, while the `focus-learning-finish` op is still queued (`1/1/break` → `1/1/none` → `0/0/none`). The phase never returns to `break`.
+  - **Break window: HEAD median ≈89 ms (81–230, n=20); pre-TASK-045 median ≈88 ms (55–253, n=20).** All 40 probe runs caught the window, about 35 ms after `reload()` returned (`review/probe-phase-{head,pre}.log`).
+  - Why the window closes before the ACK: the test's route handler calls `route.fetch()` **before** awaiting `held`. The old page's Stop PATCH therefore reaches the emulator, and only the HTTP response is delayed. The reloaded page reads the authoritative room state through unheld GETs and settles the finish. The test's 'break' wait therefore races that read by tens of milliseconds. The race is lost only when the Node→CDP round trip after `reload()` takes longer than the remaining window, which is plausible late in a 264-test single-worker shard or under load. That fits the history: failures only in full shards (one under load), 0/100 isolated.
+  - Deterministic reproduction: the same test with a 200 ms pause between `reload()` and the unchanged waitForFunction **failed 4/4 on HEAD and 4/4 on pre-TASK-045**, with the identical `page.waitForFunction: Test timeout of 30000ms exceeded` (`review/probe-delay200-{head,pre}.log`).
+  - The full-shard counts (HEAD 2/5 vs pre-TASK-045 0/3) are not significantly different (hypergeometric P≈0.36). No extra shard runs were needed after the deterministic reproduction.
+- Classification: **PRE-EXISTING** test-timing race on a transient UI state. It is not caused by TASK-045, and TASK-045 does not measurably widen it.
+- Product note: the app's behavior here is not a time-loss defect. The server already holds the Stop, and the test's later assertions (one entry, timer stopped, original id in history) still apply.
+
+### Carry-forward to TASK-047 (not TASK-046 must-fix)
+1. This mandatory test is a real required-CI flake, observed in about 1 of 4 full shard-2 runs. Fix the test's sync point at its root. Either hold the PATCH before it reaches the emulator, so "delayed Stop ACK" is actually delayed server-side (verify the rest of the test still means what it says), or replace the transient `pomodoroPhase === 'break'` wait with a stable restored-state condition. A timeout pad, retry or skip is not acceptable (TASK-047 constraints). Prove it with the 200 ms-pause variant passing and repeated full shard-2 runs.
+2. Correct the archive warm-up wording in TEST_REPORT (above).
+
+Scratch trees D:/t/rev/{head,pre} were removed after their node_modules junctions were deleted first. The shared node_modules is intact (404 entries). No repo file changed except this entry and TASK-046's status. Nothing was committed, pushed or deployed.
+
+gate: **approved (held)**. This is red zone: the combined candidate carries TASK-045 accounting retention and capture-durability runtime and refreshed release pins. The human merges, and there is no auto-merge.

@@ -2740,7 +2740,7 @@ verification:
     unchanged; accounting browser specs; runtime-mirror --check; git diff --check; SELF_REVIEW.md + QA.md.
 
 ### TASK-046 - Combined-tree qualification: accounting, wider workload, release artifacts, Android packaged
-status: review
+status: approved
 owner: codex (Claude finished implementation/testing Nov26 after Codex quota exhaustion; unavailable until Nov29)
 source: owner-direct (QUEUE-20261126 item 3)
 priority: P0
@@ -2772,7 +2772,7 @@ result (Nov26): ready for review. Pins committed in 0dc2a07 (WIDER_COUNT 1107 an
   TASK-047. Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/.
 
 ### TASK-047 - Resolve genuine required CI failures for the combined candidate
-status: todo
+status: codex
 owner: codex
 source: owner-direct (QUEUE-20261126 item 4)
 priority: P1
@@ -2782,6 +2782,15 @@ objective:
   Every required CI job (.github/workflows/ci.yml, scripts/ci-*) green locally on the candidate; each previously
   failing job either fixed at its real cause or documented as an environment limitation with evidence. Hosted CI
   on the candidate requires a push, which is an owner action; prepare the exact command.
+known inputs (from TASK-046 review, Nov 26):
+  - Required-CI flake: tests/accounting-staged-effects.spec.js:1474 "Focus terminal Learning frontier survives
+    interrupted receipt, reload and delayed Stop ACK" fails ~1 in 4 full shard-2 runs on both HEAD and 6029be3.
+    Root cause (review/VERDICT in task-046 evidence): route.fetch() runs before the Stop is held, so after reload the
+    `break` phase is visible only ~90 ms; the wait on pomodoroPhase==='break' can miss it. Fix the TEST at its root
+    (hold the Stop before it reaches the emulator, or assert a stable restored state) without weakening what it
+    proves. Proof: the 200 ms-pause variant passes, plus repeated full shard-2 runs (one worker, quiet).
+  - TEST_REPORT correction: archive warm-up runs only under the explicit history-cut flag (index.html:2909), not
+    by default.
 constraints:
   - No skip, retry inflation, allowlist/known-failure additions, timeout padding without root cause, or waiver.
 verification:
