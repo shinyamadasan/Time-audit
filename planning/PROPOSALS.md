@@ -372,7 +372,7 @@ occurrence beyond this synthetic repro, effort) before a priority is assigned.
 **Source:** QUEUE-20261126 evidence, not a capture. TASK-045 diagnosis
 (`D:/ChronaSenseQualificationEvidence/20261126-queue/task-045/diagnosis.log`, DECISIONS #45) and the TASK-046 mixed-workload
 probe (`.../task-046/mixed-projection.json`): at E=2489 the accounting envelope holds committed entries (~1.42M chars),
-physical records (~1.44M) and the first hydrate input (~1.44M) — the same entries three times; the separate `ta3-entries` cache (~1.42M) would be a fourth copy and already fails at quota — and realistic daily use adds
+physical records (~1.44M), plus the first hydrate input (~1.44M) until the first automatic archive cut; the separate `ta3-entries` cache (~1.42M) fails at quota before that cut and fits after it. In steady state the same entries are stored three times (envelope committed + envelope physical + `ta3-entries` cache), and realistic daily use adds
 ~122K chars/day, reaching the ~5.24M localStorage wall in ≈7 day-equivalents.
 
 - **Option A (in current scope):** widen automatic archive eligibility (DECISIONS #45) from Start/Stop/hydrate to settled,

@@ -2812,7 +2812,7 @@ blocker: the required `unit` job (npm test) is intermittently red, outside TASK-
   Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/ (gates/, lock-probe/).
 
 ### TASK-048 - Physical-device acceptance kit and final release evidence
-status: review
+status: codex
 owner: claude
 source: owner-direct (QUEUE-20261126 item 5)
 priority: P1
@@ -2833,10 +2833,12 @@ result (Nov26): packet ready for review at docs/RELEASE_PACKET_QUEUE_20261126.md
     f99b5a80…8dd6 was re-hashed for the packet.
   - UNVERIFIED items are flagged in the packet:
     - no independent review of the TASK-044 merge step;
-    - option B of the storage decision is not recorded in repo docs;
     - rollback (downgrade) data compatibility was not tested;
     - native Google sign-in with the debug key;
     - the TASK-047 N3 raw log is missing.
+    - "no accounting write failed" in the mixed probe covers only its rolling 400-write error window.
+  - Review round 1 (Nov26): changes required (5 docs must-fixes); fixed by Claude (push order, device-profile
+    isolation + P0 pre-check, storage copy wording in packet and PROPOSALS, 400-write window, this entry).
   - Not run: hosted CI and physical device. Both are owner actions; see packet §4b and §5.
 
 ### TASK-049 - Life Ledger sync worker stale-lock takeover race (unblocks TASK-047 unit job)

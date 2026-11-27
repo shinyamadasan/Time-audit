@@ -47,7 +47,7 @@ Relative to 0ff39ec, the runtime diff covers only `accounting-command.js` and `i
 - **Accounting recovery (TASK-041, DECISIONS #44).** Some devices hold an old "orphan heartbeat" record that
   points at a Start saved only in local intake. Today that state blocks accounting. The new code repairs this
   one known case under the account lock and keeps every original fact. The page may stay paused until reload
-  or sign-in. Files: `accounting-command.js` (+58 lines).
+  or sign-in. Files: `accounting-command.js` (+56/−2 lines).
 - **Storage durability (TASK-045, DECISIONS #45).**
   - Settled ordinary Start/Stop and read-only hydrate history is archived to IndexedDB once the local
     accounting store passes 3 Mi characters. A record leaves the store only after its archived copy has been
@@ -57,7 +57,7 @@ Relative to 0ff39ec, the runtime diff covers only `accounting-command.js` and `i
     Keep this page open while storage recovers."
   - In a browser, leaving the page triggers a "leave site?" warning. The app retries the held change with its
     original id, input and time.
-  - Files: `accounting-command.js` (+12 lines) and `index.html` (+75/−48 lines).
+  - Files: `accounting-command.js` (+10/−2 lines) and `index.html` (+53/−22 lines).
 - **Focus test fix (TASK-047).** Test only, with no app change. A required-CI Focus test raced a ~90 ms UI
   window. It now holds the Stop before it reaches the server.
 - **Life Ledger lock fix (TASK-049, DECISIONS #46).** This is the local PC sync worker, not the app. Two
@@ -113,8 +113,8 @@ The APK hash is specific to this build environment and debug key. It cannot be r
 
 ## 2. Gate table
 
-"Tree" is the commit each gate ran on. Every gate below ran on 3d8c9f9 or 9db0bf5, which have the same
-runtime as da5c4d4 (§1.1). The only non-doc changes after 3d8c9f9 are the Life Ledger worker and its test.
+"Tree" is the commit each gate ran on (c2b6f95, 120dba5, fc29b2c, 3d8c9f9, 50d909b or 9db0bf5). Every one of these
+has the same runtime as da5c4d4 (§1.1; c2b6f95→120dba5 and 120dba5→fc29b2c change only docs and CI pins). The only non-doc changes after 3d8c9f9 are the Life Ledger worker and its test.
 The unit job reran on 9db0bf5 and covers both. 9db0bf5 → da5c4d4 changes only `TASKS.md` and `TEST_REPORT.md`.
 
 | # | Gate | Tree | Result | Raw evidence |
@@ -126,9 +126,9 @@ The unit job reran on 9db0bf5 and covers both. 9db0bf5 → da5c4d4 changes only 
 | 2a | 490 on the TASK-046 tree (history) | fc29b2c | Not clean: 489/1 on the Focus terminal flake. The flake was fixed by TASK-047 (#2). | `$E/task-046/claude-mandatory-required-490.log`, `-r2.log` |
 | 3 | Wider regression, 1,107 tests in 4 shards, against `scripts/ci-known-failures.json` | 3d8c9f9 | **PASS (aggregate classifier exit 0):** ran 1107, passed 808, 297 known-baseline failures, 2 history-only, **0 outside the baseline**, 17 baseline tests now passing. Ran with one worker; see §3.6. | `$E/task-047/wider/wider-aggregate.{log,exit}`, `wider-{1..4}.json`, `run.meta` |
 | 4 | Household My Day (opt-in, 11 tests) | 120dba5 runtime (fc29b2c) | **PASS 11/11** on HEAD (45.2 s) and on pre-TASK-045 (42.3 s). Reviewer rerun: 11/11 (44.2 s). | `$E/task-046/claude-household-{head,pre045}.log`, `$E/task-046/review/rerun-household-head.{log,exit}` |
-| 5 | Packaged (real release bundles, 31 web + 31 Android) plus byte pins | 3d8c9f9 against release-02 | **PASS 62/62**, required-62 classifier PASS. Web, bundle and rules pins OK. | `$E/task-047/gates/packaged.{log,json}`, `packaged-classifier.log`, `packaged-pins-r2.log` |
+| 5 | Packaged (real release bundles, 31 web + 31 Android) plus byte pins | 3d8c9f9 against release-02 | **PASS 62/62**, required-62 classifier PASS. Web, bundle and rules pins OK. | `$E/task-047/gates/packaged.{log,json}`, `packaged-classifier.log`, `packaged-pins-r2.log`; release dir set in `$E/task-047/run-gates.sh` (`REL=…/task-046/release-02`) |
 | 5a | Packaged, independent rerun | 120dba5 | PASS 62/62 | `$E/task-046/review/packaged-review.{log,json}`, `packaged-review-classifier.log` |
-| 6 | `zz-perf-profile` (unchanged blob `8de432f1…`; E=2489, PERF_OPS=0,40; one worker) | 120dba5 | **PASS 1/1** (8.2 min). Also passed inside wider shard 4. Independent TASK-045 reviewer: 1/1 (4.4 min). | `$E/task-046/perf-standalone.{log,json,exit}`, `perf-profile-standalone.json`; `$E/task-045/perf.log`; `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/perf-out` (see †) |
+| 6 | `zz-perf-profile` (unchanged blob `8de432f1…`; E=2489, PERF_OPS=0,40; one worker) | 120dba5 | **PASS 1/1** (8.2 min). Also passed inside wider shard 4. Independent TASK-045 reviewer: 1/1 (4.4 min). | `$E/task-046/perf-standalone.{log,json,exit}`, `perf-profile-standalone.json`; `$E/task-045/perf.log`; `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/perf.log` (see †) |
 | 7 | Durability spec (`accounting-storage-durability.spec.js`: Path A, Path B, archive) | 120dba5 | **PASS 3/3** three times (TASK-045 final, TASK-046, TASK-046 reviewer). Red before the fix: 1 passed, 2 failed. | `$E/task-045/focused-{red,green,final}.{log,json}`; `$E/task-046/storage-durability.log`; `$E/task-046/review/storage-durability-review.log` |
 | 8 | Accounting node regressions (orphan recovery, wall observation, history cut, storage-full, capability, staged-effects, growth, gates, native projection) | c2b6f95 | PASS 195/195 | `$E/task-045/accounting-unit.log` |
 | 9 | Mixed-workload headroom probe (measurement only) | 120dba5 | **About 7 day-equivalents** from seed to the 5,242,880-character wall (6.93 using days 2–6, 7.03 using days 3–6). See §3.1. | `$E/task-046/mixed-projection.json`, `mixed-settled-run.json`, `mixed-headroom-settled.json`, `mixed-settled.log` |
@@ -151,7 +151,7 @@ together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch
 | TASK-041 (runtime b18cc52) | APPROVE (fresh-context implementation QA, cycle 2). It was not a release authorization. | — (TASK-041 entry stays `blocked` for its original pre-queue reasons, superseded by this queue) | `TEST_REPORT.md` "TASK-041 … owner-decision implementation qualification"; probes at `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/chronasense-task041-evidence-20261124/independent-qa-cycle2/probe.log`. The verdict text exists only in TEST_REPORT; there is no standalone verdict file. |
 | TASK-044 (integration merge 9eb6cf2) | **UNVERIFIED: no separate independent review is recorded.** TASK-044 was a conflict-resolution merge approved by the Tech Lead. Its byte claims (accounting runtime equals b18cc52, Household equals 0ff39ec) are recorded only in TEST_REPORT. The TASK-046 reviewer later re-derived the full web/APK trees from raw blobs (`review/indep-bytes.json`), which covers the combined result but not the merge step itself. | approved (held) | `$E/task-044/{mirror.log,npm-test-longtmp.log}` |
 | TASK-045 | APPROVE WITH NOTES: 1 MAJOR (archive scope, §3.1), 4 MINOR, 1 NIT; no blocker | approved (held) | `REVIEW.md` "TASK-045 · Capture durability…"; reviewer outputs `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/` (†), probe `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/probe/eligible.probe.cjs` |
-| TASK-046 | APPROVE. Release bytes, pins and packaged approved separately (`VERDICT.md`). The Focus flake was ruled pre-existing and routed to TASK-047. | approved (held) | `$E/task-046/review/VERDICT.md`, `review/rerun-*`, `review/probe-*` |
+| TASK-046 | APPROVE. Release bytes, pins and packaged approved separately (`VERDICT.md`, whose blocking documentation finding F1 on the capacity wording was fixed in TEST_REPORT before close). The Focus flake was ruled pre-existing and routed to TASK-047. | approved (held) | `$E/task-046/review/VERDICT.md`, `review/rerun-*`, `review/probe-*` |
 | TASK-047 | APPROVE WITH NOTES (N1–N4, §3.7) | approved (held) | `$E/task-047/review/VERDICT.md`, `review/rev-*` |
 | TASK-049 round 1 | CHANGES REQUIRED. Empty-generation ABA reproduced 5/5. | — | `$E/task-049/review/probe-empty-generation-aba.log` |
 | TASK-049 round 2 | APPROVE, with non-blocking notes 1–4 (§3.4) | approved (held) | `$E/task-049/review2/` |
@@ -175,12 +175,16 @@ together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch
   records. Pings, automatic logs, edits, Focus, break/away, undo, the committed entries and the physical
   records all still grow without limit (TASK-045 review MAJOR; DECISIONS #45 "Known limit").
 - **Entries are stored three times.**
-  - At E=2489, the envelope's committed entries take 1,421,345 characters and its physical records take
-    1,443,811. The separate `ta3-entries` compatibility cache tries to write another 1,421,345
-    (`$E/task-045/diagnosis.log`).
-  - In the mixed probe, that cache write **failed on days 0–1**: 9 failures, then 29
-    (`$E/task-046/mixed-projection.json` `errors`). It fit only after the day-2 archive cut. No accounting
-    write failed.
+  - At E=2489 the accounting envelope holds committed entries (1,421,345 characters) and physical records
+    (1,443,811). Before the first automatic archive cut it also holds the first hydrate frame (~1.44M), a
+    third copy (`$E/task-045/diagnosis.log`).
+  - The separate `ta3-entries` compatibility cache (~1.42-1.43M) is another copy. In the mixed probe its write
+    **failed on days 0–1** (9 failures, then 29; `$E/task-046/mixed-projection.json` `errors`). At the day-2
+    cut the hydrate frame left the envelope (envelope 4,541,238 → 3,208,659 characters) and the cache then fit.
+    So in steady state the three copies are: envelope committed entries, envelope physical records, and the
+    `ta3-entries` cache.
+  - No accounting write failure appeared in the probe's error window. That window is a rolling record of the
+    last 400 writes, so earlier failures would not be visible (TASK-046 review limitation; TEST_REPORT).
 - **At the wall, archiving cannot free space for a page-held capture.** Recovery needs space freed outside
   accounting (TASK-045 review MINOR).
 - **The rollback target is worse, not safer.** Live main 0ff39ec failed the required perf profile in hosted
@@ -188,10 +192,17 @@ together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch
   "TASK-041/042 November26 completion" (hosted runs 45722193000 and 45118304375). T3 snapshots are under
   `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/chronasense-task042-qualification-20261126/`.
 - **Owner decision pending (§4a).** Either (A) widen archive eligibility to the other settled kinds, or
-  (B) stop storing entries three times in the envelope (committed entries + physical records + the first hydrate frame, ~1.42-1.44M chars each; the separate `ta3-entries` cache would be a fourth copy and already fails at quota).
+  (B) stop storing entries three times (in steady state: envelope committed entries + envelope physical
+  records + the `ta3-entries` cache, ~1.42-1.44M characters each; before the first archive cut the hydrate frame
+  is an additional envelope copy).
   Neither option is designed or scheduled. Both are recorded with their evidence and the PM recommendation (A before
   release, B as the next project) in `planning/PROPOSALS.md` "Storage headroom after TASK-045"; DECISIONS #45 records
   the archive-scope limit.
+
+- **Pre-existing known failures include time-loss scenarios.** The 297 known-baseline wider failures also fail
+  on live main. They include time-loss-shaped scenarios, e.g. daily-use-reliability F-1, F-2 and F-3 ("in an
+  OFFLINE session … must not lose the session"). This release neither fixes nor worsens them
+  (`$E/task-046` wider classifier; `scripts/ci-known-failures.json`).
 
 ### 3.2 Page-held captures are lost on forced close
 
@@ -224,6 +235,8 @@ Every gate in §2 ran locally on Windows with Node 24.19.0. Hosted CI uses ubunt
 (`.github/workflows/ci.yml:46-52`). Some hosted-only steps were not reproduced: `npm ci`,
 `playwright install --with-deps`, artifact upload/download, and the online Gradle build (`npx cap add android`
 + `build-release-artifacts.mjs --gradle-online`). The APK is the local offline D: toolchain build.
+Every local gate after the TASK-045 review ran on a shared node_modules restored with `npm ci --offline`, with the
+protobufjs and sharp install scripts skipped (REVIEW.md TASK-045 incident). Hosted `npm ci` is the check for that.
 
 ### 3.6 The regression job ran with one worker locally
 
@@ -253,7 +266,7 @@ outside-ledger results in TASK-046 were environmental load or timing effects tha
 ### 3.9 Other limits
 
 - **Rollback data compatibility is UNVERIFIED.** DECISIONS #45 says the candidate uses the existing
-  envelope and archive formats, and the archive has no app reader. That suggests 0ff39ec can read state the
+  envelope and archive formats, and the TASK-045 review found the archive has no app reader. That suggests 0ff39ec can read state the
   candidate wrote, but no downgrade test was run.
 - **Native Google sign-in with this debug APK is UNVERIFIED.** The APK is signed with a fresh debug key
   (SHA-1 `d2458c8b…1913`). Native Google sign-in usually works only if that SHA-1 is registered for the
@@ -279,8 +292,9 @@ Pick one, and record it in DECISIONS.md:
 - **A. Widen archive eligibility** to the other settled kinds: ping, automatic log, save-entry, Focus,
   break/away, undo. This extends the existing mechanism, but every new kind needs a dependency and receipt
   audit.
-- **B. Stop storing entries three times.** For example, drop or derive the `ta3-entries` compatibility cache
-  or the duplicated committed/physical views. This saves about 1.4M characters per copy at E=2489. It is red
+- **B. Stop storing entries three times** (envelope committed + envelope physical + the `ta3-entries` cache in
+  steady state). For example, drop or derive the `ta3-entries` compatibility cache or the duplicated
+  committed/physical views. This saves about 1.4M characters per copy at E=2489. It is red
   zone, because it touches entry storage and sync.
 - Or accept roughly 7 day-equivalents of headroom under heavy mixed use, as a known limit for this release.
 
@@ -291,19 +305,23 @@ in this candidate.
 
 The branch's upstream is `origin/main`. **Never run a bare `git push`.**
 
-```
-git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration rev-parse refs/heads/task-044-durability-integration
-git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration push origin refs/heads/task-044-durability-integration:refs/heads/release/queue-20261126-rc
-```
+Run these three steps in order. Do not push until step 2 is clean.
 
-- **Check the SHA from the first command before you push.** The qualified candidate is `da5c4d4…`. This
-  packet adds docs-only commits on top, so the branch head will be a later SHA.
-- Confirm that the difference contains docs only. This should list only `docs/` and `*.md` files:
-  ```
-  git -C <worktree> diff --name-only da5c4d493af5908cd2c7e27547eba0519b3e149f <printed SHA>
-  ```
-  If any other file appears, stop.
-- To push exactly the qualified commit instead:
+1. Read the branch head and note the printed SHA:
+   ```
+   git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration rev-parse refs/heads/task-044-durability-integration
+   ```
+2. Confirm everything after the qualified candidate `da5c4d4…` is docs only. The output must list only `.md`
+   files (root, `docs/`, `planning/`). If any other file appears, **stop**:
+   ```
+   git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration diff --name-only da5c4d493af5908cd2c7e27547eba0519b3e149f <printed SHA>
+   ```
+3. Push **that exact SHA** (not the branch name, which could have moved) to a new branch:
+   ```
+   git -C C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration push origin <printed SHA>:refs/heads/release/queue-20261126-rc
+   ```
+
+- To push exactly the qualified commit instead (skips steps 1-2):
   ```
   git -C <worktree> push origin da5c4d493af5908cd2c7e27547eba0519b3e149f:refs/heads/release/queue-20261126-rc
   ```
@@ -344,7 +362,7 @@ Do this only after (a), (b) green and (c) pass. All queue tasks (TASK-044/045/04
 6. Android is separate. `scripts/deploy-release.ps1` refuses to run on `main`, so run
    `-Confirm` from a release branch. Then build in Android Studio. Never uninstall a real-data install to get
    past a signing-key mismatch.
-7. After deploy: repeat §5 W1/W5 on the production URL using a test account, then mark TASK-044..049
+7. After deploy: repeat §5 W1–W3 on the production URL using a test account, then mark TASK-044..049
    `done` with the merge SHA.
 
 ### (e) Rollback target and how
@@ -373,8 +391,11 @@ Do this only after (a), (b) green and (c) pass. All queue tasks (TASK-044/045/04
 
 ### 5.0 Ground rules (read first)
 
-- **Use a dedicated device, or a separate Android user profile, with no real-data ChronaSense install.** The
-  package id is `com.timeaudit.app`. If it is already installed on that device or user, **STOP**.
+- **Use a dedicated device with no real-data ChronaSense install in any user profile.** The package id is
+  `com.timeaudit.app`. A separate Android user profile is **not** isolation: `adb install` installs for all
+  users by default and app code is shared across profiles, so a real-data install in any profile would be
+  updated in place (same key) or block the install (different key). If the package is installed in **any** user
+  profile on that device, **STOP**.
   - Do not uninstall, clear data or override a signing mismatch (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). That
     could erase unsynced time.
 - **Sign in with a dedicated test Google account, never the real-data account.** The build talks to the
@@ -392,7 +413,8 @@ Do this only after (a), (b) green and (c) pass. All queue tasks (TASK-044/045/04
 
 | Step | Action | Expected | Record |
 |---|---|---|---|
-| P1 | On the PC: `adb devices`, then `adb install D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/release-02/chronasense-debug.apk` (device B = Android APK) | `Success`. No existing-install conflict. | adb output |
+| P0 | Pre-check on the PC: `adb devices`; `adb shell pm list users`; then for **each** user id `adb shell pm list packages --user <id> com.timeaudit.app` | Every listing is empty. If any user lists `com.timeaudit.app`, **STOP**; do not install. | command output |
+| P1 | On the PC: `adb install D:/ChronaSenseQualificationEvidence/20261126-queue/task-046/release-02/chronasense-debug.apk` (device B = Android APK) | `Success`. No existing-install conflict. | adb output |
 | P2 | Open the app, sign in with the test account | Signed in, My Day shown, no crash-recovery modal. **If Google sign-in fails** (for example code 10 / DEVELOPER_ERROR), stop the APK signed-in steps and record it. The debug SHA-1 `d2458c8b7ed318c55b821aa8b6b0ea47897b1913` is probably not registered, and registering it is a separate owner decision. | screenshot, error text |
 | P3 | Web on the phone (device A = phone Chrome). On the PC: `python -m http.server 8000 --bind 127.0.0.1 --directory C:/Users/DevLabs-Test/.t3/worktrees/Time-audit/task-044-durability-integration/www` then `adb reverse tcp:8000 tcp:8000`. On the phone, open `http://localhost:8000/`. | App loads. Sign-in works, because `localhost` is a default Firebase authorized domain. **If you see `auth/unauthorized-domain`, stop; do not add domains.** The localhost origin has its own storage, separate from the production site's. | URL, screenshot |
 | P4 | Remote inspection: on the PC, open `chrome://inspect`. Both the phone Chrome tab and the debug APK's WebView should be listed. | Both inspectable. If the WebView is not listed, do the S/R steps on web only and record that. | which targets are listed |
@@ -410,7 +432,7 @@ Do this only after (a), (b) green and (c) pass. All queue tasks (TASK-044/045/04
 | Step | Action | Expected | Record |
 |---|---|---|---|
 | S1 | In the inspected page's DevTools console, fill storage: `(()=>{let i=0,j=0;const b='x'.repeat(262144),s='x'.repeat(1024);try{for(;;)localStorage.setItem('zz-device-test-fill-'+(i++),b)}catch(e){}try{for(;;)localStorage.setItem('zz-device-test-fill-s'+(j++),s)}catch(e){}return{big:i-1,small:j-1}})()` | Returns counts, so storage is now at quota | returned counts |
-| S2 | Press Start on a task | The app **never** says "kept safely" or claims the change was saved. You will see one of two outcomes:<br>• a durable-intake path that later imports normally;<br>• a page-held status, "N accounting change(s) is/are held in this page. Keep this page open while storage recovers.", with a real count (press Stop too: the count should increase);<br>• or the toast "This device's storage is full. Use Check now to retry accounting when space is available." | exact status and toast text; the count |
+| S2 | Press Start on a task | The app **never** says "kept safely" or claims the change was saved. You will see one of three outcomes:<br>• a durable-intake path that later imports normally;<br>• a page-held status, "N accounting change(s) is/are held in this page. Keep this page open while storage recovers.", with a real count (press Stop too: the count should increase);<br>• or the toast "This device's storage is full. Use Check now to retry accounting when space is available." | exact status and toast text; the count |
 | S3 | Clear the filler: `Object.keys(localStorage).filter(k=>k.startsWith('zz-device-test-fill-')).forEach(k=>localStorage.removeItem(k))`, then press **Check now** (or wait up to about 30 s) | The held count drops to 0. The Start/Stop land **exactly once**, with the original times (no new timestamp and no second press needed). The entry appears once on the other device. | before/after count; entry times; any duplicate |
 
 ### 5.4 Reload with a page-held capture (R)
@@ -434,6 +456,12 @@ Do this only after (a), (b) green and (c) pass. All queue tasks (TASK-044/045/04
 | H1 | Web: open `http://localhost:8000/?household=1` | Household My Day: today's tasks column. The partner card is read-only (or reads "isn't sharing their full daily list"). Food reads "Meal Prep is not connected on this device yet." | screenshot |
 | H2 | Start then Stop a task from the Household view, and mark one Done | One entry, logged once. Done state persists after reload. | entries |
 | H3 | Open `http://localhost:8000/` without the flag | Normal My Day, unchanged. On the APK, Household is not shown (it is web-only behind the flag). | screenshot |
+
+### 5.5a Cleanup after testing
+
+On the phone, for `http://localhost:8000`: unregister its service worker and clear that origin's site data
+(Chrome → Settings → Site settings → All sites → localhost:8000 → Clear & reset). Then `adb reverse --remove tcp:8000`
+and stop the local `http.server`. Leave the test APK installed or uninstall it **only** on the dedicated device.
 
 ### 5.6 Result record (copy, fill in, and attach to TASK-048)
 

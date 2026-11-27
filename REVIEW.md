@@ -743,3 +743,79 @@ verdict: **APPROVE**. Must-fix 1 from round 1 is closed, including the claim-lev
 No code or test changed. Nothing was committed, pushed, merged or deployed. The scheduler installer and `--apply` were not run. The scratch tree has been removed, and it never held a node_modules link.
 
 gate: **approved (held)**. The queue disallows `done`, and this is the lock that guards vault writes. The human merges it with the candidate.
+
+---
+
+## TASK-048 review · 2026-11-26 · Release packet docs/RELEASE_PACKET_QUEUE_20261126.md (HEAD e79f540)
+
+reviewer: independent Claude review subagent (did not write the packet). Read-only except the trivial packet fixes listed below, this entry and TASK-048's status. Evidence root `D:/ChronaSenseQualificationEvidence/20261126-queue/`. Nothing was committed, pushed, merged or deployed; the §4b push was **not** run.
+verdict: **CHANGES REQUIRED** (small, docs-only). Every numeric gate and verdict claim traced to raw evidence and held, apart from the trivial errors I fixed. Five items must change before the owner can approve in one pass: the push sequence, device-profile safety, a contradiction in the storage option B, an evidence caveat that was left out, and a stale UNVERIFIED line in TASKS.
+
+### Checked against raw evidence (52 claims; all confirmed unless listed under Fixed / Must-fix)
+- **Artifacts.** I re-hashed both files with `sha256sum`. APK = `f99b5a80…8dd6`, 5,967,177 bytes. `release-manifest.json` = `74ade476…505b`. Manifest fields: commit 120dba5, web tree `bf81c9e5…` with 111 files, bundle tree `6c73eb28…`, rules `93f0a774…`, apkSha256/apkBytes match. The rules sha256 from `git show 0ff39ec:firebase.rules.json` equals `93f0a774…`, so the rules are unchanged from main. `packaged-pins-r2.log` shows web, android and rules OK. Signer: v2 only, 1 signer, CN=Android Debug, SHA-1 `d2458c8b…1913` (in both `apk-signature.log` and `review/apksigner.log`). Badging: `com.timeaudit.app`, sdk 24, target/compile 36.
+- **Gate 1.** In `unit-rerun-9db0bf5`, `head.txt` = 9db0bf5. Exits are 0,0,0. The summed `ℹ` lines give 2,567 pass / 0 fail / 1 skip in each run; custom is 455/455 ×3.
+- **Gate 1a.** mirror, lint, rules-builder and functions-shared all exit 0. Lint: 0 errors, 172 warnings. **Gate 15:** mirror OK with 111 files.
+- **Gate 1b.** `gates.meta` HEAD = 3d8c9f9. `npm-test` exit 1 on the `Finding 3` assertion at life-ledger-sync-worker.test.js:340 (actual 2 vs expected 1). r2 and r3 exit 0.
+- **Gate 2.** The quiet `mandatory-required-490-r1..r5` runs are all "ran 490, passed 490", exit 0. Shard JSON: 186, 264 ×5 and 40 expected; 0 unexpected, 0 flaky, 0 skipped. `run.meta` HEAD = 3d8c9f9 with the quiet checks.
+- **Gate 2a.** `claude-mandatory-required-490.log` shows 489/1 on the Focus terminal Learning frontier test. The r2 run is 490/490.
+- **Gate 3.** `wider-aggregate` exit 0: 1107 run, 808 passed, 297 known, 2 history-only, 0 outside the baseline, 17 now passing. Each shard used `--workers=1`. `zz-perf-profile` passed in shard 4.
+- **Gate 4.** Household 11/11 at 45.2 s (head), 42.3 s (pre-TASK-045) and 44.2 s (reviewer rerun), all exit 0.
+- **Gates 5 and 5a.** 62 passed; JSON 62 expected / 0 unexpected; 31 web + 31 android titles; classifier PASS. The reviewer rerun is 62/62. The release dir is release-02 (from `run-gates.sh:6,44`; `packaged.command.txt` omits the env var).
+- **Gate 6.** Standalone 1/1 in 8.2 min. E=2489. The `PERF_OPS` default is `0,40`, which gives checkpoints opsBefore 0 and 80. Blob `8de432f1` is identical at 0ff39ec, 120dba5 and HEAD. TASK-045 perf: 1 passed (5.4 min). Reviewer: 1 passed (4.4 min), in `rev045/perf.log`.
+- **Gate 7.** red: 2 failed / 1 passed. green 3/3, final 3/3, TASK-046 3/3, reviewer 3/3. c2b6f95→120dba5 changes only DECISIONS, REVIEW and TASKS.
+- **Gate 8.** `accounting-unit.log`: 195/195.
+- **Gate 9.** `mixed-projection.json`: 122,276 chars/day from day 2; 6.926 and 7.033 days; peak 5,144,900; `ta3-entries` errors 9 on day 0 and 29 on day 1, none afterwards. `diagnosis.log`: entries 1,421,345, physicalEntries 1,443,811, failed `ta3-entries` writes of 1,421,345.
+- **Gate 10.** rules-suites 142/142, fences 23/23, mutation 43/43. Tombstone required 3/3 with 4 superseded; reliability with 5 superseded. All exits 0.
+- **Gate 11.** `loop-200.log`: 200 runs of 24/24, 0 failed. Reviewer 150/150. Red on the 806854c worker: 21/3 (both copies). Green on 50d909b: 24/0. Siblings all rc 0. Round-1 probe: 5× VIOLATION.
+- **Gate 12.** worker 55/55; wrangler dry-run bundle exits clean.
+- **Gates 13 and 14.** `independent-apk-raw-blobs` exit 0. `indep-bytes.json`: web disk = blobs = manifest, 111 files, `apkDiffFromBlobs` [], 2 extra cordova files, `serverUrl` null, bundle tree reproduced.
+- **§2.1 verdicts.** These match REVIEW.md, the TASK-046 and TASK-047 `VERDICT.md` files, `review2/` and TEST_REPORT:3315-3340 (TASK-041 cycle-2 APPROVE, "not release authorization"). The TASK-041 `probe.log` and TASK-044 `mirror.log` / `npm-test-longtmp.log` exist. `npm-test.log` has 23 node failures on the short TMP; `longtmp` has 0.
+- **Candidate integrity.** `git diff --name-only 120dba5 HEAD` lists ci.yml, 8 root `.md` docs, docs/ and planning/ `.md` files, `scripts/life-ledger-sync-worker{.mjs,.test.js}` and `tests/accounting-staged-effects.spec.js`. It touches no www/, root runtime JS/HTML/CSS, capacitor.config.json, firebase.json, firebase.rules.json, functions/ or workers/. The built APK and web bundle therefore represent HEAD's runtime. `git log 0ff39ec..HEAD` has 29 commits: the packet's 27 (identical, in order) plus ff51ad3 and e79f540. `da5c4d4..HEAD` touches only STATUS.md, TASKS.md, the packet and planning/PROPOSALS.md, which all pass the packet's docs-only guard. merge-base = 0ff39ec. `git ls-remote` (read-only): main = 0ff39ec, and no `release/queue-20261126-rc` exists.
+- **Push safety.** `branch.task-044-durability-integration.{remote=origin, merge=refs/heads/main}` is confirmed, so the warning against a bare push is correct. Both push commands use explicit refspecs to the new `refs/heads/release/queue-20261126-rc`, never main. ci.yml runs on `release/**` and has no deploy or secret step (the Worker job uses `--dry-run`).
+- **Deploy and rollback mechanics.** `sync.bat --check` wraps `runtime-mirror.mjs --check`. `deploy-release.ps1` refuses main and needs `-Confirm`. Hosted CI uses Node 22 on ubuntu-latest (ci.yml:46-52). The wider job uses Playwright's default worker count (`ci-run-wider.mjs` passes no `--workers`). TEST_REPORT:3456 cites the 0ff39ec hosted runs 45722193000 and 45118304375 failing the required profile.
+- **§1.2 strings and DECISIONS.** The §5 UI strings exist in index.html and household-my-day.js. DECISIONS #44 (paused until reload or sign-in) and #45 (forced close loses page-held; known limit) match the packet.
+
+### Fixed in the packet (trivial factual errors)
+1. §1.2: TASK-041 `accounting-command.js` "+58 lines" → **+56/−2** (git numstat for b18cc52).
+2. §1.2: TASK-045 "+12 lines" / index.html "+75/−48" → **+10/−2** / **+53/−22** (numstat for c2b6f95; also the 0ff39ec..HEAD index.html total).
+3. §2 preamble: "Every gate below ran on 3d8c9f9 or 9db0bf5" was false, because the table's own Tree column includes c2b6f95, 120dba5, fc29b2c and 50d909b. It now lists every tree and states that each one has the da5c4d4 runtime, which I verified.
+4. Gate 6 evidence path: `preserved-scratch/rev045/perf-out` holds only `.last-run.json`, so it now points to `rev045/perf.log` (1 passed, 4.4 min).
+5. Gate 5 evidence: added `$E/task-047/run-gates.sh`, which binds `CHRONASENSE_RELEASE_DIR` to release-02.
+6. §4(d)7: "W1/W5" pointed to a nonexistent W5. It now reads W1–W3.
+7. §5.3 S2: "one of two outcomes" introduced three bullets. It now says three.
+8. §3.9: "the archive has no app reader" was attributed to DECISIONS #45. The finding comes from the TASK-045 review, so the attribution now says so.
+
+### Must-fix (docs only; then re-review)
+1. **§4(b) push order.** The code block runs `rev-parse` and then pushes the branch ref. The diff guard comes only afterwards, in the bullets. Copying the block therefore pushes before the guard has run, and it pushes whatever the ref points to at that moment, not the SHA that was checked. Required order: (1) `rev-parse` and note the SHA; (2) run `git diff --name-only da5c4d4… <SHA>`, which must list only `.md` files under the root, docs/ or planning/, and stop otherwise; (3) `git push origin <SHA>:refs/heads/release/queue-20261126-rc`. Keep the exact-`da5c4d4` alternative.
+2. **§5.0 and P1: a separate Android user profile is not isolation.** `adb install` installs for all users by default, and APK code is shared across profiles. A real-data `com.timeaudit.app` in any profile is either updated in place (same key) or blocks the install (different key). Required changes:
+   - Change "on that device or user" to "in **any** user profile on that device".
+   - Add an explicit pre-check before P1: `adb shell pm list users`, then `adb shell pm list packages --user <id> com.timeaudit.app` for each user. The expected result is empty. Otherwise STOP.
+   - Either drop the profile option or require `adb install --user <testUserId>` and only when no other profile has the package.
+3. **§3.1 contradicts itself on the copies.** The "Entries are stored three times" bullet names committed + physical + the `ta3-entries` cache. Option (B) instead says three copies *in the envelope* (committed + physical + the first hydrate frame), with `ta3-entries` as a fourth copy that "already fails at quota". `mixed-projection.json` supports only the first reading in steady state. The 1.44M hydrate group is gone from the envelope at the day-2 cut (envelope 4,541,238 → 3,208,659; groups `{}`), and the ~1.43M `ta3-entries` cache then fits (non-envelope 4.7K → 1.43M, no errors). The hydrate frame is the third envelope copy and the cache fails only before the first cut. Make (B) consistent with that bullet and with §4(a) B. PROPOSALS "Storage headroom after TASK-045" has the same sentence and needs the same correction. This matters because it is the text the owner decides on.
+4. **§3.1 "No accounting write failed" is overstated.** The error counts come from a rolling window of the last 400 writes, so `{}` on days 2–6 means none *in that window*. The TASK-046 VERDICT lists this as a required limitation, and TEST_REPORT:3604 carries it. Add it.
+5. **TASKS.md TASK-048 `result` is stale.** It still lists "option B of the storage decision is not recorded in repo docs" as UNVERIFIED, but e79f540 recorded A and B in PROPOSALS. Update it.
+
+### Non-blocking (recommend adding one line each)
+- The 297 known-baseline wider failures are pre-existing and also failing on main. They include time-loss-shaped scenarios, for example daily-use-reliability F-1, F-2 and F-3 ("in an OFFLINE session … must not lose the session"). This release neither fixes nor worsens them. Given north-star #3, the owner should see that in §3.
+- Every local gate after the TASK-045 review ran on a shared node_modules restored with `npm ci --offline`, with the protobufjs and sharp install scripts skipped (REVIEW TASK-045 incident). Hosted `npm ci` (§3.5) is the check for this. Name it there.
+- §5 cleanup: also unregister the localhost:8000 service worker and clear that origin's site data on the phone.
+- §2.1 TASK-046: its VERDICT.md carried a blocking documentation finding, F1, which was later resolved in TEST_REPORT. Mention it for completeness.
+
+### Risks section and UNVERIFIED list
+§3 is otherwise unsoftened and accurate on every point I checked:
+- about 7 day-equivalents of headroom, NOT storage-safe;
+- the remaining unbounded kinds;
+- loss of page-held captures on forced close;
+- no APK unload dialog;
+- the at-wall MINOR;
+- `lock_unsupported_filesystem` and the EPERM caveat;
+- hosted CI not run, Node 24 vs 22, one worker vs the default;
+- the rollback target is worse;
+- downgrade UNVERIFIED;
+- native Google sign-in UNVERIFIED;
+- TASK-047 N1–N4;
+- the TASK-045 MAJOR, 4 MINOR and NIT.
+
+Of the TASK-041 reviewer notes, only the equal-time sort note is not carried, and it was closed with a test. The UNVERIFIED list is complete apart from must-fix 4.
+
+gate: **codex (rework)**. Must-fixes 1–5 are docs-only. When fixed and re-reviewed, this packet lands as `approved` (held), not `done`: it carries release authority over red-zone runtime and the push/merge/deploy steps, so the human acts.
