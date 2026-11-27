@@ -5921,3 +5921,37 @@ deviations:
 - No push, merge, PR or deploy. No Firebase rules, config, credentials or production data.
 
 -> TASK-050 `review` (already set by the coordinator in 0744ea2).
+## TASK-052 November27 - full local requalification of the Option A candidate (Claude as tester; Codex out of quota)
+changed:
+- `.github/workflows/ci.yml` only, in 1d216ff (made by the previous agent, verified here):
+  - `RELEASE_WEB_TREE` → `2cec5b19…6f2c` and `RELEASE_BUNDLE_TREE` → `f8b9fc78…afa5`. These equal the manifest of the APK built from cd48824 and were independently re-derived from raw blobs.
+  - `WIDER_COUNT` 1107 → 1111: the 4 TASK-050 durability cases.
+  - `RELEASE_RULES_SHA256` and `MANDATORY_COUNT` are unchanged.
+  - `git diff --name-only cd48824 1d216ff` = ci.yml, so www/ and the runtime are byte-identical to the build commit.
+- No runtime, test or Firebase change. Scratch harnesses live only in the evidence directory.
+
+tests: TEST_REPORT TASK-052. Evidence: `D:/ChronaSenseQualificationEvidence/20261126-queue/task-052/`. Results:
+- unit/static/rules/worker green;
+- mandatory 490/490;
+- wider r1 aggregate PASS (1111; 0 outside the baseline);
+- Household 11/11;
+- packaged 62/62 r3 with pins OK;
+- APK sha256 `15f0f7787510cfb0b1c51ea7e1adc2bc4fb3aa4085d39beba9280af10054f884` (v2 debug signature verified);
+- perf 1/1 and durability 7/7;
+- mixed minima/maxima 57.6/49.1 day-equivalents;
+- fault injection 6/6;
+- forward migration and control pass;
+- rollback 4/4, with the R2C control.
+
+findings:
+- `daily-command-center.spec.js :: Plan Tomorrow uses the approved desktop modal…` is a pre-existing sub-pixel flake outside the baseline: 10/20 on the candidate, 8/20 on 0ff39ec. It made the clean shard-4 re-run's aggregate exit 1. It was not allow-listed. It needs a planned test fix, because it can redden hosted CI.
+- Rollback to 0ff39ec loses nothing durable. The limits are in TEST_REPORT. Page-held captures are lost on any reload (#45). The R2-shape legacy pause is pre-existing and identical in the same-version control.
+
+deviations:
+- Two scratch harnesses were corrected after their first run. Both r1 versions are preserved by hash.
+  - F2: window injection instead of polling.
+  - Rollback: R2C control and a page-held/durable split. R1 stays strict.
+- Superseded runs are kept and labelled: packaged r1 and r2, wider-4 r1, fault r1, rollback r1.
+- No push, merge, PR or deploy. No Firebase rules, config, credentials or production data.
+
+-> TASK-052 `review`.

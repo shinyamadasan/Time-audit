@@ -2931,7 +2931,7 @@ acceptance:
   - Any RELEASE-BLOCKING case becomes its own fix task (recorded by Claude) before release.
 
 ### TASK-052 - Requalification of the A candidate (capacity, durability, recovery, Household, migration, rollback)
-status: codex
+status: review
 owner: claude
 source: owner-direct (QUEUE-20261126-B items 2-3)
 priority: P0

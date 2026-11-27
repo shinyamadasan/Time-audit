@@ -3861,3 +3861,104 @@ Capacity: the day-end estimator is phase-dependent (26.5 on the implementer's ru
 samples a bounded history sawtooth; it is not used for the target. Daily minima/maxima give ≈45–50 day-equivalents at
 E=2489 (implementer ≈50; reviewer: minima +16.5K/day, maxima +14.2K/day → ≈45). Target (≥30) met.
 Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-050-review/ (run.meta first).
+
+## TASK-052 · 2026-11-27 · Full local requalification of the Option A candidate (Claude as tester; Codex out of quota)
+
+**Candidate.** Tested HEAD `1d216ff0fdf687c770ef4130f219dcc7b68ef1a3` (branch `task-044-durability-integration`). Release artifacts are built from `cd48824112d8576bb914861641ed61513ec7b166`. `git diff --name-only cd48824 1d216ff` lists only `.github/workflows/ci.yml` (4 lines: the pins and `WIDER_COUNT`). So `www/`, the runtime and every test file are byte-identical between the build commit and the tested HEAD. Every run's `*.meta` records HEAD `1d216ff` with status `?? review-artifacts/` only.
+
+**Evidence root:** `D:/ChronaSenseQualificationEvidence/20261126-queue/task-052/` (`$E`). Runners: `run-gates.sh` (A, A2, B), `run-C.sh` (C1, C2), `run-C2r.sh` (F2R, RBR), `run-P3.sh`, `run-FL.sh`, `run-FL0.sh`. Launch log: `run-gates.command.txt`. TMP=TEMP=D:/t, one Playwright worker throughout.
+
+**Run discipline.** Before every browser run, the runner waits for two checks 30 s apart that find no Playwright, Chromium or emulator process. The owner's idle processes are excluded by PID: java 48184 (RTDB emulator :60432), node 16704 and node 36520. After each run it records an after-check. Any run whose after-check found a foreign process was re-run. Superseded runs are kept and labelled.
+
+**Resumption.** The previous agent stopped on a usage limit at 17:51Z. Its parts A (sections 1 and 5) and A2 (mandatory, perf, durability) had clean exits and quiet checks and were kept. Not kept: `gates-aborted-split/` (an aborted first split, npm-test exit ≠ 0 from that aborted run) and the first packaged run (no after-check; `run-A.meta` shows a foreign Meal-Prep Playwright right after it). Everything below marked r2/r3 was run in this session.
+
+| # | Gate | Result | Evidence |
+|---|---|---|---|
+| 1 | `npm run check:www-parity`, `node scripts/runtime-mirror.mjs --check` | exit 0; 111-file closure byte-identical | `gates/www-parity.*`, `gates/runtime-mirror.*` |
+| 1 | `npm run check:firebase-rules` (rules builder), `npm run check:functions-shared` | exit 0 / exit 0 | `gates/firebase-rules.*`, `gates/functions-shared.*` |
+| 1 | `npm run lint` | exit 0; 0 errors, 172 warnings | `gates/lint.log` |
+| 1 | `npm test` | exit 0. Node runner: 2,574 tests, 2,573 pass, 0 fail, 1 existing skip. Custom runners: 455/455. Same as TASK-050. | `gates/npm-test.log` |
+| 1 | Emulator suites: `node --test firebase-rules-emulator.test.js task-completion-emulator.test.js nudge-rules-emulator.test.js time-ack.test.js scripts/verify-installed-rules.test.js`; tombstone and reliability via `scripts/ci-node-superseded.mjs`; fences; `firebase-rules-mutation.test.js` | 142/142; tombstone required 3/3 PASS; fences 23/23; reliability required 1/1 PASS; mutation 43/43 (after `npm run provision:rtdb-emulator`, checksum verified) | `gates/rules-suites.log`, `tombstone.log`, `fences.log`, `reliability.log`, `mutation.log` |
+| 1 | Worker: `npm test --prefix workers/chronasense-conversational-bridge`; `npm run check:bundle` (wrangler dry run) | 55/55; dry run exit 0 | `gates/worker-test.log`, `worker-bundle.log` |
+| 2 | Mandatory: the 10 `MANDATORY_SPECS` from ci.yml, `--shard=N/3 --workers=1 --forbid-only` | 186 + 264 + 40 = **490 passed**, 0 failed/skipped/flaky. `node scripts/ci-test-report.mjs required 490 …`: PASS | `gates/mandatory-{1,2,3}.*`, `mandatory-required-490.log`, `run-A2.meta` |
+| 3 | Wider: 75 spec files (household collects 0 without `MEAL_PREP_TEST_HOSTING`), 4 shards, `ci-test-report.mjs legacy` per shard and aggregate against `WIDER_COUNT` 1111 | **r1 aggregate PASS**: ran 1111, passed 812, failed 299; 0 outside the baseline; 297 known; 2 history-only (73739e9); 17 baseline tests now pass. Shard 4 r1's after-check found a foreign Meal-Prep run that started 19:01:31Z, 13 s before the shard ended (19:01:44Z). **Clean shard-4 re-run r2:** 1 failure outside the baseline, so aggregate r2 is exit 1 (see the finding below). | `gates/wider/wider-*.{log,json}`, `wider-aggregate.log`, `wider-aggregate-r2.log`, `run-B.meta`, `run-W4.meta` |
+| 4 | Household: `firebase.cmd emulators:exec --config firebase.local.json --only auth,firestore --project demo-meal-prep "node <wt>/node_modules/@playwright/test/cli.js test --config <wt>/playwright.config.js household-my-day.spec.js --workers=1 --forbid-only --reporter=list,json"`, with `MEAL_PREP_TEST_HOSTING` and `CI=true`; ports 9099/8080/5000 free beforehand | **11/11** (0 skipped/flaky), 43.8 s. The hosting directory is a sha-verified byte copy of task-046's, so prior evidence was not touched. | `household.*`, `meal-test-hosting/copied-from-task-046.sha256`, `run-C1.meta` |
+| 5 | Release artifacts: `python build.py cd48824…` → `scripts/build-release-artifacts.mjs --commit cd48824…` (Capacitor add, Gradle) | web tree `2cec5b19…6f2c` (111 files); bundle tree `f8b9fc78…afa5` (113 = 111 + two empty cordova files); rules `93f0a774…be00`; APK **`15f0f7787510cfb0b1c51ea7e1adc2bc4fb3aa4085d39beba9280af10054f884`**, 5,970,217 bytes; manifest `d5ee845e…0d5f` | `release/`, `release-build.log` |
+| 5 | Independent parity: `verify-apk-raw-blobs.py` re-derives every hash from raw `git cat-file` blobs and the APK ZIP entries | web = www blobs = manifest; bundle = www + cordova; trees and rules match. The same derivation reproduces the old pins from 120dba5. Changed files: exactly `accounting-command.js` and `index.html`. | `independent-apk-byte-check.json` |
+| 5 | `apksigner verify --verbose --print-certs`; `aapt dump badging` / `aapt2 dump badging` (build-tools 35.0.0) | Verifies. v2 scheme, 1 signer, Android Debug cert SHA-256 `dc0b164f…05cb`, SHA-1 `d2458c8b…1913`. `com.timeaudit.app` 1/1.0, min 24, target 36. aapt exit 0; output byte-identical to the earlier log. aapt2 exit 0. | `apk-signature.log`, `apk-badging-aapt1.*`, `apk-badging-r2.*` |
+| 5 | ci.yml pins vs manifest; packaged spec with `CHRONASENSE_RELEASE_DIR`; `ci-test-report.mjs required 62` | **r3: web/android/rules OK; 62/62; required-62 PASS**, quiet before and after. r2 superseded: a harness regex escape was lost when that script was written, so the pin check could not parse ci.yml; and a foreign Meal-Prep run overlapped its last ~25 s. | `gates/packaged-pins-r3.log`, `packaged-r3.*`, `run-P3-P.meta`; superseded `packaged-r2*`, `run-P-r2.meta` |
+| 6 | `tests/zz-perf-profile.spec.js` (blob `8de432f1…` unchanged from 0ff39ec through HEAD) and `tests/accounting-storage-durability.spec.js` | perf 1/1; durability 7/7 | `gates/perf-profile*`, `storage-durability.*` |
+| 6 | Mixed probe: task-046 harness, byte-identical (`mixed/harness.sha256`), E=2489, plus `minmax-projection.py` | **Target metric:** minima slope 13,010/day gives **57.6** day-equivalents; maxima slope 13,158/day gives **49.1**; conservative 49.1. Target ≥30 met; the TASK-050 review measured 40.2/45.5. Peak 4,675,745 of 5,242,880. The day-end estimator (96 / negative) is phase-dependent and not the target. | `mixed/minmax-projection.{json,out}`, `mixed/projection.out` |
+| 7 | Fault injection, scratch `fault/fault-recovery.spec.mjs` (real app bytes, real RTDB emulator, real IndexedDB, synthetic uids) | **r2: 6/6**, quiet before and after. Details below. | `fault/fault-recovery-r2.log`, `fault/reports/F*.json`, `fault/harness-r2.sha256` |
+| 8 | Forward migration 0ff39ec → candidate (task-050 generator and verify-forward v2, byte-identical) plus the 0ff39ec → 0ff39ec control | Both pass. Details below. | `migration/*.report.json` |
+| 8 | Rollback candidate → 0ff39ec → candidate on one origin and profile, scratch `fault/rollback.spec.mjs` | **r2: 4/4** (rules identical, R1, R2, R2C control). Details below. | `fault/rollback-r2.log`, `fault/reports/R*.json`, `fault/harness-rollback-r2.sha256` |
+
+**Finding: wider shard 4 hit a pre-existing intermittent test outside the baseline.**
+- The test is `daily-command-center.spec.js :: Plan Tomorrow uses the approved desktop modal and existing preparation flow`.
+- It failed on `expect(size.height).toBeLessThanOrEqual(viewport.height-48)`, with received 672.0000152587891 against a limit of 672. It reads `boundingBox()` immediately after `toBeVisible()`.
+- Characterisation, quiet runs, `--repeat-each=20` on that one test:
+  - candidate 1d216ff: **10/20 fail**;
+  - live main 0ff39ec: **8/20 fail**;
+  - every failure overshoots by 0.0000019–0.00003 px.
+- Spec blob `2fc67982…`, `playwright.config.js` and Playwright 1.61.0 are identical in both trees. The candidate runtime diff does not touch Plan Tomorrow or CSS.
+- It passed in shard-4 r1 and in TASK-047 by chance (about 50% per run).
+- Classification: **pre-existing test flake, not a candidate regression.** Nothing was skipped, allow-listed or added to `ci-known-failures.json`.
+- It can make hosted CI's wider job red (TASK-053). The fix belongs to Claude planning: a test-side tolerance, or waiting for the modal to settle.
+- Evidence: `gates/wider/flake-plan-tomorrow-x20{,-0ff39ec}.*`, `run-FL-FL.meta`, `run-FL0-FL.meta`.
+
+**Fault injection (gate 7), r2 reports in `fault/reports/`:**
+- **F1a, page-held capture, then reload.** Intake writes are refused, so Start is held in the page: the status reads "1 accounting change is held in this page", and beforeunload warns. Storage recovers, and the held Start is applied once (server timer `_csWrite` equals the held op). On reload: timer restored with the same start, entries identical, no modal. Stop files the session once (server 302 = 300 + 2, sessions unique).
+- **F1b, page-held capture and reload while still held** (the DECISIONS #45 forced-close limit). The held Start is gone after reload, as documented. There is no phantom entry, the timer is not shown or saved as running, entries are identical (digest), there is no "kept safely" toast and no false modal.
+- **F2, reload between the IndexedDB archive write and the envelope drop (E=2489).**
+  - Setup: 25 records written to IndexedDB and read back, 0 dropped, envelope 4,434,575 chars, one pending offline Stop.
+  - After reload: entries and pending identical, nothing paused, no modal.
+  - The new page re-offers, reads back and cuts 26, with 0 missing and integrity all zero.
+  - The pending Stop files exactly once (server 2,491).
+  - r1 note: the first harness polled for this window and lost the race; the runtime had already cut 25 of 26 verified records. That shows the runtime cutting correctly but did not exercise the reload.
+  - r2 change: the coordinator is shown no verified set, so the write and read-back complete while nothing can be dropped. That is exactly the persisted state of a reload in the window; the in-memory verified set is lost on reload anyway. The real set is still observed.
+  - r1 bytes are kept: `fault-recovery.r1.spec.mjs.txt`, `harness-r1.sha256`, `fault-recovery-r1.log`.
+- **F3, kill (context close) during the IndexedDB write.** The archive transaction was held open (25 puts, more than 10k chained reads) and never committed. On relaunch with the same profile: pre-boot history identical, no modal, entries and pending identical, the 27 IndexedDB rows that are present equal the live records. The cut then drops 26 with 0 missing. The pending Stop files once.
+- **F4, two tabs of one account cutting concurrently (E=2489).** 70 interleaved commits per tab, plus a Start and Stop in tab A. 150 distinct records were observed, all live or archived (0 missing); 28 dropped; integrity zero. Both tabs' views equal the stored generation (150). Entries are equal and unique in both tabs. The session is filed once.
+- **F5, the real Chromium quota wall** (5,242,758 of 5,242,880 chars filled).
+  - Start is page-held. The next drain reports `storage-full` and the following one `drained`: relief cut 26 verified records and applied Start once.
+  - 0 missing, integrity zero.
+  - After storage recovers: Stop, reload, no modal; the session is filed once (server 302).
+- No page errors in any scenario.
+
+**Forward migration (gate 8a), state written by 0ff39ec.**
+- Envelope 4,805,209 chars, 116 history records, 2,507 entries; pending start, stop and legacy; one unfiled device-only entry.
+- Opened by the candidate:
+  - entries and physical keys identical (2,507);
+  - the 3 pending ops are preserved, and the offline session is filed once (server 2,508);
+  - the unfiled entry is held as 1 copy and never sent;
+  - every record is live or archived (0 missing);
+  - 67 archived, history 116→58, envelope 3,113,888 chars;
+  - the legacy capture ends in `legacy-source-needs-resolution`.
+- The 0ff39ec → 0ff39ec control gives the identical release outcome (the same conflict), so this is the existing legacy-review behaviour, as in TASK-050.
+
+**Rollback (gate 8b).** Setup: the candidate ran 2 days of the mixed workload at E=2489 until the automatic archive had removed ≥25 records from the envelope. An offline session stayed unconfirmed. The server then switched to 0ff39ec bytes on the same origin, the same profile reloaded, and later the candidate was served again.
+- **R1 (pending offline session).**
+  - 53 records had been archived out of the envelope.
+  - 0ff39ec booted with no modal. Entries, pending, unfiled cache, legacy records, the archive and `droppedIds` were all identical. Integrity zero, 0 missing.
+  - With writes back, 0ff39ec filed the offline session exactly once and logged a new session.
+  - Roll-forward: entries equal to 0ff39ec's final state, cut to 84, 0 missing, server unique.
+- **R2 (plus an unfiled device-only entry, the TASK-050 shape).**
+  - r1 failed `pendingIdentical`. Diagnosis: at E=2489 the candidate's legacy capture of the ~1.4M unfiled-entries cache cannot be stored beside the 4.59M already used. It is therefore page-held in memory, and logging pauses with `accounting-recovery-unconfirmed`. This is the da5c4d4-shape residual recorded in TASK-050.
+  - r2 adds a same-version control, **R2C** (candidate → candidate), and splits durable pending from page-held pending.
+  - **R2 and R2C behave identically.**
+    - Durable pending is identical.
+    - The only difference is the page-held `legacy-accounting-caches` capture: it disappears with the page and is re-captured under a new id after every reload. 0ff39ec re-holds it too.
+    - The unfiled cache is byte-identical throughout.
+    - The offline session stays queued and is never filed, and never filed twice, on either version.
+    - Roll-forward: 0 missing, integrity zero, the candidate re-holds the capture.
+  - r1 bytes: `rollback.r1.spec.mjs.txt`, `rollback-r1.log`, `reports-r1/`.
+
+**Rollback limits, stated precisely:**
+1. 0ff39ec reads the candidate's cut envelope: `droppedIds`/`droppedEventKeys`, checkpoints and the same IndexedDB database. It keeps everything and finishes pending work.
+2. 0ff39ec never cuts, because its history-cut flag defaults to off. After rollback the envelope grows again at the pre-A rate, and the storage-wall and "kept safely" defects of release packet §3.1 return.
+3. Archived records stay in IndexedDB. Both versions keep them; neither shows them in the UI.
+4. A capture held only in page memory is lost by the rollback reload exactly as by any reload (#45). In the R2 shape it is re-derived from the unchanged cache, and nothing durable is lost. Logging nevertheless stays paused for legacy review on both versions until the user resolves it; this is the existing TASK-050 residual (Option B / TASK-055).
+
+**Cleanup.** The scratch worktrees D:/t/r052main (0ff39ec) and D:/t/r052fl (flake control) were removed. In each case the node_modules junction was deleted first with `rmdir`; the target still holds 404 entries. Then `git worktree remove` ran without `--force`.
+
+Not run: hosted CI (TASK-053), physical devices, an independent reviewer rerun.
