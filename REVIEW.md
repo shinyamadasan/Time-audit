@@ -668,3 +668,18 @@ verdict: **CHANGES REQUIRED**. The fix closes the TASK-047 interleaving, and eve
 No code or test changed. Nothing was committed, pushed, merged or deployed. The scheduler installer and `--apply` were not run. D:/t/rev047 was not touched.
 
 gate: **codex (rework)**. When it is approved, it lands as `approved` (held): this queue disallows `done`.
+
+### TASK-047 - Focus terminal Stop test fix 3d8c9f9 + required-CI reproduction (November 26, 2026)
+verdict: APPROVE WITH NOTES (independent same-provider reviewer, scratch worktree at 3d8c9f9; not Guardian).
+verified: original assertions unchanged, 4 added (tests/accounting-staged-effects.spec.js:1506-1512); old test was vacuous
+  (page already idle in 8/8 instrumented pre-fix runs), fixed test holds `break` 16/16; exactly one Stop reaches the server
+  before and after the fix (no hidden duplicate delivery; app uses no keepalive/sendBeacon). No timeout/retry/skip/config or
+  runtime change in 8e8ece9..c18bb2a. Reruns: 200 ms-pause variant 16/16; full spec 260/260; mandatory shard 2 264/264 x2,
+  0 flaky. TASK-047 quiet/ evidence set uncontaminated; unit/lock-race/packaged/worker/wider numbers match raw logs.
+notes (non-blocking): N1 no focus-learning-finish case for "server applied Stop, reply lost across reload" (same path covered
+  at :1735/:1198/:2223; optional follow-up). N2 original/reloaded split uses a `reloaded` flag, not request origin
+  (theoretical). N3 TEST_REPORT "4/4 without the pause" has no raw log (covered by reruns). N4 hosted CI not run; unit job
+  blocked on TASK-049 lock race.
+evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-047/review/VERDICT.md
+risk gate: test-only but accounting/Focus coverage → `approved` (held with the candidate), once TASK-049 lands and the unit
+  job is re-run.
