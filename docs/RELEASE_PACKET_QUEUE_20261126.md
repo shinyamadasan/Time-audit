@@ -128,7 +128,7 @@ The unit job reran on 9db0bf5 and covers both. 9db0bf5 → da5c4d4 changes only 
 | 4 | Household My Day (opt-in, 11 tests) | 120dba5 runtime (fc29b2c) | **PASS 11/11** on HEAD (45.2 s) and on pre-TASK-045 (42.3 s). Reviewer rerun: 11/11 (44.2 s). | `$E/task-046/claude-household-{head,pre045}.log`, `$E/task-046/review/rerun-household-head.{log,exit}` |
 | 5 | Packaged (real release bundles, 31 web + 31 Android) plus byte pins | 3d8c9f9 against release-02 | **PASS 62/62**, required-62 classifier PASS. Web, bundle and rules pins OK. | `$E/task-047/gates/packaged.{log,json}`, `packaged-classifier.log`, `packaged-pins-r2.log` |
 | 5a | Packaged, independent rerun | 120dba5 | PASS 62/62 | `$E/task-046/review/packaged-review.{log,json}`, `packaged-review-classifier.log` |
-| 6 | `zz-perf-profile` (unchanged blob `8de432f1…`; E=2489, PERF_OPS=0,40; one worker) | 120dba5 | **PASS 1/1** (8.2 min). Also passed inside wider shard 4. Independent TASK-045 reviewer: 1/1 (4.4 min). | `$E/task-046/perf-standalone.{log,json,exit}`, `perf-profile-standalone.json`; `$E/task-045/perf.log`; `D:/t/rev045/perf-out` (see †) |
+| 6 | `zz-perf-profile` (unchanged blob `8de432f1…`; E=2489, PERF_OPS=0,40; one worker) | 120dba5 | **PASS 1/1** (8.2 min). Also passed inside wider shard 4. Independent TASK-045 reviewer: 1/1 (4.4 min). | `$E/task-046/perf-standalone.{log,json,exit}`, `perf-profile-standalone.json`; `$E/task-045/perf.log`; `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/perf-out` (see †) |
 | 7 | Durability spec (`accounting-storage-durability.spec.js`: Path A, Path B, archive) | 120dba5 | **PASS 3/3** three times (TASK-045 final, TASK-046, TASK-046 reviewer). Red before the fix: 1 passed, 2 failed. | `$E/task-045/focused-{red,green,final}.{log,json}`; `$E/task-046/storage-durability.log`; `$E/task-046/review/storage-durability-review.log` |
 | 8 | Accounting node regressions (orphan recovery, wall observation, history cut, storage-full, capability, staged-effects, growth, gates, native projection) | c2b6f95 | PASS 195/195 | `$E/task-045/accounting-unit.log` |
 | 9 | Mixed-workload headroom probe (measurement only) | 120dba5 | **About 7 day-equivalents** from seed to the 5,242,880-character wall (6.93 using days 2–6, 7.03 using days 3–6). See §3.1. | `$E/task-046/mixed-projection.json`, `mixed-settled-run.json`, `mixed-headroom-settled.json`, `mixed-settled.log` |
@@ -141,16 +141,16 @@ The unit job reran on 9db0bf5 and covers both. 9db0bf5 → da5c4d4 changes only 
 | 16 | **Hosted CI** on the candidate | — | **NOT RUN.** It needs the owner push in §4b. | none (owner action) |
 | 17 | **Physical device** (Android APK, phone web) | — | **NOT RUN.** T3 device access is disabled; see §5. | none (owner action) |
 
-† `D:/t/rev045/` is a scratch folder outside the evidence root. It still existed on 2026-11-26, but it is not
-protected from cleanup. Copy it under `$E/task-045/review/` if you want it kept.
+† `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/` is a copy, made 2026-11-26, of the TASK-045 reviewer's scratch folder `D:/t/rev045/`, preserved under the evidence root
+together with the TASK-041 and TASK-042 temp-folder evidence (`preserved-scratch/`).
 
 ### 2.1 Independent review verdicts
 
 | Task | Verdict | Gate | Raw evidence |
 |---|---|---|---|
-| TASK-041 (runtime b18cc52) | APPROVE (fresh-context implementation QA, cycle 2). It was not a release authorization. | — (TASK-041 entry stays `blocked` for its original pre-queue reasons, superseded by this queue) | `TEST_REPORT.md` "TASK-041 … owner-decision implementation qualification"; probes at `C:/Users/DevLabs-Test/AppData/Local/Temp/chronasense-task041-evidence-20261124/independent-qa-cycle2/probe.log`. The verdict text exists only in TEST_REPORT; there is no standalone verdict file. |
+| TASK-041 (runtime b18cc52) | APPROVE (fresh-context implementation QA, cycle 2). It was not a release authorization. | — (TASK-041 entry stays `blocked` for its original pre-queue reasons, superseded by this queue) | `TEST_REPORT.md` "TASK-041 … owner-decision implementation qualification"; probes at `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/chronasense-task041-evidence-20261124/independent-qa-cycle2/probe.log`. The verdict text exists only in TEST_REPORT; there is no standalone verdict file. |
 | TASK-044 (integration merge 9eb6cf2) | **UNVERIFIED: no separate independent review is recorded.** TASK-044 was a conflict-resolution merge approved by the Tech Lead. Its byte claims (accounting runtime equals b18cc52, Household equals 0ff39ec) are recorded only in TEST_REPORT. The TASK-046 reviewer later re-derived the full web/APK trees from raw blobs (`review/indep-bytes.json`), which covers the combined result but not the merge step itself. | approved (held) | `$E/task-044/{mirror.log,npm-test-longtmp.log}` |
-| TASK-045 | APPROVE WITH NOTES: 1 MAJOR (archive scope, §3.1), 4 MINOR, 1 NIT; no blocker | approved (held) | `REVIEW.md` "TASK-045 · Capture durability…"; reviewer outputs `D:/t/rev045/` (†), probe `D:/t/rev045/probe/eligible.probe.cjs` |
+| TASK-045 | APPROVE WITH NOTES: 1 MAJOR (archive scope, §3.1), 4 MINOR, 1 NIT; no blocker | approved (held) | `REVIEW.md` "TASK-045 · Capture durability…"; reviewer outputs `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/` (†), probe `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/rev045/probe/eligible.probe.cjs` |
 | TASK-046 | APPROVE. Release bytes, pins and packaged approved separately (`VERDICT.md`). The Focus flake was ruled pre-existing and routed to TASK-047. | approved (held) | `$E/task-046/review/VERDICT.md`, `review/rerun-*`, `review/probe-*` |
 | TASK-047 | APPROVE WITH NOTES (N1–N4, §3.7) | approved (held) | `$E/task-047/review/VERDICT.md`, `review/rev-*` |
 | TASK-049 round 1 | CHANGES REQUIRED. Empty-generation ABA reproduced 5/5. | — | `$E/task-049/review/probe-empty-generation-aba.log` |
@@ -186,12 +186,12 @@ protected from cleanup. Copy it under `$E/task-045/review/` if you want it kept.
 - **The rollback target is worse, not safer.** Live main 0ff39ec failed the required perf profile in hosted
   CI. It still shows the misleading "kept safely" toast on the page-held path. Evidence: `TEST_REPORT.md`
   "TASK-041/042 November26 completion" (hosted runs 45722193000 and 45118304375). T3 snapshots are under
-  `C:/Users/DevLabs-Test/AppData/Local/Temp/chronasense-task042-qualification-20261126/`.
+  `D:/ChronaSenseQualificationEvidence/20261126-queue/preserved-scratch/chronasense-task042-qualification-20261126/`.
 - **Owner decision pending (§4a).** Either (A) widen archive eligibility to the other settled kinds, or
-  (B) stop storing entries three times (envelope committed entries + physical records + `ta3-entries` cache).
-  Neither option is designed, recorded in `DECISIONS.md` or scheduled. DECISIONS #45 only says that
-  "widening archive eligibility is a follow-up decision". **Option B as a named option is UNVERIFIED in repo
-  docs**: it comes from the queue thread, and the triple-storage measurement above is its evidence.
+  (B) stop storing entries three times in the envelope (committed entries + physical records + the first hydrate frame, ~1.42-1.44M chars each; the separate `ta3-entries` cache would be a fourth copy and already fails at quota).
+  Neither option is designed or scheduled. Both are recorded with their evidence and the PM recommendation (A before
+  release, B as the next project) in `planning/PROPOSALS.md` "Storage headroom after TASK-045"; DECISIONS #45 records
+  the archive-scope limit.
 
 ### 3.2 Page-held captures are lost on forced close
 

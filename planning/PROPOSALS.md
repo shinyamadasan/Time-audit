@@ -366,3 +366,22 @@ block Phase 11.6 or Phase 11.7.
 occurrence beyond this synthetic repro, effort) before a priority is assigned.
 
 ---
+
+## Storage headroom after TASK-045 (pending owner decision, 2026-11-26)
+
+**Source:** QUEUE-20261126 evidence, not a capture. TASK-045 diagnosis
+(`D:/ChronaSenseQualificationEvidence/20261126-queue/task-045/diagnosis.log`, DECISIONS #45) and the TASK-046 mixed-workload
+probe (`.../task-046/mixed-projection.json`): at E=2489 the accounting envelope holds committed entries (~1.42M chars),
+physical records (~1.44M) and the first hydrate input (~1.44M) — the same entries three times; the separate `ta3-entries` cache (~1.42M) would be a fourth copy and already fails at quota — and realistic daily use adds
+~122K chars/day, reaching the ~5.24M localStorage wall in ≈7 day-equivalents.
+
+- **Option A (in current scope):** widen automatic archive eligibility (DECISIONS #45) from Start/Stop/hydrate to settled,
+  acknowledged ping, scheduled-log, break/away, Focus and edit history, using the same verified IndexedDB archive. Buys weeks
+  to a few months; does not change the growth from entries themselves. Red zone; needs requalification (TASK-046 gates).
+- **Option B (architecture; owner approval required):** stop keeping three full copies of entries in the localStorage
+  envelope (e.g. move committed/physical views or the initial hydrate frame to IndexedDB, or keep one canonical copy).
+  The lasting fix; touches entry storage and sync (red zone), needs its own design, DECISIONS entry and full qualification.
+
+**Recommendation (Claude/PM):** A before release, B approved as the next project. North-star #3 (never lose logged time)
+outweighs release speed; about a week of headroom is not a safe ship state.
+**Status:** awaiting owner ("A", "A+B", or "hold").
