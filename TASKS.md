@@ -2828,6 +2828,37 @@ constraints:
 verification:
   - An independent reviewer confirms every gate claim links to raw evidence.
 
+### TASK-049 - Life Ledger sync worker stale-lock takeover race (unblocks TASK-047 unit job)
+status: codex
+owner: claude (implementer; Codex out of quota until Nov 29)
+source: owner-direct (QUEUE-20261126 item 4 "required CI qualification"; Tech Lead scoping, Nov 26)
+priority: P1
+depends-on: TASK-047 (blocked on this; evidence in its TEST_REPORT section)
+files: scripts/life-ledger-sync-worker.mjs (acquireLock/isLockStale/tryCreateLockFile only);
+  scripts/life-ledger-sync-worker.test.js (new regression only; existing tests unchanged); CODEMAP.md lock-hardening
+  sentence if the mechanism changes; DECISIONS.md if a non-obvious choice is made; CHANGELOG.md/TEST_REPORT.md; this entry.
+context:
+  TASK-047 found scripts/life-ledger-sync-worker.test.js:340 ("Finding 3") fails ~5/40 runs (4/40 on origin/main
+  0ff39ec, byte-identical code), reaching required CI via `npm test`. acquireLock() (scripts/life-ledger-sync-worker.mjs
+  ~168-201) judges staleness from an earlier read, then renames whatever lock exists NOW: a late contender can rename
+  a winner's fresh lock away, so two workers proceed. Evidence: task-047 evidence lock-probe/ and gates/.
+objective:
+  At most one worker holds the lock at any instant, including when several contenders race the same stale lock; a
+  live holder's lock is never broken; a crashed holder's lock is still recovered.
+acceptance:
+  - A deterministic regression test that reproduces the interleaving (fresh lock replaced between the staleness read
+    and the takeover) fails on the current code and passes after the fix.
+  - The existing test file is unchanged and passes in >=200 consecutive runs of `node --test
+    scripts/life-ledger-sync-worker.test.js` (0 failures); the chaos/health/retention/restore/intervention tests pass.
+  - No crash-recovery regression: a dead-PID or unparsable aged lock is still taken over; a process that dies
+    mid-takeover cannot wedge the lock permanently.
+  - Full npm test passes; lint passes.
+constraints:
+  - Life Ledger worker only (a local scheduled script; not the web/Android runtime, entry schema or RTDB sync).
+    No new dependency. No timeout/retry padding or test weakening. Do not run the scheduler installer.
+verification:
+  - Red->green regression; 200-run loop; npm test (TMP/TEMP=D:/t); independent review APPROVE.
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
