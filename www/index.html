@@ -2576,24 +2576,51 @@ function restoreUnifiedAccounting() {
   finally { _accountingRestoring = false; restoreOrdinaryProvisional(); }
 }
 
+// The entry/redemption images and session frames one accounting record carries. A compatibility cache value is
+// recognised only through the committed value or these images (retainUnconfirmedCompatibilityCaches).
+function accountingRecordCacheImages(operation) {
+  const entries = [], redemptions = [];
+  for (const image of [operation.proposal?.before, operation.proposal?.patch]) {
+    for (const [path, value] of Object.entries(image || {})) {
+      if (!value) continue;
+      if (path.startsWith('entries/')) entries.push(value);
+      if (path.startsWith('focusRedemptions/')) redemptions.push(value);
+    }
+  }
+  for (const change of operation.input.records || []) {
+    for (const value of [change.before, change.after]) if (value) (change.store === 'entries' ? entries : redemptions).push(value);
+  }
+  if (operation.input.observation?.facts.entry) entries.push(operation.input.observation.facts.entry);
+  const frames = [operation.proposal?.local?.before, operation.proposal?.local?.after, operation.input.before, operation.input.after].filter(Boolean);
+  return { entries, redemptions, frames };
+}
+
+function accountingCompatibilityCacheImage(frame, base) {
+  if (base === TIMER_STORAGE_KEY) return frame.running && frame.timerStartedAt ? {
+    timerStartedAt: frame.timerStartedAt, totalSecs: frame.totalSecs, running: true, lastTask: frame.lastTaskForRepeat,
+    currentTask: frame.currentTask, taskStartTime: frame.taskStartTime, trackingStartedAt: frame.trackingStartedAt,
+    blockStartTime: frame.blockStartTime, ownerDeviceId: frame.timerOwnerDeviceId || null, planItemId: frame.currentTaskPlanItemId || null } : null;
+  if (base === AWAY_STORAGE_KEY) return frame.awayActive && frame.awayStartTime ? { active: true, label: frame.awayLabel, startedAt: frame.awayStartTime } : null;
+  if (base === 'ta3-focus-timer') return typeof focusCompatibilityCache === 'function' ? focusCompatibilityCache(frame) : null;
+  return frame.breakActive && frame.breakStartTs && frame.breakEndsAt ? { active: true, startedAt: frame.breakStartTs,
+    endsAt: frame.breakEndsAt, durationMin: Math.max(1, Math.round((frame.breakEndsAt - frame.breakStartTs) / 60000)),
+    startedBy: frame._breakStartedBy, timerOwnerDeviceId: frame.timerOwnerDeviceId, currentTask: frame.currentTask,
+    lastTask: frame.lastTaskForRepeat, planItemId: frame.currentTaskPlanItemId || null, totalSecs: frame.totalSecs, remaining: frame.remaining } : null;
+}
+
+// Local Focus bytes have no Firebase pruning semantics: []/{} must not match absence.
+function accountingCacheFrameKnown(base, value, image) {
+  return base === 'ta3-focus-timer' ? image != null && JSON.stringify(value) === JSON.stringify(image) : TimeAckCore.same(value, image);
+}
+
 function retainUnconfirmedCompatibilityCaches(coordinator) {
   const state = coordinator.snapshot();
   if (!state.committed) return;
   const knownEntries = [...state.committed.value.entries], knownRedemptions = [...state.committed.value.focusRedemptions];
   const frames = [state.committed.value];
   for (const operation of [...state.history, ...state.queue, ...coordinator.captures(roomCode).map(item => item.captured)]) {
-    for (const image of [operation.proposal?.before, operation.proposal?.patch]) {
-      for (const [path, value] of Object.entries(image || {})) {
-        if (!value) continue;
-        if (path.startsWith('entries/')) knownEntries.push(value);
-        if (path.startsWith('focusRedemptions/')) knownRedemptions.push(value);
-      }
-    }
-    for (const change of operation.input.records || []) {
-      for (const value of [change.before, change.after]) if (value) (change.store === 'entries' ? knownEntries : knownRedemptions).push(value);
-    }
-    if (operation.input.observation?.facts.entry) knownEntries.push(operation.input.observation.facts.entry);
-    frames.push(...[operation.proposal?.local?.before, operation.proposal?.local?.after, operation.input.before, operation.input.after].filter(Boolean));
+    const images = accountingRecordCacheImages(operation);
+    knownEntries.push(...images.entries); knownRedemptions.push(...images.redemptions); frames.push(...images.frames);
   }
   // This tab's own displayed frame: the timer/away/break/Focus caches it persisted last mirror it. A change from
   // another device (e.g. a takeover, then Stop there) is applied without a local operation, so without this the
@@ -2615,18 +2642,6 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
     for (const item of known) { const key = String(item.id); if (!byId.has(key)) byId.set(key, []); byId.get(key).push(item); }
     if (local.some(record => counts.get(String(record.id)) > 1 || !byId.get(String(record.id))?.some(item => same(item, record)))) unknown[base] = raw;
   }
-  const cache = (frame, base) => {
-    if (base === TIMER_STORAGE_KEY) return frame.running && frame.timerStartedAt ? {
-      timerStartedAt: frame.timerStartedAt, totalSecs: frame.totalSecs, running: true, lastTask: frame.lastTaskForRepeat,
-      currentTask: frame.currentTask, taskStartTime: frame.taskStartTime, trackingStartedAt: frame.trackingStartedAt,
-      blockStartTime: frame.blockStartTime, ownerDeviceId: frame.timerOwnerDeviceId || null, planItemId: frame.currentTaskPlanItemId || null } : null;
-    if (base === AWAY_STORAGE_KEY) return frame.awayActive && frame.awayStartTime ? { active: true, label: frame.awayLabel, startedAt: frame.awayStartTime } : null;
-    if (base === 'ta3-focus-timer') return typeof focusCompatibilityCache === 'function' ? focusCompatibilityCache(frame) : null;
-    return frame.breakActive && frame.breakStartTs && frame.breakEndsAt ? { active: true, startedAt: frame.breakStartTs,
-      endsAt: frame.breakEndsAt, durationMin: Math.max(1, Math.round((frame.breakEndsAt - frame.breakStartTs) / 60000)),
-      startedBy: frame._breakStartedBy, timerOwnerDeviceId: frame.timerOwnerDeviceId, currentTask: frame.currentTask,
-      lastTask: frame.lastTaskForRepeat, planItemId: frame.currentTaskPlanItemId || null, totalSecs: frame.totalSecs, remaining: frame.remaining } : null;
-  };
   for (const base of [TIMER_STORAGE_KEY, AWAY_STORAGE_KEY, BREAK_STORAGE_KEY, 'ta3-focus-timer']) {
     if (base === 'ta3-focus-timer' && typeof focusCompatibilityCache !== 'function') continue;
     const raw = read(base);
@@ -2637,11 +2652,7 @@ function retainUnconfirmedCompatibilityCaches(coordinator) {
       unknown[base] = raw; retainUnprovenFocusCache(raw); continue;
     }
     if (value && base !== 'ta3-focus-timer') { delete value.timerUpdatedAt; if (base === AWAY_STORAGE_KEY) delete value.updatedAt; }
-    const known = frames.some(frame => {
-      const image = cache(frame, base);
-      // Local Focus bytes have no Firebase pruning semantics: []/{} must not match absence.
-      return base === 'ta3-focus-timer' ? image != null && JSON.stringify(value) === JSON.stringify(image) : same(value, image);
-    });
+    const known = frames.some(frame => accountingCacheFrameKnown(base, value, accountingCompatibilityCacheImage(frame, base)));
     if ((value != null || base === 'ta3-focus-timer' && raw != null) && !known) {
       unknown[base] = raw;
       if (base === 'ta3-focus-timer') retainUnprovenFocusCache(raw);
@@ -2785,14 +2796,100 @@ function accountingCompactionFlags() {
   const explicitCut = on('ta3-accounting-flag-history-cut');
   const policy = explicitCut ? (Number.isSafeInteger(keepOps) ? { keepOps } : {}) : {
     minEnvelopeChars: ACCOUNTING_ARCHIVE_THRESHOLD, keepOps: 50, batch: 25,
-    eligible: op => op.phase === 'local-applied' && (
-      op.input.ordinary?.v === 1 && ['start', 'stop'].includes(op.input.ordinary.kind)
-      || op.input.name === 'hydrate-accounting' && op.authority === 'coherent-account-read' && op.evidence == null)
+    // Decision 47: every settled kind. A record that carries held evidence stays; accountingArchiveProtected() keeps
+    // what page readers still walk. The coordinator's own pins and the legacy/resolution exclusions still apply.
+    eligible: op => (op.phase === 'local-applied' || op.phase === 'coalesced' && !!op.aliasOf) && op.evidence == null,
+    protect: (state, candidates, pending) => accountingArchiveProtected(state, candidates, pending)
   };
   return { stripFirstHydrate: on('ta3-accounting-flag-strip-first-hydrate'), elideNoopHydrate: on('ta3-accounting-flag-elide-noop-hydrate'),
     refFirstHydrate: on('ta3-accounting-flag-ref-first-hydrate'),
     historyCut: { enabled: true, ...policy, archived: owner => AccountingHistoryArchive.verified(owner),
       onCandidates: (owner, records) => AccountingHistoryArchive.store(owner, records) } };
+}
+
+// Decision 47: settled records the automatic archive keeps although the coordinator would let them go. The coordinator
+// already keeps the committed record, the current timer's writer, effect/receipt/provisional owners and the direct
+// dependencies of every pending item (queued, sourced, captured, page-held). Page readers walk further:
+//   - focusSourceLease() and ordinaryProvisionalState() walk dependsOn/aliasOf chains to their end, without checkpoints;
+//   - materializeNativeAccountingPing() walks the current timer's write chain back to its ping;
+//   - accountingExistingEvent() reports a dropped eventKey as settled before it looks at pending items;
+//   - retainUnconfirmedCompatibilityCaches() recognises a stale cache value only through history images.
+// Reads only; never changes state, candidates or pending. Must stay cheap: it runs about once per 25 commits.
+function accountingArchiveProtected(state, candidates, pending) {
+  const keep = new Set(), history = new Map(state.history.map(op => [op.id, op]));
+  const settled = op => op?.phase === 'local-applied' || op?.phase === 'fenced-reconciled';
+  // 1. Whole causal chains behind the committed record, the current timer, every pending item and this page's live
+  //    Focus producer and ordinary recovery.
+  const roots = [state.committed?.operationId, state.committed?.value?.serverTimer?._csWrite?.operationId];
+  for (const item of pending) roots.push(item.dependsOn, item.aliasOf, item.source?.requestDependency, item.sourceId, item.input?.sourceId);
+  if (state.owner === roomCode) {
+    if (typeof _focusProducer !== 'undefined' && _focusProducer?.context?.owner === state.owner) roots.push(_focusProducer.parentId);
+    roots.push(_ordinaryProvisionalRecovery?.operationId);
+  }
+  for (const stack = roots.filter(Boolean); stack.length;) {
+    const id = AccountingCommand.resolveDropped(state, stack.pop()), op = history.get(id);
+    if (!op || keep.has(id)) continue;
+    keep.add(id);
+    for (const next of [op.dependsOn, op.aliasOf, op.source?.requestDependency]) if (next) stack.push(next);
+  }
+  // 2. The current timer's write chain, exactly as materializeNativeAccountingPing() follows it.
+  let timer = state.committed?.value?.serverTimer;
+  for (const seen = new Set(); timer?._csWrite?.operationId && !seen.has(timer._csWrite.operationId);) {
+    seen.add(timer._csWrite.operationId);
+    const origin = history.get(timer._csWrite.operationId);
+    if (!origin) break;
+    keep.add(origin.id);
+    if (origin.input.name === 'ping') break;
+    const before = origin.proposal?.before?.timer;
+    if (!before || ['running', 'mode', 'ownerRoom', 'ownerDeviceId', 'startedAt', 'trackingStartedAt', 'intervalSecs']
+      .some(field => !TimeAckCore.same(before[field], timer[field]))) break;
+    timer = before;
+  }
+  // 3. An occurrence still pending elsewhere, and an alias whose original is not settled.
+  const pendingKeys = new Set(pending.map(item => item.eventKey).filter(Boolean));
+  for (const op of candidates) {
+    if (op.eventKey && pendingKeys.has(op.eventKey)) keep.add(op.id);
+    if (op.phase === 'coalesced') {
+      const original = AccountingCommand.resolveDropped(state, op.aliasOf);
+      if (!Object.hasOwn(state.droppedIds || {}, op.aliasOf) && !settled(history.get(original))) keep.add(op.id);
+    }
+  }
+  // 4. The only witnesses of a stale compatibility cache value (one the committed value does not explain).
+  for (const id of accountingCacheWitnesses(state, candidates)) keep.add(id);
+  return keep;
+}
+
+function accountingCacheWitnesses(state, candidates) {
+  const keep = new Set(), committed = state.committed?.value, same = TimeAckCore.same;
+  if (!committed) return keep;
+  const images = candidates.map(op => [op, accountingRecordCacheImages(op)]);
+  const read = base => localStorage.getItem(accountLocalKey(base, state.owner));
+  for (const [base, field, store] of [['ta3-entries', 'entries', 'entries'], ['ta3-focus-redemptions', 'redemptions', 'focusRedemptions']]) {
+    const current = new Map((committed[store] || []).map(item => [String(item.id), item]));
+    const stale = images.flatMap(([op, found]) => found[field].filter(value => !same(current.get(String(value.id)) ?? null, value))
+      .map(value => [op, value]));
+    if (!stale.length) continue;
+    let local = null;
+    try { local = JSON.parse(read(base) || '[]'); } catch { /* unreadable: keep every candidate below */ }
+    if (!Array.isArray(local)) { stale.forEach(([op]) => keep.add(op.id)); continue; }
+    const cached = new Map();
+    for (const item of local) { const id = String(item?.id); if (!cached.has(id)) cached.set(id, []); cached.get(id).push(item); }
+    for (const [op, value] of stale) if (cached.get(String(value.id))?.some(item => same(item, value))) keep.add(op.id);
+  }
+  for (const base of [TIMER_STORAGE_KEY, AWAY_STORAGE_KEY, BREAK_STORAGE_KEY, 'ta3-focus-timer']) {
+    if (base === 'ta3-focus-timer' && typeof focusCompatibilityCache !== 'function') continue;
+    const raw = read(base);
+    if (raw == null) continue;
+    let value;
+    try { value = JSON.parse(raw); } catch { continue; } // an unparseable cache is unknown whatever history holds
+    if (value && base !== 'ta3-focus-timer') { delete value.timerUpdatedAt; if (base === AWAY_STORAGE_KEY) delete value.updatedAt; }
+    if (value == null && base !== 'ta3-focus-timer') continue;
+    if (accountingCacheFrameKnown(base, value, accountingCompatibilityCacheImage(committed, base))) continue;
+    for (const [op, found] of images) {
+      if (found.frames.some(frame => accountingCacheFrameKnown(base, value, accountingCompatibilityCacheImage(frame, base)))) keep.add(op.id);
+    }
+  }
+  return keep;
 }
 
 // Before the coordinator may

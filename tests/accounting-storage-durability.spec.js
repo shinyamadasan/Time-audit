@@ -234,3 +234,210 @@ test('automatic compaction preserves unfiled facts and requires an exact archive
   expect(result.sources).toEqual([result.open]);
   expect(result.filed).toEqual([{ id: 1, activity: 'Filed time' }]);
 });
+
+// TASK-050 (Decision 47): the automatic archive takes every settled kind and keeps what page readers still walk.
+test('automatic archive takes every settled kind but keeps chains, the timer write chain, aliases and cache witnesses', async ({ page }) => {
+  const uid = 'archive_kinds', world = await emulator.fresh(rules);
+  await open(page, world, uid); await pinned(page);
+  const result = await page.evaluate(async () => {
+    const owner = 'uid_kinds_fixture', key = AccountingCommand.BASE + ':' + owner;
+    const ctx = { owner, uid: 'kinds_fixture', device: 'proof-device', generation: 1 };
+    const record = (id, input, extra = {}) => ({ v: 1, ...ctx, id, at: 1, phase: 'local-applied', input, local: null,
+      eventKey: null, dependsOn: null, ...extra });
+    const small = 'k'.repeat(10_000);
+    const kinds = ['ping', 'automatic-log', 'scheduled-log', 'save-entry', 'retro-edit', 'retro-log', 'delete-entry', 'quick-save',
+      'focus-start', 'focus-end-work', 'focus-end-break', 'focus-exit', 'focus-learning-finish', 'start-break', 'break-end',
+      'start-away', 'end-away', 'undo', 'recovery', 'sleep-log', 'switch-task', 'takeover-timer', 'native-usage',
+      'activity-cleanup', 'clear-selected-entries', 'common-log', 'stop-and-log', 'reset-timer'];
+    const settledKinds = kinds.map((name, i) => record('kind-' + String(i).padStart(3, '0'), { name, pad: small },
+      name.endsWith('-log') || name === 'ping' ? { eventKey: name + ':fixture:' + i } : {}));
+    settledKinds.push(record('kind-ordinary-start', { name: 'start-timer', ordinary: { v: 1, kind: 'start' }, pad: small }));
+    settledKinds.push(record('kind-coalesced-settled', { name: 'ping', pad: small }, { phase: 'coalesced', aliasOf: 'kind-000' }));
+    const session = { running: true, mode: 'normal', ownerRoom: owner, ownerDeviceId: 'proof-device', startedAt: 5, trackingStartedAt: 5, intervalSecs: 1800 };
+    // Held (not settled) and protected records.
+    const pending = record('pending-conflict', { name: 'ping', pad: small }, { phase: 'conflict', reason: 'occurrence-changed',
+      eventKey: 'ping:fixture:held', dependsOn: 'chain-a1' });
+    const protectedRecords = [
+      record('chain-a1', { name: 'focus-end-work' }, { dependsOn: 'chain-a2' }), // pinned by the coordinator (direct)
+      record('chain-a2', { name: 'focus-start' }, { dependsOn: 'chain-a3' }),    // closure
+      record('chain-a3', { name: 'save-entry' }),                                // closure
+      record('timer-w2', { name: 'save-entry' }),                                // closure behind the timer writer
+      record('timer-t1', { name: 'ping' }),                                      // the timer write chain's ping
+      record('timer-writer', { name: 'switch-task' }, { dependsOn: 'timer-w2',
+        proposal: { before: { timer: { ...session, _csWrite: { v: 1, operationId: 'timer-t1', revision: 3 } } }, patch: {}, local: {} } }),
+      record('alias-pending', { name: 'ping' }, { phase: 'coalesced', aliasOf: 'pending-conflict', eventKey: 'ping:fixture:held' }),
+      record('held-evidence', { name: 'hydrate-accounting' }, { authority: 'coherent-account-read', evidence: { raw: 'unknown server value' } }),
+      record('cache-witness-entry', { name: 'save-entry', records: [{ store: 'entries', id: 77,
+        before: { id: 77, activity: 'Old title' }, after: { id: 77, activity: 'New title' } }] }),
+      record('cache-witness-timer', { name: 'start-timer', after: { running: true, timerStartedAt: 5, totalSecs: 1800, lastTaskForRepeat: 'Write',
+        currentTask: 'Write', taskStartTime: 5, trackingStartedAt: 5, blockStartTime: 5, timerOwnerDeviceId: 'proof-device', currentTaskPlanItemId: null } })
+    ];
+    const notWitness = record('stale-not-cached', { name: 'save-entry', records: [{ store: 'entries', id: 88,
+      before: { id: 88, activity: 'Gone' }, after: null }], pad: small });
+    const filler = Array.from({ length: 60 }, (_, i) => record('filler-' + String(i).padStart(3, '0'),
+      { name: 'hydrate-accounting', frame: { pad: 'f'.repeat(50_000) } }, { authority: 'coherent-account-read' }));
+    const commit = filler.at(-1);
+    commit.appliedGeneration = 1;
+    const value = { entries: [{ id: 77, activity: 'New title' }], focusRedemptions: [],
+      serverTimer: { ...session, _csWrite: { v: 1, operationId: 'timer-writer', revision: 4 } } };
+    const history = [...settledKinds, ...protectedRecords, notWitness, ...filler];
+    localStorage.setItem(key, JSON.stringify({ v: 1, owner, generation: 1, committed: { generation: 1, operationId: commit.id, value },
+      history, queue: [pending] }));
+    // A stale entry copy and a stale running-timer copy: only history images explain them.
+    localStorage.setItem(accountLocalKey('ta3-entries', owner), JSON.stringify([{ id: 77, activity: 'Old title' }]));
+    localStorage.setItem(accountLocalKey(TIMER_STORAGE_KEY, owner), JSON.stringify({ timerStartedAt: 5, totalSecs: 1800, running: true,
+      lastTask: 'Write', currentTask: 'Write', taskStartTime: 5, trackingStartedAt: 5, blockStartTime: 5, timerUpdatedAt: 9,
+      ownerDeviceId: 'proof-device', planItemId: null }));
+    const initialChars = localStorage.getItem(key).length;
+    let seq = 0;
+    const coordinator = AccountingCommand.createCoordinator({ storage: localStorage, lock: TimeAckCore.webLock,
+      identity: () => ctx, randomId: () => 'kinds-fresh-' + (++seq), same: TimeAckCore.same, compaction: accountingCompactionFlags(),
+      transport: { enforcesAccounting: true, inspect: async () => ({}) },
+      prepare: async () => ({ localOnly: true, projection: value }), apply() {} });
+    const advance = () => coordinator.submit({ name: 'hydrate-accounting', confirmedOnly: true });
+    await advance(); await AccountingHistoryArchive.read(owner); await advance();
+    const final = coordinator.snapshot(owner), archived = await AccountingHistoryArchive.read(owner);
+    const live = new Set(final.history.map(op => op.id)), dropped = Object.keys(final.droppedIds || {});
+    // Page roots: this page's Focus producer and ordinary recovery (state owned by the signed-in account).
+    const producer = _focusProducer, recovery = _ordinaryProvisionalRecovery;
+    let roots;
+    try {
+      _focusProducer = { context: { owner: roomCode }, parentId: 'fp-1' };
+      _ordinaryProvisionalRecovery = { operationId: 'or-1' };
+      const at = (id, extra) => ({ id, phase: 'local-applied', input: { name: 'focus-start' }, ...extra });
+      const state = { owner: roomCode, history: [at('fp-0'), at('fp-1', { dependsOn: 'fp-0' }), at('or-1'), at('other')], queue: [], committed: null };
+      roots = [...accountingArchiveProtected(state, state.history, [])].sort();
+    } finally { _focusProducer = producer; _ordinaryProvisionalRecovery = recovery; }
+    return {
+      initialChars, finalChars: localStorage.getItem(key).length, dropped, live: [...live], roots,
+      kinds: settledKinds.map(op => op.id), protected: protectedRecords.map(op => op.id), notWitness: notWitness.id,
+      preserved: history.every(op => [...final.history, ...archived].some(copy => copy.id === op.id && TimeAckCore.same(copy, op))),
+      queue: final.queue.map(op => op.id), committedValue: TimeAckCore.same(final.committed.value, value)
+    };
+  });
+  expect(result.kinds.filter(id => !result.dropped.includes(id)), 'settled kinds left in live history').toEqual([]);
+  expect(result.dropped).toContain(result.notWitness);
+  expect(result.protected.filter(id => !result.live.includes(id)), 'protected records archived').toEqual([]);
+  expect(result.roots).toEqual(['fp-0', 'fp-1', 'or-1']);
+  expect(result.queue).toEqual(['pending-conflict']);
+  expect(result.preserved).toBe(true);
+  expect(result.committedValue).toBe(true);
+  expect(result.finalChars).toBeLessThan(result.initialChars);
+});
+
+test('at the wall, the verified cut frees room for a page-held capture, which then becomes durable and applies', async ({ page }) => {
+  const uid = 'archive_wall', world = await emulator.fresh(rules);
+  await open(page, world, uid); await pinned(page);
+  const result = await page.evaluate(async () => {
+    const owner = 'uid_wall_fixture', key = AccountingCommand.BASE + ':' + owner;
+    const ctx = { owner, uid: 'wall_fixture', device: 'proof-device', generation: 1 };
+    // 74 settled records: the commit cut (newest 50 + batch 25) has nothing to do, so only the quota cut can help.
+    const history = Array.from({ length: 74 }, (_, i) => ({ v: 1, ...ctx, id: 'wall-' + String(i).padStart(3, '0'), at: 1 + i,
+      phase: 'local-applied', input: { name: ['ping', 'save-entry', 'focus-start', 'automatic-log'][i % 4], pad: 'w'.repeat(30_000) },
+      local: null, eventKey: null, dependsOn: null }));
+    const commit = history.at(-1);
+    commit.appliedGeneration = 1;
+    localStorage.setItem(key, JSON.stringify({ v: 1, owner, generation: 1, committed: { generation: 1, operationId: commit.id, value: { entries: [] } },
+      history, queue: [] }));
+    // Real quota semantics for this owner's keys: a write fails when keys plus values would exceed the limit.
+    const write = Storage.prototype.setItem;
+    const used = () => Object.keys(localStorage).reduce((n, k) => n + k.length + localStorage.getItem(k).length, 0);
+    let limit = Infinity;
+    Storage.prototype.setItem = function (k, v) {
+      if (this === localStorage && String(k).includes(owner)) {
+        const old = localStorage.getItem(k), next = used() - (old == null ? 0 : k.length + old.length) + k.length + String(v).length;
+        if (next > limit) throw new DOMException('Injected full storage', 'QuotaExceededError');
+      }
+      return write.call(this, k, v);
+    };
+    let seq = 0;
+    const coordinator = AccountingCommand.createCoordinator({ storage: localStorage, lock: TimeAckCore.webLock,
+      identity: () => ctx, randomId: () => 'wall-fresh-' + (++seq), same: TimeAckCore.same, compaction: accountingCompactionFlags(),
+      transport: { enforcesAccounting: true, inspect: async () => ({}) },
+      prepare: async () => ({ localOnly: true, projection: { entries: [] } }), apply() {} });
+    try {
+      limit = used() + 500;
+      let captureError = null;
+      try { coordinator.capture({ name: 'hydrate-accounting', confirmedOnly: true, original: 'p'.repeat(5_000) }); }
+      catch (error) { captureError = error.name; }
+      const heldAfterCapture = coordinator.failedCaptureCount(owner);
+      const first = await coordinator.drain(); // offers the candidates to IndexedDB; nothing is verified yet
+      const heldAfterFirst = coordinator.failedCaptureCount(owner);
+      await AccountingHistoryArchive.read(owner); // the readonly transaction queues behind the archive write
+      const second = await coordinator.drain(); // drops verified records, then retries the original bytes
+      const final = coordinator.snapshot(owner), archived = await AccountingHistoryArchive.read(owner);
+      return {
+        captureError, heldAfterCapture, first: first.status, heldAfterFirst, second: second.status,
+        held: coordinator.failedCaptureCount(owner), dropped: Object.keys(final.droppedIds || {}).length,
+        applied: final.history.filter(op => op.input.original && op.phase === 'local-applied').length,
+        preserved: history.every(op => [...final.history, ...archived].some(copy => copy.id === op.id && TimeAckCore.same(copy, op)))
+      };
+    } finally { Storage.prototype.setItem = write; }
+  });
+  expect(result.captureError).toBe('QuotaExceededError');
+  expect(result.heldAfterCapture).toBe(1);
+  expect(result.first).not.toBe('drained');
+  expect(result.heldAfterFirst).toBe(1);
+  expect(result.second).toBe('drained');
+  expect(result.held).toBe(0);
+  expect(result.applied).toBe(1);
+  expect(result.dropped).toBe(24);
+  expect(result.preserved).toBe(true);
+});
+
+// TASK-050 / TASK-051 §6: a queued Stop's whole ordinary lineage (Stop -> resume -> Start) survives a cut while the
+// Stop is unconfirmed, so the provisional display still resolves its Start and the Stop still files the session.
+// An expired resume rewrites the timer's session fields, so only the pending-chain protection reaches the Start.
+for (const expired of [false, true]) test(`a cut while an offline Stop is unconfirmed keeps its whole lineage (resume ${expired ? 'after' : 'before'} the interval); display and Stop still resolve`, async ({ page }) => {
+  test.setTimeout(180_000);
+  const uid = 'archive_lineage' + (expired ? '_expired' : ''), world = await emulator.fresh(rules), MIN = 60_000;
+  await open(page, world, uid); await pinned(page);
+  const pattern = `http://127.0.0.1:${emulator.port}/rooms/uid_${uid}.json*`;
+  await page.route(pattern, route => route.abort('failed'));
+  expect(await page.evaluate(() => _startTimer('Lineage session'))).toBe(true);
+  await page.evaluate(at => window.__setNow(at), T0 + (expired ? 35 : 5) * MIN);
+  expect(await page.evaluate(timerExpired => captureOrdinaryTimer('resume', null, null, { timerExpired }), expired)).toBe(true);
+  await page.evaluate(at => window.__setNow(at), T0 + 40 * MIN);
+  expect(await page.evaluate(() => captureOrdinaryTimer('stop'))).toBe(true);
+  const ids = await page.evaluate(() => Object.fromEntries(accountingCoordinator().snapshot().queue
+    .filter(op => op.input.ordinary).map(op => [op.input.ordinary.kind, { id: op.id, dependsOn: op.dependsOn }])));
+  expect(ids.resume.dependsOn).toBe(ids.start.id);
+  expect(ids.stop.dependsOn).toBe(ids.resume.id);
+  // Reconnect, but the Stop's write never arrives: Start and resume settle; the Stop stays unconfirmed.
+  await page.unroute(pattern);
+  await page.route(pattern, route => route.request().method() === 'PATCH' && (route.request().postData() || '').includes(ids.stop.id)
+    ? route.abort('failed') : route.continue());
+  await page.evaluate(() => accountingCoordinator().drain());
+  // Normal reconciliation keeps committing read-only refreshes behind the held Stop until the Start leaves the newest 50.
+  const before = await page.evaluate(async ({ ids }) => {
+    for (let i = 0; i < 55; i++) await accountingCoordinator().submit({ name: 'hydrate-accounting', confirmedOnly: true });
+    const state = accountingCoordinator().snapshot(), plain = state.history.filter(op => op.input.name !== 'checkpoint');
+    return { queue: state.queue.map(op => [op.id, op.phase]), startAge: plain.length - plain.findIndex(op => op.id === ids.start.id) };
+  }, { ids });
+  expect(before.queue).toEqual([[ids.stop.id, 'unknown']]);
+  expect(before.startAge).toBeGreaterThan(55);
+  // A full store: the verified cut runs on its own (first drain archives, second drops).
+  await installQuotaFault(page); await setFault(page, 'intake');
+  const cut = await page.evaluate(async ({ ids }) => {
+    const coordinator = accountingCoordinator();
+    try { coordinator.capture({ name: 'hydrate-accounting', confirmedOnly: true }); } catch {}
+    await coordinator.drain(); await AccountingHistoryArchive.read(roomCode); await coordinator.drain();
+    const state = coordinator.snapshot(), dropped = Object.keys(state.droppedIds || {});
+    const view = ordinaryProvisionalState();
+    return { dropped: dropped.length, startDropped: dropped.includes(ids.start.id), resumeDropped: dropped.includes(ids.resume.id),
+      view: view && { startId: view.startId, conflict: view.conflict, kind: view.command.kind }, paused: window._accountingLegacyLoadError || null };
+  }, { ids });
+  expect(cut.dropped).toBeGreaterThan(0);
+  expect(cut).toMatchObject({ startDropped: false, resumeDropped: false, paused: null,
+    view: { startId: ids.start.id, conflict: false, kind: 'stop' } });
+  await expect(page.locator('#ordinary-provisional')).toContainText('Lineage session');
+  // Storage recovers and the write goes through: the original session is filed exactly once.
+  await setFault(page, ''); await page.unroute(pattern);
+  const final = await page.evaluate(async () => {
+    await accountingCoordinator().drain();
+    return { queue: accountingCoordinator().snapshot().queue.length, held: accountingCoordinator().failedCaptureCount(roomCode) };
+  });
+  expect(final).toEqual({ queue: 0, held: 0 });
+  const filed = Object.values(await world.read(`rooms/uid_${uid}/entries`) || {});
+  expect(filed).toEqual([expect.objectContaining({ activity: 'Lineage session', tsStart: T0, ts: T0 + 40 * MIN })]);
+});

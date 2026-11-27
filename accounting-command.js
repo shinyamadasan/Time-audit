@@ -535,19 +535,22 @@
       if (archived instanceof Map) return archived.has(op.id) && same(archived.get(op.id), op);
       return typeof archived.has === 'function' && archived.has(op.id);
     }
-    function cutHistory(state) {
+    // atQuota (TASK-050): the same cut, run on its own after a real quota failure so a page-held or stuck capture can
+    // find room. It ignores the envelope threshold and drops verified records in batches of one; nothing else differs.
+    function cutHistory(state, { atQuota = false } = {}) {
       const config = compaction.historyCut;
       const keep = Math.max(50, Number.isSafeInteger(config.keepOps) ? config.keepOps : 200);
-      const batch = Number.isSafeInteger(config.batch) ? Math.max(1, config.batch) : 50;
+      const batch = atQuota ? 1 : Number.isSafeInteger(config.batch) ? Math.max(1, config.batch) : 50;
       const plain = state.history.filter(op => !isCheckpoint(op));
       if (plain.length <= keep + batch) return 0;
-      if (config.minEnvelopeChars && (readStored(key(state.owner))?.length || 0) < config.minEnvelopeChars) return 0;
+      if (!atQuota && config.minEnvelopeChars && (readStored(key(state.owner))?.length || 0) < config.minEnvelopeChars) return 0;
       const pinned = new Set([state.committed?.operationId, state.committed?.value?.serverTimer?._csWrite?.operationId,
         ...(state.effects || []).map(effect => effect.operationId),
         ...Object.values(state.effectReceipts || {}).map(receipt => receipt.operationId),
         ...Object.keys(state.provisionalObserved || {})]);
-      for (const item of [...state.queue, ...state.sources || [], ...captures(state.owner).map(entry => entry.captured),
-        ...[...failed.values()].map(entry => entry.record)]) {
+      const pending = [...state.queue, ...state.sources || [], ...captures(state.owner).map(entry => entry.captured),
+        ...[...failed.values()].map(entry => entry.record)];
+      for (const item of pending) {
         for (const id of [item.dependsOn, item.aliasOf, item.source?.requestDependency, item.sourceId, item.input?.sourceId]) if (id) pinned.add(id);
       }
       const nativeNewest = {};
@@ -556,10 +559,19 @@
       }
       for (const op of Object.values(nativeNewest)) pinned.add(op.id);
       const newest = new Set(plain.slice(-keep).map(op => op.id));
-      const eligible = plain.filter(op => !newest.has(op.id) && !pinned.has(op.id) && !op.resolution
+      let eligible = plain.filter(op => !newest.has(op.id) && !pinned.has(op.id) && !op.resolution
         && !/^legacy-/.test(op.input?.name || '') && (SETTLED.includes(op.phase) || op.phase === 'coalesced' && !!op.aliasOf)
         && (!config.eligible || config.eligible(op)));
       if (eligible.length < batch) return 0;
+      // The page names further records its readers still walk (config.protect). It reads state, candidates and the
+      // pending items without changing them (they are not cloned: the envelope is large). Any failure keeps everything.
+      if (typeof config.protect === 'function') {
+        let kept;
+        try { kept = config.protect(state, eligible, pending); } catch { return 0; }
+        if (!(kept instanceof Set)) return 0;
+        eligible = eligible.filter(op => !kept.has(op.id));
+        if (eligible.length < batch) return 0;
+      }
       let archived = null;
       try { archived = config.archived?.(state.owner) || null; } catch { archived = null; }
       try { config.onCandidates?.(state.owner, clone(eligible.filter(op => !archived || !archivedCopyMatches(archived, op)))); } catch {}
@@ -573,10 +585,19 @@
         for (const id of [op.dependsOn, op.aliasOf, op.source?.requestDependency]) if (id && drop.has(id) && !starts.includes(id)) starts.push(id);
       }
       const checkpoints = [], visitedBy = new Map();
+      // A checkpoint id is new to this envelope. A commit cut is the only cut at its generation, so this is the
+      // original `ckpt-<generation>-<n>`; a quota cut at the same generation gets a numeric suffix instead.
+      const taken = new Set([...state.history, ...state.queue, ...state.sources || []].map(op => op.id)
+        .concat(Object.keys(state.droppedIds || {})));
+      const freshId = (base, tail = '') => {
+        let id = base + tail;
+        for (let n = 1; taken.has(id); n++) id = `${base}-${n}${tail}`;
+        taken.add(id); return id;
+      };
       for (const [n, start] of starts.entries()) {
         const walk = walkFrom(state, start);
         if (!walk) return 0; // fail safe: an incomplete walk means nothing is dropped
-        const id = `ckpt-${state.generation}-${n}`;
+        const id = freshId(`ckpt-${state.generation}-${n}`);
         checkpoints.push({ v: VERSION, id, owner: state.owner, uid: state.owner.slice(4), device: 'checkpoint', at: Date.now(),
           phase: 'fenced-reconciled', input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: walk.visited.length },
           settledWrites: walk.ancestry, dependsOn: null });
@@ -584,9 +605,10 @@
       }
       // A dropped record no edge reaches still needs a target: a later replay of it is retired against it.
       // One sink for the envelope's lifetime: reuse the existing one so cuts never accumulate sinks.
-      let sink = state.history.find(op => isCheckpoint(op) && op.id.endsWith('-sink'))?.id || null;
+      // A sink a new walk passed through is folded below, so it cannot receive new ids.
+      let sink = state.history.find(op => isCheckpoint(op) && op.id.endsWith('-sink') && !visitedBy.has(op.id))?.id || null;
       const target = id => visitedBy.get(id) || (sink ||= (() => {
-        const record = { v: VERSION, id: `ckpt-${state.generation}-sink`, owner: state.owner, uid: state.owner.slice(4),
+        const record = { v: VERSION, id: freshId(`ckpt-${state.generation}`, '-sink'), owner: state.owner, uid: state.owner.slice(4),
           device: 'checkpoint', at: Date.now(), phase: 'fenced-reconciled',
           input: { name: 'checkpoint', compacted: 1, digestV: DIGEST_V, covers: 0 }, settledWrites: {}, dependsOn: null };
         checkpoints.push(record); return record.id;
@@ -784,12 +806,29 @@
       drains.set(partition, work);
       return work.promise;
     }
+    // TASK-050: after a real quota failure the verified cut runs once on its own, under this same lock, and the drain
+    // is retried once if it freed room. A cut that cannot run, or a save that fails, leaves the envelope unchanged.
+    function relieveHistory(owner) {
+      if (compaction.historyCut?.enabled !== true) return 0;
+      try {
+        const next = load(owner), dropped = cutHistory(next, { atQuota: true });
+        if (dropped) save(next);
+        return dropped;
+      } catch { return 0; }
+    }
     function drainOnce(context) {
       return lock(context.owner, async () => {
-        try { return await drainLocked(context); }
-        catch (error) {
-          if (!isQuotaError(error)) throw error;
-          return { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: pruneStuck() };
+        let relieved = false;
+        for (;;) {
+          let result;
+          try { result = await drainLocked(context); }
+          catch (error) {
+            if (!isQuotaError(error)) throw error;
+            result = { status: 'storage-full', reason: 'local-storage-full', retained: true, stuck: pruneStuck() };
+          }
+          const full = result.status === 'storage-full' || result.status === 'capture-unconfirmed' && result.quota === true;
+          if (!full || relieved || !attached(context) || !relieveHistory(context.owner)) return result;
+          relieved = true;
         }
       });
     }
@@ -800,6 +839,7 @@
         const state = load(context.owner);
         try { flushFailedCaptures(context); }
         catch (error) {
+          const quota = isQuotaError(error);
           // Read-only recovery may observe a peer Stop while original facts cannot be stored.
           // It never sends, retires or gives a dependency receipt to those page-held facts.
           const refresh = [...state.queue, ...captures(context.owner).map(item => item.captured)]
@@ -815,7 +855,7 @@
           // The queue/history now durably owns this read; its intake cannot replay the receipt.
           storage.removeItem(prefix(context.owner) + refresh.id);
           if (!settled) await settleOne(state, refresh, context);
-          return { status: 'capture-unconfirmed', reason: error.message, retained: true };
+          return { status: 'capture-unconfirmed', reason: error.message, retained: true, ...(quota ? { quota } : {}) };
         }
         importCaptures(state); // receipt recheck is inside this same lock
         if (state.committed) { validateProjection(clone(state.committed.value), context.owner); apply(clone(state.committed.value), clone(state.committed)); }
