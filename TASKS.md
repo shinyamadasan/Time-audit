@@ -2883,7 +2883,7 @@ dependency-rule: as QUEUE-20261126 (a dependency counts when its work is on this
 implementer: Claude (Codex out of quota until Nov 29); every change gets a separate independent reviewer.
 
 ### TASK-050 - Option A: bound all settled accounting history (red zone)
-status: review
+status: approved
 owner: claude
 source: owner-direct (QUEUE-20261126-B item 1)
 priority: P0
@@ -2931,7 +2931,7 @@ acceptance:
   - Any RELEASE-BLOCKING case becomes its own fix task (recorded by Claude) before release.
 
 ### TASK-052 - Requalification of the A candidate (capacity, durability, recovery, Household, migration, rollback)
-status: todo
+status: codex
 owner: claude
 source: owner-direct (QUEUE-20261126-B items 2-3)
 priority: P0
@@ -2973,6 +2973,9 @@ objective:
 
 ### TASK-055 - Option B: one stored copy of time entries (next dedicated storage project)
 status: todo
+result (Nov27): plan written, docs/STORAGE_OPTION_B_PLAN.md (8d8c693): staged B1 (stop writing ta3-entries once a
+  confirmed envelope exists) -> B2 (store physical records only, derive the entry list; two releases) -> B3/B4; C
+  (IndexedDB) held until ~7,500 entries. Six owner questions in the plan; to be presented with final release approval.
 owner: claude
 source: owner-direct (QUEUE-20261126-B item 8) - queued, not part of this release
 priority: P1 (next project after this release)

@@ -3855,3 +3855,9 @@ Classification:
 **CI pins.** `MANDATORY_COUNT` 490 is unchanged (the durability spec is not mandatory). `WIDER_COUNT` 1107 and the release pins must include the 4 new durability cases. Refreshing them is left to TASK-052; ci.yml is not touched.
 
 Not run: hosted CI, and physical-device quota and unload behaviour.
+
+### TASK-050 independent review correction (2026-11-27)
+Capacity: the day-end estimator is phase-dependent (26.5 on the implementer's run, 73 on the reviewer's) because it
+samples a bounded history sawtooth; it is not used for the target. Daily minima/maxima give ≈45–50 day-equivalents at
+E=2489 (implementer ≈50; reviewer: minima +16.5K/day, maxima +14.2K/day → ≈45). Target (≥30) met.
+Evidence: D:/ChronaSenseQualificationEvidence/20261126-queue/task-050-review/ (run.meta first).

@@ -866,3 +866,86 @@ After these fixes the guard still lists only `.md` files.
 - P0 does not catch a package that was uninstalled with `-k` (data kept, which `pm list packages -u` would show). This is an unlikely edge case on a dedicated device.
 
 gate: **approved (held)**. The packet carries release authority over red-zone runtime (entry storage, accounting, crash recovery) and the push, merge and deploy steps. Only the owner acts: hosted CI (§4b), the storage decision (§4a), the device kit (§5), then the merge and deploy (§4d). The trivial fixes above still need to be committed before step 1 of §4(b).
+
+## TASK-050 · Option A: archive every settled accounting history kind · 2026-11-27
+
+reviewer: independent Claude review subagent. I did not write TASK-050. Reviewed runtime 70986e0, docs 681870b, coordinator section 0744ea2 and implementer addendum 934a8ed; base 98b32b4. HEAD at review: 8d8c693 (the Option B plan is docs only). My reruns and logs are in `D:/ChronaSenseQualificationEvidence/20261126-queue/task-050-review/` (`run.meta`, `run-review.sh`). I changed only this entry and TASK-050's `status:`. Nothing was committed, pushed, merged or deployed.
+verdict: **APPROVE**. Nothing blocks approval. I found no case where archiving removes a record that a pending, unknown, held or unfiled op, a cache witness, Undo, Focus, crash recovery or the legacy path still needs, and the at-wall cut drops only verified copies. The ≥30 day-equivalent target is met by the estimator that does not depend on sawtooth phase (see Capacity). The da5c4d4-shape stall is pre-existing and is not made worse; it is not reachable from live 0ff39ec as dumped, but the candidate itself can reach the same stall (see Migration).
+
+### 1. Per-kind audit (Decision 47)
+- **Kinds checked against the code.** These are all the history kinds the code creates:
+  - 30 names from `stageAccountingChange` and 6 from `stageAccountingObservation`;
+  - `focus-end-work` and `focus-end-break`, from `captureFocusObservation`;
+  - the ordinary `start-timer`, `stop-and-log` and `recovery` (a resume);
+  - `ordinary-heartbeat` (intake only; it becomes `provisionalObserved` and never a history record);
+  - `native-usage`, `hydrate-accounting`, `legacy-time-ack`, `legacy-accounting-caches` and `checkpoint`.
+
+  Decision 47's table and exclusions cover every one. No kind is missing, and none is wrongly marked settled. Settled means `local-applied`, or `coalesced` with an `aliasOf`, and no `evidence`. Conflict, unknown, captured and `inspection-unconfirmed` records are never offered.
+- **Readers checked against the protections:**
+
+  | Reader | What protects its records | Result |
+  |---|---|---|
+  | `ordinaryProvisionalState` and `prepareOrdinaryAccounting` (the latter has no `resolveDropped`) | Direct pin plus whole-chain closure | The expired-resume lineage case shows the closure is needed (mutant M1 fails it). |
+  | `materializeNativeAccountingPing` | Rule 2 | |
+  | `focusSourceLease` and `restoreFocusProducer` | Their parent is the timer writer (a coordinator pin plus the rule 1 root) or a pending op | |
+  | The `waitingLearning` receipt lookup | Receipt pin | |
+  | `phoneUsageSources` | Newest-per-device pin | |
+  | `accountingExistingEvent` | Settled history is checked before dropped keys, so rule 3 is harmless | Unchanged behaviour |
+  | `retainUnconfirmedCompatibilityCaches` | Rule 4, which uses the same helper and compares against the actual cache at cut time | |
+  | Legacy dedupe and the storage.js cache-preservation check | `legacy-*` is excluded | |
+  | Undo | `accountingAcceptedUndo` is self-contained | |
+  | Crash recovery | Reads the committed frame; `transferOrdinaryRecovery` needs the newest op | Hard Rules 4, 6, 7 and 8 are not in the diff. |
+- **Another tab's live Focus chain (residual R1).** Decision 47 relies on the direct-dependency pin for this. I judge that safe in practice. While Focus runs, the producer's `parentId` is the op that last wrote the timer, either `focus-start` or a phase end (both rewrite the session clock). That op is pinned in every tab, and rule 1 walks its whole chain from `serverTimer._csWrite`. A non-timer parent would have to be older than the newest 50 records. Hydrates dominate history at about 20–40 records a day, so that means one Focus phase lasting more than a day. The failure is fail-closed: `focusSourceLease` returns false, the producer stops and the Focus session stays visible. It is not a silent loss.
+
+### 2. Safety contract and interleavings
+- **Removal.** A record is removed only if `archivedCopyMatches`, meaning `same()` holds between the IndexedDB read-back or warm copy and the live record at cut time. The relief path calls the same `cutHistory`. With no IndexedDB, nothing in the verified Map, or a protect hook that throws or returns something other than a Set, the cut returns 0. Relief catches load, cut and save failures. A quota failure on save leaves the bytes unchanged, because `setItem` either replaces the whole envelope or nothing.
+- **Relief bounds.** Relief runs only under the account lock, only for a real quota result (`storage-full`, or `capture-unconfirmed` with `quota`), only while attached, and at most once per drain. Unit test 3 shows a non-quota error never triggers it.
+- **Multi-tab.** The cut and relief run under the same Web Lock. `load()` re-validates a raw envelope it has not validated before. IndexedDB copies are never deleted. Reload during a cut is safe: the envelope is a single `setItem`, and the archive is written before any drop.
+- **Checkpoint ids.** `freshId` checks history, queue, source and dropped ids. Unit test 5 fails "Unreadable accounting envelope" without it (mutant). The sink exclusion stops ids being pointed at a sink that is folded away in the same cut (unit test 6). After either cut, `validateEnvelope` still holds, including the target, live-id and receipt/effect/provisional checks.
+
+### 3. Migration: classification of the two cases
+- **0ff39ec → candidate (`legacy-accounting-caches` conflict, `legacy-source-needs-resolution`): NOT caused by TASK-050; pre-existing and by design; does not block release.**
+  - The generator injects a device-only entry, 990001, into the 0ff39ec entry cache (`generate-pre-a.spec.mjs:141-145`). 0ff39ec itself captures it: the pre-A dump's queue already holds `legacy-accounting-caches captured`.
+  - The 0ff39ec→0ff39ec control releases identically: the same conflict, the offline session filed once, 2,508 server entries, `unfiledSent` 0 and `unfiledHeld` true.
+  - For a real 0ff39ec user, the conflict arises only if the cache holds an entry that no record explains (in practice pre-accounting data, the TASK-051 D-3 path). Their own logged time is held, not sent and not lost.
+  - This agrees with the TASK-051 reviewer: a real 0ff39ec→candidate upgrade with no such entry carried over and logged once. The no-unfiled control here also files normally.
+  - da5c4d4 shows the same conflict mechanism, not the same outcome: its dump hits the page-held stall below instead.
+- **da5c4d4-shape stall (the 1.4M legacy capture page-held): pre-existing, not worsened, not release-blocking for TASK-050; an owner residual for Option B.**
+  - *Who.* da5c4d4 was never deployed (live main is 0ff39ec). A 0ff39ec device cannot produce this dump shape: it has no page-held state, and its legacy capture is already durable in the queue. On 0ff39ec dumps the candidate frees about 1.7M (4.80M → 3.11M), so A gives more room, not less.
+  - *Same shape on the candidate.* It can arise on the candidate for a device that has an entry no record explains together with about 2,500 entries. The legacy capture copies the ~1.4M cache, which cannot fit next to the cache itself.
+  - *Time lost?* No. The offline Start and Stop stay durable in the queue, and the unfiled entry stays in the cache (`unfiledHeld`). The page-held copy is captured again from the cache after a close or reload, and nothing is sent twice. Logging stays paused and visible (`accounting-recovery-unconfirmed`) until room exists. That makes it a usability and tracking risk, not a loss of recorded time.
+  - *Worse than before?* No. The da5c4d4 control is identical, and the candidate also frees 17 records.
+
+### 4. Red → green (rerun by me)
+- **Unit tests:** `accounting-archive-settled.test.cjs` gives 1 pass and 5 fail on 98b32b4, and 6/6 on HEAD. The 1 base pass is the non-quota guard, as expected.
+- **Browser tests:** I ran `tests/accounting-storage-durability.spec.js` from 681870b against the 98b32b4 runtime in a scratch worktree (`D:/t/r050`, since removed). Cases 1–3 passed and the 4 new cases (4–7) failed (`red-base-browser.log`); all 7 pass on HEAD.
+- **Mutants:** the implementer's M1–M5 logs are consistent. M1 fails case 4 and the expired-resume lineage case; the non-expired variant passes, because rule 2 covers it.
+
+### 5. Quiet reruns on HEAD 934a8ed
+Each run used one worker with TMP/TEMP=D:/t, and a process check before each run found no other Playwright, Chromium or emulator process.
+
+| Run | Result |
+|---|---|
+| `npm test` | Exit 0. Node runner 2,574 tests: 2,573 passed, 0 failed, 1 existing skip. Custom runners 455/455. Matches 934a8ed. |
+| `accounting-storage-durability.spec.js` | **7/7 passed** (51 s). Matches the addendum's 7/7 correction. |
+| Mandatory shard 2/3 (includes `accounting-staged-effects`) | **264 passed**, 0 failed (12.5 min). |
+| `runtime-mirror --check` | OK; the 111-file closure is byte-identical. |
+| `git diff --check 98b32b4 HEAD` | Clean. Root and `www/` copies of `index.html` and `accounting-command.js` are byte-identical. |
+
+### 6. Capacity (mixed probe, unchanged harness, sha 3fdfcf16… = the TASK-046 spec)
+- **My rerun.** Day-end totals were 4,311,664 / 4,545,926 / 4,565,618 / 4,611,511 / 4,640,379 / 4,572,980 / 4,603,682. A cut landed before the day-5 sample, so the script's day-end estimator gives **9.5K/day and 73 day-equivalents**. On the implementer's run the same estimator gave 27.4K/day and 26.5. The day-end estimator only shows where in the sawtooth the sample fell, and should not be used for the target.
+- **Phase-independent figures.** Daily per-action minima rise 16.5K/day and maxima 14.2K/day (days 1→5). The peak was 4,680,041. That projects **≈45 day-equivalents** at E=2489; the implementer's run gave about 50. Both are ≥30, so the target is met. History stays a bounded sawtooth of 53–77 records. Queue, page-held and intake were empty at every day end.
+- **The ~13–16K/day that remains** is the new entry in the committed and physical views plus the cache, the drop maps and checkpoints. That is Option B's scope, as Decision 47 says.
+
+### Findings (none blocking)
+1. **LOW, pre-existing and widened by #47 (cross-tab).** A cut sees only this tab's page-held captures (`failed`, `accounting-command.js:552-553`) and this tab's Focus producer and ordinary recovery roots (`index.html:2825-2827`). Scenario: tab B holds a page-held Stop whose settled dependency is older than the newest 50 (about 2 days of records), and tab A archives that dependency. When B flushes, `prepareOrdinaryAccounting` (`index.html:3692`) finds no parent and holds the Stop as `ordinary-predecessor-unproven`. The Stop is visible and held, not lost. #45 already had this for Start and Stop. I recommend one line in the Decision 47 residuals.
+2. **LOW (limitation).** Relief is triggered only by a page-held capture or by a full drain ending in `storage-full`. Intake stuck at import (`importCaptures`, `accounting-command.js:325-336`) behind a held queue head, for example while offline, returns the head's status, so relief waits until the queue moves. The intake is durable, so nothing is lost.
+3. **NOTE, pre-existing.** Folding an old checkpoint into a new one (`accounting-command.js:618-619`) re-points every id the old checkpoint covered, including ids on a sibling branch. If two kept records depend on the same dropped parent, the folded ancestry can include the other branch's writes. In practice `dependsOn` is set from the latest pending command, which makes this branching rare, and rule 1 keeps pending chains out of new folds. I am not asking for a change; it belongs to TASK-052 qualification.
+4. **Doc nit.** In Decision 47 and the addendum, "≈50 day-equivalents" should become "≈45–50" and the day-end estimator should be called phase-dependent (26.5 on one run, 73 on mine). CODEMAP says the protect hook runs "about once per 25 commits"; it actually runs on every commit once the cut is eligible and the threshold is met. The cost is small: the entry cache is parsed only when stale images exist.
+
+### Scope
+- The runtime and test change is only `accounting-command.js`, `index.html` (accounting archive/cache-helper section), their `www/` mirrors, `accounting-archive-settled.test.cjs`, the durability spec and the `package.json` test wiring.
+- Docs: DECISIONS, CODEMAP, CHANGELOG, TEST_REPORT and TASKS.
+- No rules, schema or `storage.js` change. Hard Rules 4/6/7/8/9 are not in the diff, and the moved cache-image helper's text is unchanged.
+
+gate: **approved (held)**. This is red zone (accounting history, envelope writes at the storage wall, "never lose logged time"), so `main` is not merged. TASK-052 requalification, hosted CI and the owner's merge decision remain.
